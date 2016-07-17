@@ -94,11 +94,19 @@ public class KernelStatement implements TxStateHolder, Statement
     public DataWriteOperations dataWriteOperations()
             throws InvalidTransactionTypeKernelException
     {
+        // TODO: Sascha
+        // if(onlyVirtualWrites){
+        //      return facade;
+        //}
+
+        // Virtual entities are allowed without write
         if( !transaction.mode().allowsWrites() )
         {
+
             throw new AuthorizationViolationException(
                     String.format( "Write operations are not allowed for `%s` transactions.", transaction.mode().name() ) );
         }
+
         transaction.upgradeToDataWrites();
         return facade;
     }
