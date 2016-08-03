@@ -40,6 +40,11 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
   private def createNode(context: ExecutionContext, state: QueryState): ExecutionContext = {
     val node = state.query.createNode()
     // TODO: SASCHA?
+
+    //properties.
+
+
+    // optional: do not set virtual property
     setProperties(context, state, node.getId)
     setLabels(context, state, node.getId)
     context += key -> node

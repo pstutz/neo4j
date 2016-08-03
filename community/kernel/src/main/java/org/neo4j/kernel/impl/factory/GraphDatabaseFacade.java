@@ -87,7 +87,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     private IndexManager indexManager;
     private NodeProxy.NodeActions nodeActions;
     private RelationshipProxy.RelationshipActions relActions;
-    private SPI spi;
+    protected SPI spi;
 
     /**
      * This is what you need to implemenent to get your very own {@link GraphDatabaseFacade}. This SPI exists as a thin

@@ -19,47 +19,19 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import java.util.Iterator;
-import java.util.Map;
-import java.util.function.Predicate;
-
-import org.neo4j.collection.primitive.PrimitiveIntCollection;
-import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.neo4j.collection.primitive.PrimitiveIntStack;
-import org.neo4j.collection.primitive.PrimitiveLongCollections;
-import org.neo4j.collection.primitive.PrimitiveLongIterator;
-import org.neo4j.collection.primitive.PrimitiveLongResourceIterator;
+import org.neo4j.collection.primitive.*;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.kernel.api.DataWriteOperations;
 import org.neo4j.kernel.api.LegacyIndex;
 import org.neo4j.kernel.api.LegacyIndexHits;
 import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.constraints.NodePropertyConstraint;
-import org.neo4j.kernel.api.constraints.NodePropertyExistenceConstraint;
-import org.neo4j.kernel.api.constraints.PropertyConstraint;
-import org.neo4j.kernel.api.constraints.RelationshipPropertyConstraint;
-import org.neo4j.kernel.api.constraints.RelationshipPropertyExistenceConstraint;
-import org.neo4j.kernel.api.constraints.UniquenessConstraint;
-import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
-import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
-import org.neo4j.kernel.api.exceptions.LabelNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.RelationshipTypeIdNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.TransactionFailureException;
+import org.neo4j.kernel.api.constraints.*;
+import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.schema.AlreadyConstrainedException;
-import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
-import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
-import org.neo4j.kernel.api.exceptions.schema.CreateConstraintFailureException;
-import org.neo4j.kernel.api.exceptions.schema.DropConstraintFailureException;
-import org.neo4j.kernel.api.exceptions.schema.DropIndexFailureException;
-import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
-import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
-import org.neo4j.kernel.api.exceptions.schema.SchemaRuleNotFoundException;
-import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
+import org.neo4j.kernel.api.exceptions.schema.*;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.legacyindex.AutoIndexing;
@@ -68,33 +40,22 @@ import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.api.properties.PropertyKeyIdIterator;
 import org.neo4j.kernel.api.txstate.TransactionCountingStateVisitor;
 import org.neo4j.kernel.api.txstate.TransactionState;
-import org.neo4j.kernel.impl.api.operations.CountsOperations;
-import org.neo4j.kernel.impl.api.operations.EntityOperations;
-import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
-import org.neo4j.kernel.impl.api.operations.KeyWriteOperations;
-import org.neo4j.kernel.impl.api.operations.LegacyIndexReadOperations;
-import org.neo4j.kernel.impl.api.operations.LegacyIndexWriteOperations;
-import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
-import org.neo4j.kernel.impl.api.operations.SchemaWriteOperations;
+import org.neo4j.kernel.impl.api.operations.*;
 import org.neo4j.kernel.impl.api.state.ConstraintIndexCreator;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.index.IndexEntityType;
 import org.neo4j.kernel.impl.index.LegacyIndexStore;
 import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.storageengine.api.EntityType;
-import org.neo4j.storageengine.api.LabelItem;
-import org.neo4j.storageengine.api.NodeItem;
-import org.neo4j.storageengine.api.PropertyItem;
-import org.neo4j.storageengine.api.RelationshipItem;
-import org.neo4j.storageengine.api.StorageProperty;
-import org.neo4j.storageengine.api.StorageStatement;
-import org.neo4j.storageengine.api.StoreReadLayer;
-import org.neo4j.storageengine.api.Token;
+import org.neo4j.storageengine.api.*;
 import org.neo4j.storageengine.api.schema.IndexReader;
 import org.neo4j.storageengine.api.schema.PopulationProgress;
 import org.neo4j.storageengine.api.schema.SchemaRule;
 import org.neo4j.storageengine.api.txstate.ReadableDiffSets;
+
+import java.util.Iterator;
+import java.util.Map;
+import java.util.function.Predicate;
 
 import static org.neo4j.collection.primitive.PrimitiveLongCollections.single;
 import static org.neo4j.helpers.collection.Iterators.iterator;
@@ -301,6 +262,8 @@ public class StateHandlingStatementOperations implements
     @Override
     public long nodeCreate( KernelStatement state )
     {
+        //TODO: Sascha
+        // virtual
         long nodeId = storeLayer.reserveNode();
         state.txState().nodeDoCreate(nodeId);
         return nodeId;
