@@ -85,8 +85,8 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
 
     private Schema schema;
     private IndexManager indexManager;
-    private NodeProxy.NodeActions nodeActions;
-    private RelationshipProxy.RelationshipActions relActions;
+    protected NodeProxy.NodeActions nodeActions;
+    protected RelationshipProxy.RelationshipActions relActions;
     protected SPI spi;
 
     /**

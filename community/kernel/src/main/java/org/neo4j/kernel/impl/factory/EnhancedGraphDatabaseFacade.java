@@ -2,24 +2,50 @@ package org.neo4j.kernel.impl.factory;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.index.IndexManager;
+import org.neo4j.kernel.impl.core.NodeProxy;
 
-import java.util.HashMap;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Created by Sascha Peukert on 03.08.2016.
  */
 public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
-    private HashMap<Integer,Node> virtualNodes;
+    private Map<Integer, TreeMap<Integer, PropertyContainer>> virtualNodes; // TA-Hashcode -> Map ( Id -> Node)
+    private Map<Integer,TreeMap<Integer,PropertyContainer>> virtualRelationships; // TA-Hashcode -> Map ( Id -> Relationship)
+
+    private int getFreeVirtualId(TreeMap<Integer,PropertyContainer> map){
+        if(map.size()==0){
+            return -1;
+        }
+        return map.firstKey() -1; // because negative id -> first key is the lowest one
+        // TODO: is this ordering/collection fast enough?
+    }
 
     @Override
     public void init(SPI spi) {
         super.init(spi);
     }
 
+    public Node createVirtualNode(){
+        int transaction_hashcode = spi.currentTransaction().hashCode();
+
+        // Ensure that there is a map
+        TreeMap<Integer,PropertyContainer> current_map = virtualNodes.get(transaction_hashcode);
+        if(current_map==null){
+            current_map = new TreeMap<>();
+            virtualNodes.put(transaction_hashcode,current_map);
+        }
+
+        int id = getFreeVirtualId(current_map);
+        NodeProxy newNode = new NodeProxy(nodeActions,id);  // TODO: Exchange NodeProxy because of how relationships are created
+        current_map.put(id,newNode);
+        return newNode;
+    }
+
     @Override
     public Node createNode() {
-        //spi.currentTransaction().hashCode();
         return super.createNode();
     }
 
