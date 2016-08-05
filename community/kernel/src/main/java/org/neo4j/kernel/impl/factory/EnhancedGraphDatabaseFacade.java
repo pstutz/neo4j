@@ -18,6 +18,8 @@ import java.util.TreeMap;
  */
 public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
+    //TODO: Write tests!
+
     private Map<Integer, TreeMap<Integer, PropertyContainer>> virtualNodes; // TA-Hashcode -> Map ( Id -> Node)
     private Map<Integer,TreeMap<Integer,PropertyContainer>> virtualRelationships; // TA-Hashcode -> Map ( Id -> Relationship)
     private Map<Integer,TreeMap<Integer,Label>> virtualLabels; // TA-Hashcode -> Map (NodeId -> Label)
@@ -114,61 +116,81 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
     @Override
     public Relationship getRelationshipById(long id) {
+        if(id<0) {
+            // virtual node
+            int transaction_hashcode = spi.currentTransaction().hashCode();
+            try {
+                return (Relationship) virtualRelationships.get(transaction_hashcode).get(id);
+            } catch (NullPointerException e){
+                throw new IllegalArgumentException("You looked for a virtual relationship that isn't there. How?");
+            }
+        }
         return super.getRelationshipById(id);
     }
 
     @Override
     public IndexManager index() {
+        // TODO need to add virtual stuff to index?
         return super.index();
     }
 
     @Override
     public ResourceIterable<Node> getAllNodes() {
+        // TODO need to add all virtual nodes to this Iterable
         return super.getAllNodes();
     }
 
     @Override
     public ResourceIterable<Relationship> getAllRelationships() {
+        // TODO need to add all virtual relationships to this Iterable
         return super.getAllRelationships();
     }
 
     @Override
     public ResourceIterable<Label> getAllLabelsInUse() {
+        // TODO need to add all used (only) virtual labels to this Iterable
         return super.getAllLabelsInUse();
     }
 
     @Override
     public ResourceIterable<RelationshipType> getAllRelationshipTypesInUse() {
+        // TODO need to add all used (only) virtual relationship types to this Iterable
         return super.getAllRelationshipTypesInUse();
     }
 
     @Override
     public ResourceIterable<Label> getAllLabels() {
+        // TODO need to add all (only) virtual labels to this Iterable
         return super.getAllLabels();
     }
 
     @Override
     public ResourceIterable<RelationshipType> getAllRelationshipTypes() {
+        // TODO need to add all (only) virtual relationship types to this Iterable
         return super.getAllRelationshipTypes();
     }
 
     @Override
     public ResourceIterable<String> getAllPropertyKeys() {
+        // TODO need to add all only virtual property keys to this Iterable
         return super.getAllPropertyKeys();
     }
 
     @Override
     public ResourceIterator<Node> findNodes(Label myLabel, String key, Object value) {
+        // TODO search virtual nodes too
         return super.findNodes(myLabel, key, value);
     }
 
     @Override
     public Node findNode(Label myLabel, String key, Object value) {
+        // TODO search virtual nodes too
         return super.findNode(myLabel, key, value);
     }
 
     @Override
     public ResourceIterator<Node> findNodes(Label myLabel) {
+        // TODO search virtual nodes too
         return super.findNodes(myLabel);
     }
 }
