@@ -2,8 +2,14 @@ package org.neo4j.kernel.impl.factory;
 
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.index.IndexManager;
+import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
+import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
+import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException;
 import org.neo4j.kernel.impl.core.NodeProxy;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -14,6 +20,7 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
     private Map<Integer, TreeMap<Integer, PropertyContainer>> virtualNodes; // TA-Hashcode -> Map ( Id -> Node)
     private Map<Integer,TreeMap<Integer,PropertyContainer>> virtualRelationships; // TA-Hashcode -> Map ( Id -> Relationship)
+    private Map<Integer,TreeMap<Integer,Label>> virtualLabels; // TA-Hashcode -> Map (NodeId -> Label)
 
     private int getFreeVirtualId(TreeMap<Integer,PropertyContainer> map){
         if(map.size()==0){
@@ -26,6 +33,10 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     @Override
     public void init(SPI spi) {
         super.init(spi);
+
+        virtualNodes = new HashMap<>();
+        virtualRelationships = new HashMap<>();
+        virtualLabels = new HashMap<>();
     }
 
     public Node createVirtualNode(){
@@ -49,6 +60,39 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
         return super.createNode();
     }
 
+    public Node createVirtualNode(Label... labels){
+        try
+        {
+            Node newNode = createVirtualNode();
+            for ( Label label : labels )
+            {
+                // IF NOT YET HERE!
+                int labelId = spi.currentStatement().tokenWriteOperations().labelGetOrCreateForName( label.name() );
+
+                newNode.addLabel(label); // this will also call dataWriteOperations, so this is no option!
+                // -> Handle everything yourself here
+                // Remember that there could be constraints
+
+                //statement.dataWriteOperations().nodeAddLabel( nodeId, labelId );
+                //TODO: Finish this
+
+            }
+            return newNode;
+        }
+        catch ( ConstraintValidationKernelException e )
+        {
+            throw new ConstraintViolationException( "Unable to add label.", e );
+        }
+        catch ( SchemaKernelException e )
+        {
+            throw new IllegalArgumentException( e );
+        }
+        catch ( InvalidTransactionTypeKernelException e )
+        {
+            throw new ConstraintViolationException( e.getMessage(), e );
+        }
+    }
+
     @Override
     public Node createNode(Label... labels) {
         return super.createNode(labels);
@@ -56,6 +100,15 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
     @Override
     public Node getNodeById(long id) {
+        if(id<0) {
+            // virtual node
+            int transaction_hashcode = spi.currentTransaction().hashCode();
+            try {
+                return (Node) virtualNodes.get(transaction_hashcode).get(id);
+            } catch (NullPointerException e){
+                throw new IllegalArgumentException("You looked for a virtual node that isn't there. How?");
+            }
+        }
         return super.getNodeById(id);
     }
 
