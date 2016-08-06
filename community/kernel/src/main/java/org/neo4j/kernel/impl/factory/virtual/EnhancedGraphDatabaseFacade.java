@@ -3,9 +3,11 @@ package org.neo4j.kernel.impl.factory.virtual;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.index.IndexManager;
+import org.neo4j.helpers.collection.PrefetchingResourceIterator;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.impl.core.NodeProxy;
+import org.neo4j.kernel.impl.core.RelationshipProxy;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.storageengine.api.EntityType;
 
@@ -22,9 +24,9 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
     //TODO: Write tests!
 
-    private Map<Integer, TreeMap<Integer, PropertyContainer>> virtualNodes; // TA-Hashcode -> Map ( Id -> Node)
-    private Map<Integer,TreeMap<Integer,PropertyContainer>> virtualRelationships; // TA-Hashcode -> Map ( Id -> Relationship)
-    private Map<Integer,TreeMap<Integer,Label>> virtualLabels; // TA-Hashcode -> Map (NodeId -> Label)
+    private Map<String, TreeMap<Integer, PropertyContainer>> virtualNodes; // TA -> Map ( Id -> Node)
+    private Map<String,TreeMap<Integer,PropertyContainer>> virtualRelationships; // TA -> Map ( Id -> Relationship)
+    private Map<String,TreeMap<Integer,Label>> virtualLabels; // TA -> Map (NodeId -> Label)
 
     private int getFreeVirtualId(TreeMap<Integer,PropertyContainer> map){
         if(map.size()==0){
@@ -44,13 +46,13 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     }
 
     public Node createVirtualNode(){
-        int transaction_hashcode = spi.currentTransaction().hashCode();
+        String transaction_ident = spi.currentTransaction().toString();
 
         // Ensure that there is a map
-        TreeMap<Integer,PropertyContainer> current_map = virtualNodes.get(transaction_hashcode);
+        TreeMap<Integer,PropertyContainer> current_map = virtualNodes.get(transaction_ident);
         if(current_map==null){
             current_map = new TreeMap<>();
-            virtualNodes.put(transaction_hashcode,current_map);
+            virtualNodes.put(transaction_ident,current_map);
         }
 
         int id = getFreeVirtualId(current_map);
@@ -106,9 +108,9 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     public Node getNodeById(long id) {
         if(id<0) {
             // virtual node
-            int transaction_hashcode = spi.currentTransaction().hashCode();
+            String transaction_ident = spi.currentTransaction().toString();
             try {
-                Object n = virtualNodes.get(transaction_hashcode).get(id);
+                Object n = virtualNodes.get(transaction_ident).get(id);
                 if(n!=null){
                     return (Node) n;
                 }
@@ -125,9 +127,9 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     public Relationship getRelationshipById(long id) {
         if(id<0) {
             // virtual relationship
-            int transaction_hashcode = spi.currentTransaction().hashCode();
+            String transaction_ident = spi.currentTransaction().toString();
             try {
-                Object r = virtualRelationships.get(transaction_hashcode).get(id);
+                Object r = virtualRelationships.get(transaction_ident).get(id);
                 if(r!=null){
                     return (Relationship) r;
                 }
@@ -148,23 +150,46 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
     @Override
     public ResourceIterable<Node> getAllNodes() {
-        // TODO need to add all virtual nodes to this Iterable
         assertTransactionOpen();
         return () -> {
             Statement statement = spi.currentStatement();
-            int transaction_hashcode = spi.currentTransaction().hashCode();
+            String transaction_ident = spi.currentTransaction().toString();
+            Map<Integer,PropertyContainer> currentMap = virtualNodes.get(transaction_ident);
             PrimitiveLongIterator it = statement.readOperations().nodesGetAll();
-            // okay, this is not all that cool...
-            PrimitiveLongIterator newOne = new MergePrimitiveLongIterator(it,virtualNodes.get(transaction_hashcode).values());
-
-            return map2nodes( newOne, statement );
+            if(currentMap!=null){
+                it = new MergePrimitiveLongIterator(it,virtualNodes.get(transaction_ident).values(),true);
+            }
+            return map2nodes( it, statement );
         };
     }
 
     @Override
     public ResourceIterable<Relationship> getAllRelationships() {
-        // TODO need to add all virtual relationships to this Iterable
-        return super.getAllRelationships();
+        assertTransactionOpen();
+        return () -> {
+            final Statement statement = spi.currentStatement();
+            String transaction_ident = spi.currentTransaction().toString();
+            Map<Integer,PropertyContainer> currentMap = virtualRelationships.get(transaction_ident);
+            PrimitiveLongIterator ids = statement.readOperations().relationshipsGetAll();
+            if(currentMap!=null){
+                ids = new MergePrimitiveLongIterator(ids,virtualRelationships.get(transaction_ident).values(),false);
+            }
+            final PrimitiveLongIterator newOne = ids;
+            return new PrefetchingResourceIterator<Relationship>()
+            {
+                @Override
+                public void close()
+                {
+                    statement.close();
+                }
+
+                @Override
+                protected Relationship fetchNextOrNull()
+                {
+                    return newOne.hasNext() ? new RelationshipProxy( relActions, newOne.next() ) : null;
+                }
+            };
+        };
     }
 
     @Override

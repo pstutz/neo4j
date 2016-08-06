@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 public class EnhancedGraphDatabaseFacadeTest {
 
     @Test
-    public void shouldCreateVirtualNodes() throws Exception
+    public void shouldCreateVirtualNodesThatOnlyExistForThisTransaction() throws Exception
     {
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
 
