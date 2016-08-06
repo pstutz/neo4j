@@ -19,25 +19,7 @@
  */
 package org.neo4j.test;
 
-import java.io.File;
-import java.io.IOException;
-import java.net.URL;
-import java.util.Map;
-import java.util.function.Consumer;
-import java.util.function.Function;
-import java.util.function.Supplier;
-
-import org.neo4j.graphdb.DependencyResolver;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Label;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.QueryExecutionException;
-import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.graphdb.ResourceIterable;
-import org.neo4j.graphdb.ResourceIterator;
-import org.neo4j.graphdb.Result;
-import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.event.KernelEventHandler;
 import org.neo4j.graphdb.event.TransactionEventHandler;
@@ -58,6 +40,14 @@ import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.store.StoreId;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
+
+import java.io.File;
+import java.io.IOException;
+import java.net.URL;
+import java.util.Map;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 public abstract class DatabaseRule extends ExternalResource implements GraphDatabaseAPI
 {
@@ -471,5 +461,10 @@ public abstract class DatabaseRule extends ExternalResource implements GraphData
     public BidirectionalTraversalDescription bidirectionalTraversalDescription()
     {
         return database.bidirectionalTraversalDescription();
+    }
+
+    @Override
+    public Node createVirtualNode() throws Exception {
+        throw new Exception("Can't handle virtual entities in GraphDatabaseFacade");
     }
 }

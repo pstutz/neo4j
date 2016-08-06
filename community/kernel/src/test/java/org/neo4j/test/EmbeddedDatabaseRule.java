@@ -20,16 +20,14 @@
 package org.neo4j.test;
 
 import org.junit.rules.TemporaryFolder;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.Map;
-
 import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.configuration.Config;
+
+import java.io.File;
+import java.io.IOException;
 
 /**
  * JUnit @Rule for configuring, creating and managing an EmbeddedGraphDatabase instance.

@@ -19,14 +19,14 @@
  */
 package org.neo4j.graphdb;
 
-import java.util.Map;
-
 import org.neo4j.graphdb.event.KernelEventHandler;
 import org.neo4j.graphdb.event.TransactionEventHandler;
 import org.neo4j.graphdb.index.IndexManager;
 import org.neo4j.graphdb.schema.Schema;
 import org.neo4j.graphdb.traversal.BidirectionalTraversalDescription;
 import org.neo4j.graphdb.traversal.TraversalDescription;
+
+import java.util.Map;
 
 /**
  * The main access point to a running Neo4j instance. The most common way to instantiate a {@link GraphDatabaseService}
@@ -47,6 +47,8 @@ import org.neo4j.graphdb.traversal.TraversalDescription;
  */
 public interface GraphDatabaseService
 {
+    Node createVirtualNode() throws Exception;
+
     /**
      * Creates a new node.
      *

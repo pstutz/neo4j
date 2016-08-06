@@ -186,6 +186,12 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     }
 
     @Override
+    public Node createVirtualNode() throws Exception {
+
+        throw new Exception("Can't handle virtual entities in GraphDatabaseFacade");
+    }
+
+    @Override
     public Node createNode()
     {
         try ( Statement statement = spi.currentStatement() )
@@ -546,7 +552,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
                 .newResourceIterator( statement, map( nodeId -> new NodeProxy( nodeActions, nodeId ), nodeIds ) );
     }
 
-    private ResourceIterator<Node> map2nodes( PrimitiveLongIterator input, Statement statement )
+    protected ResourceIterator<Node> map2nodes( PrimitiveLongIterator input, Statement statement )
     {
         return ResourceClosingIterator
                 .newResourceIterator( statement, map( id -> new NodeProxy( nodeActions, id ), input ) );
@@ -637,7 +643,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         }
     }
 
-    private void assertTransactionOpen()
+    protected void assertTransactionOpen()
     {
         if ( spi.currentTransaction().shouldBeTerminated() )
         {

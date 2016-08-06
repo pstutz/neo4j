@@ -19,9 +19,6 @@
  */
 package org.neo4j.kernel.impl.factory;
 
-import java.io.File;
-import java.util.Map;
-
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.security.URLAccessRule;
 import org.neo4j.helpers.Exceptions;
@@ -29,16 +26,16 @@ import org.neo4j.kernel.AvailabilityGuard;
 import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.coreapi.CoreAPIAvailabilityGuard;
+import org.neo4j.kernel.impl.factory.virtual.EnhancedGraphDatabaseFacade;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.Logger;
 
-import static org.neo4j.kernel.configuration.Settings.ANY;
-import static org.neo4j.kernel.configuration.Settings.STRING;
-import static org.neo4j.kernel.configuration.Settings.illegalValueMessage;
-import static org.neo4j.kernel.configuration.Settings.matches;
-import static org.neo4j.kernel.configuration.Settings.setting;
+import java.io.File;
+import java.util.Map;
+
+import static org.neo4j.kernel.configuration.Settings.*;
 
 /**
  * This is the main factory for creating database instances. It delegates creation to three different modules
@@ -105,7 +102,7 @@ public abstract class GraphDatabaseFacadeFactory
      */
     public GraphDatabaseFacade newFacade( File storeDir, Map<String, String> params, final Dependencies dependencies )
     {
-        return newFacade( storeDir, params, dependencies, new GraphDatabaseFacade() );
+        return newFacade( storeDir, params, dependencies, new EnhancedGraphDatabaseFacade() );
     }
 
     /**

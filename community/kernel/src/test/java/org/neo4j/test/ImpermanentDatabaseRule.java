@@ -19,6 +19,7 @@
  */
 package org.neo4j.test;
 
+import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.logging.LogProvider;
@@ -69,4 +70,5 @@ public class ImpermanentDatabaseRule extends DatabaseRule
     {
         return ( internalLogProvider == null ) ? factory : factory.setInternalLogProvider( internalLogProvider );
     }
+
 }

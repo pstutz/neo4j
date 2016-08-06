@@ -1,17 +1,19 @@
-package org.neo4j.kernel.impl.factory;
+package org.neo4j.kernel.impl.factory.virtual;
 
+import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.index.IndexManager;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
-import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
-import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
-import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException;
 import org.neo4j.kernel.impl.core.NodeProxy;
+import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
+import org.neo4j.storageengine.api.EntityType;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
+
+import static java.lang.String.format;
 
 /**
  * Created by Sascha Peukert on 03.08.2016.
@@ -62,7 +64,7 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
         return super.createNode();
     }
 
-    public Node createVirtualNode(Label... labels){
+    /*public Node createVirtualNode(Label... labels){
         try
         {
             Node newNode = createVirtualNode();
@@ -93,7 +95,7 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
         {
             throw new ConstraintViolationException( e.getMessage(), e );
         }
-    }
+    }*/
 
     @Override
     public Node createNode(Label... labels) {
@@ -106,7 +108,12 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
             // virtual node
             int transaction_hashcode = spi.currentTransaction().hashCode();
             try {
-                return (Node) virtualNodes.get(transaction_hashcode).get(id);
+                Object n = virtualNodes.get(transaction_hashcode).get(id);
+                if(n!=null){
+                    return (Node) n;
+                }
+                throw new NotFoundException( format( "Node %d not found", id ),
+                        new EntityNotFoundException( EntityType.NODE, id ) );
             } catch (NullPointerException e){
                 throw new IllegalArgumentException("You looked for a virtual node that isn't there. How?");
             }
@@ -117,10 +124,15 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     @Override
     public Relationship getRelationshipById(long id) {
         if(id<0) {
-            // virtual node
+            // virtual relationship
             int transaction_hashcode = spi.currentTransaction().hashCode();
             try {
-                return (Relationship) virtualRelationships.get(transaction_hashcode).get(id);
+                Object r = virtualRelationships.get(transaction_hashcode).get(id);
+                if(r!=null){
+                    return (Relationship) r;
+                }
+                throw new NotFoundException( format( "Relationship %d not found", id ),
+                        new EntityNotFoundException( EntityType.RELATIONSHIP, id ) );
             } catch (NullPointerException e){
                 throw new IllegalArgumentException("You looked for a virtual relationship that isn't there. How?");
             }
@@ -137,7 +149,16 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     @Override
     public ResourceIterable<Node> getAllNodes() {
         // TODO need to add all virtual nodes to this Iterable
-        return super.getAllNodes();
+        assertTransactionOpen();
+        return () -> {
+            Statement statement = spi.currentStatement();
+            int transaction_hashcode = spi.currentTransaction().hashCode();
+            PrimitiveLongIterator it = statement.readOperations().nodesGetAll();
+            // okay, this is not all that cool...
+            PrimitiveLongIterator newOne = new MergePrimitiveLongIterator(it,virtualNodes.get(transaction_hashcode).values());
+
+            return map2nodes( newOne, statement );
+        };
     }
 
     @Override
