@@ -191,6 +191,14 @@ class DelegatingQueryContext(val inner: QueryContext) extends QueryContext {
 
   override def isGraphKernelResultValue(v: Any): Boolean =
     inner.isGraphKernelResultValue(v)
+
+  override def createVirtualNode(): Node = inner.createVirtualNode()
+
+  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
+    inner.createVirtualRelationship(start,end,relType)
+
+  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
+    inner.createVirtualRelationship(start,end,relType)
 }
 
 class DelegatingOperations[T <: PropertyContainer](protected val inner: Operations[T]) extends Operations[T] {

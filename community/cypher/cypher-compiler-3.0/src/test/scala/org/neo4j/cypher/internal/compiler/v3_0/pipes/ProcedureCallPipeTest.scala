@@ -26,6 +26,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.spi._
 import org.neo4j.cypher.internal.frontend.v3_0.ast.AstConstructionTestSupport
 import org.neo4j.cypher.internal.frontend.v3_0.symbols._
 import org.neo4j.cypher.internal.frontend.v3_0.test_helpers.CypherFunSuite
+import org.neo4j.graphdb.{Node, Relationship}
 
 class ProcedureCallPipeTest
   extends CypherFunSuite
@@ -129,5 +130,10 @@ class ProcedureCallPipeTest
       result(args)
     }
 
+    override def createVirtualNode(): Node = ???
+
+    override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship = ???
+
+    override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship = ???
   }
 }

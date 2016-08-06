@@ -24,6 +24,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.commands.expressions.Literal
 import org.neo4j.cypher.internal.compiler.v3_0.commands.values.{KeyToken, TokenType}
 import org.neo4j.cypher.internal.compiler.v3_0.commands.{LabelAction, LabelSetOp}
 import org.neo4j.cypher.internal.compiler.v3_0.spi.{QueryContext, _}
+import org.neo4j.graphdb.{Node, Relationship}
 
 import scala.collection.Iterator
 
@@ -79,4 +80,10 @@ class SnitchingQueryContext extends QueryContext with QueryContextAdaptation {
   override def getOrCreateLabelId(labelName: String) = labels(labelName)
 
   override def getOptLabelId(labelName: String): Option[Int] = labels.get(labelName)
+
+  override def createVirtualNode(): Node = ???
+
+  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship = ???
+
+  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship = ???
 }

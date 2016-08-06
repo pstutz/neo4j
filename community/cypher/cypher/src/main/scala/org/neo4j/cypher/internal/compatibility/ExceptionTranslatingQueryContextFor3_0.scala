@@ -255,5 +255,13 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   class ExceptionTranslatingTransactionalContext(inner: QueryTransactionalContext) extends DelegatingQueryTransactionalContext(inner) {
     override def close(success: Boolean) { translateException(super.close(success)) }
   }
+
+  override def createVirtualNode(): Node = translateException(inner.createVirtualNode())
+
+  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
+    translateException(inner.createVirtualRelationship(start,end,relType))
+
+  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
+    translateException(inner.createVirtualRelationship(start,end,relType))
 }
 
