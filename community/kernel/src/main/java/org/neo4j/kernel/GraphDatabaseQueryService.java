@@ -19,16 +19,16 @@
  */
 package org.neo4j.kernel;
 
-import java.net.URL;
-
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.security.URLAccessValidationError;
-import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
+
+import java.net.URL;
 
 /*
  * This is a trimmed down version of GraphDatabaseService and GraphDatabaseAPI, limited to a subset of functions needed
@@ -37,7 +37,9 @@ import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 public interface GraphDatabaseQueryService
 {
     DependencyResolver getDependencyResolver();
+    Node createVirtualNode();
     Node createNode();
+    Node createVirtualNode( Label... labels );
     Node createNode( Label... labels );
     Node getNodeById(long id);
     Relationship getRelationshipById(long id);

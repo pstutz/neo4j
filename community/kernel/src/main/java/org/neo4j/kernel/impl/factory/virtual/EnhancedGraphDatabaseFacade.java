@@ -66,8 +66,8 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
         return super.createNode();
     }
 
-    /*public Node createVirtualNode(Label... labels){
-        try
+    public Node createVirtualNode(Label... labels){
+        /*try
         {
             Node newNode = createVirtualNode();
             for ( Label label : labels )
@@ -96,8 +96,10 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
         catch ( InvalidTransactionTypeKernelException e )
         {
             throw new ConstraintViolationException( e.getMessage(), e );
-        }
-    }*/
+        }*/
+
+        return null;  // just for the moment
+    }
 
     @Override
     public Node createNode(Label... labels) {

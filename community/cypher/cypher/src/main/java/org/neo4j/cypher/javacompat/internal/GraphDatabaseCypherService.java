@@ -19,27 +19,24 @@
  */
 package org.neo4j.cypher.javacompat.internal;
 
-import java.net.URL;
-
-import org.neo4j.graphdb.DependencyResolver;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Label;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.Relationship;
+import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.security.URLAccessValidationError;
 import org.neo4j.kernel.GraphDatabaseQueryService;
-import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
+import org.neo4j.kernel.impl.factory.virtual.EnhancedGraphDatabaseFacade;
+
+import java.net.URL;
 
 public class GraphDatabaseCypherService implements GraphDatabaseQueryService
 {
-    private GraphDatabaseFacade graph;
+    private EnhancedGraphDatabaseFacade graph;
 
     public GraphDatabaseCypherService( GraphDatabaseService graph )
     {
-        this.graph = (GraphDatabaseFacade) graph;
+        this.graph = (EnhancedGraphDatabaseFacade) graph;
     }
 
     @Override
@@ -49,9 +46,19 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
     }
 
     @Override
+    public Node createVirtualNode() {
+        return graph.createVirtualNode();
+    }
+
+    @Override
     public Node createNode()
     {
         return graph.createNode();
+    }
+
+    @Override
+    public Node createVirtualNode(Label... labels) {
+        return graph.createVirtualNode(labels);
     }
 
     @Override

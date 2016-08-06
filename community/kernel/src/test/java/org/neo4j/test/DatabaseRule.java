@@ -467,4 +467,9 @@ public abstract class DatabaseRule extends ExternalResource implements GraphData
     public Node createVirtualNode() throws Exception {
         throw new Exception("Can't handle virtual entities in GraphDatabaseFacade");
     }
+
+    @Override
+    public Node createVirtualNode(Label ... labels) throws Exception {
+        throw new Exception("Can't handle virtual entities in GraphDatabaseFacade");
+    }
 }

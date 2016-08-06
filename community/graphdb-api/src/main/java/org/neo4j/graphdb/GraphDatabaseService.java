@@ -47,6 +47,11 @@ import java.util.Map;
  */
 public interface GraphDatabaseService
 {
+    /**
+     * Creates a virtual node.
+     *
+     * @return the virtual node.
+     */
     Node createVirtualNode() throws Exception;
 
     /**
@@ -55,6 +60,15 @@ public interface GraphDatabaseService
      * @return the created node.
      */
     Node createNode();
+
+    /**
+     * Creates a virtual node and adds the provided labels to it.
+     *
+     * @param labels {@link Label labels} to add to the virtual node.
+     * @return the virtual node.
+     */
+    Node createVirtualNode( Label... labels ) throws Exception;
+
 
     /**
      * Creates a new node and adds the provided labels to it.

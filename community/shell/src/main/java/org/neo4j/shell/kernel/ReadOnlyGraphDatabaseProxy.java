@@ -19,38 +19,11 @@
  */
 package org.neo4j.shell.kernel;
 
-import java.io.Serializable;
-import java.net.URL;
-import java.util.Collections;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import org.neo4j.graphdb.DependencyResolver;
-import org.neo4j.graphdb.Direction;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Label;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.PropertyContainer;
-import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.graphdb.ResourceIterable;
-import org.neo4j.graphdb.ResourceIterator;
-import org.neo4j.graphdb.Result;
-import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.event.KernelEventHandler;
 import org.neo4j.graphdb.event.TransactionEventHandler;
-import org.neo4j.graphdb.index.AutoIndexer;
-import org.neo4j.graphdb.index.Index;
-import org.neo4j.graphdb.index.IndexHits;
-import org.neo4j.graphdb.index.IndexManager;
-import org.neo4j.graphdb.index.IndexPopulationProgress;
-import org.neo4j.graphdb.index.RelationshipAutoIndexer;
-import org.neo4j.graphdb.index.RelationshipIndex;
-import org.neo4j.graphdb.schema.ConstraintCreator;
-import org.neo4j.graphdb.schema.ConstraintDefinition;
-import org.neo4j.graphdb.schema.IndexCreator;
-import org.neo4j.graphdb.schema.IndexDefinition;
-import org.neo4j.graphdb.schema.Schema;
+import org.neo4j.graphdb.index.*;
+import org.neo4j.graphdb.schema.*;
 import org.neo4j.graphdb.security.URLAccessValidationError;
 import org.neo4j.graphdb.traversal.BidirectionalTraversalDescription;
 import org.neo4j.graphdb.traversal.TraversalDescription;
@@ -59,8 +32,14 @@ import org.neo4j.helpers.collection.PrefetchingResourceIterator;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.impl.store.StoreId;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
+
+import java.io.Serializable;
+import java.net.URL;
+import java.util.Collections;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDatabaseAPI, IndexManager
 {
@@ -116,9 +95,19 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
     }
 
     @Override
+    public Node createVirtualNode() throws Exception {
+        return actual.createVirtualNode();
+    }
+
+    @Override
     public Node createNode()
     {
         return readOnly();
+    }
+
+    @Override
+    public Node createVirtualNode(Label... labels) throws Exception {
+        return actual.createVirtualNode(labels);
     }
 
     @Override
