@@ -265,6 +265,21 @@ public interface Node extends PropertyContainer
     Relationship createRelationshipTo( Node otherNode, RelationshipType type );
 
     /**
+     * Creates a virtual relationship between this node and another node. The
+     * relationship is of type <code>type</code>. It starts at this node and
+     * ends at <code>otherNode</code>.
+     * <p>
+     * A relationship is equally well traversed in both directions so there's no
+     * need to create another relationship in the opposite direction (in regards
+     * to traversal or performance).
+     *
+     * @param otherNode the end node of the virtual relationship
+     * @param type the type of the virtual relationship
+     * @return the virtual relationship
+     */
+    Relationship createVirtualRelationshipTo( Node otherNode, RelationshipType type );
+
+    /**
      * Returns relationship types which this node has one more relationships
      * for. If this node doesn't have any relationships an empty {@link Iterable}
      * will be returned.

@@ -286,6 +286,11 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
         }
 
         @Override
+        public Relationship createVirtualRelationshipTo(Node otherNode, RelationshipType type) {
+            return actual.createVirtualRelationshipTo(otherNode,type);
+        }
+
+        @Override
         public void delete()
         {
             readOnly();

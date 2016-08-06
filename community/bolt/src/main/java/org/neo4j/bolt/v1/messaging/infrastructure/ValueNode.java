@@ -19,24 +19,14 @@
  */
 package org.neo4j.bolt.v1.messaging.infrastructure;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-
 import org.neo4j.bolt.v1.messaging.BoltIOException;
 import org.neo4j.bolt.v1.messaging.Neo4jPack;
-import org.neo4j.graphdb.Direction;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Label;
-import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.NotFoundException;
-import org.neo4j.graphdb.Relationship;
-import org.neo4j.graphdb.RelationshipType;
+import org.neo4j.graphdb.*;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.api.exceptions.Status;
+
+import java.io.IOException;
+import java.util.*;
 
 public class ValueNode
         extends ValuePropertyContainer
@@ -210,6 +200,11 @@ public class ValueNode
     @Override
     public Relationship createRelationshipTo( Node node, RelationshipType relationshipType )
     {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Relationship createVirtualRelationshipTo(Node otherNode, RelationshipType type) {
         throw new UnsupportedOperationException();
     }
 
