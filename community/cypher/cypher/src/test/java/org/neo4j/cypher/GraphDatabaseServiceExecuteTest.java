@@ -20,8 +20,8 @@
 package org.neo4j.cypher;
 
 import org.junit.Test;
-
 import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.Result;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.test.TestGraphDatabaseFactory;
@@ -43,7 +43,7 @@ public class GraphDatabaseServiceExecuteTest
         }
 
         // when
-        graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})" );
+        Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})" );
 
         // then
         try ( Transaction tx = graphDb.beginTx() )
@@ -52,5 +52,30 @@ public class GraphDatabaseServiceExecuteTest
             tx.success();
         }
         assertEquals( before + 1, after );
+    }
+
+    @Test
+    public void shouldExecuteCypherWithVirtualNode() throws Exception
+    {
+        // given
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        final long before, after;
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            before = Iterables.count( graphDb.getAllNodes() );
+            tx.success();
+        }
+
+        // when
+        Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"}) RETURN n.virtual" );
+        assertEquals("{n.virtual=baz}",r.next().toString());
+        
+        // then
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            after = Iterables.count( graphDb.getAllNodes() );
+            tx.success();
+        }
+        assertEquals( before , after );
     }
 }

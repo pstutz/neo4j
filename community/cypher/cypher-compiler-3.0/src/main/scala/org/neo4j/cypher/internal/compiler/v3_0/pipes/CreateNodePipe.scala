@@ -40,15 +40,59 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
   private def createNode(context: ExecutionContext, state: QueryState): ExecutionContext = {
     //val node = state.query.createNode()
     // TODO: SASCHA
-    val node = state.query.createVirtualNode() // just for fun
-    //properties.
+
+    // current check if virtual:
+    // (dirty) check if prop is set (to String)
+
+    val virtual = properties.toList.toString().contains("virtual -> {  AUTOSTRING")
+    if(virtual) {
+      val node = state.query.createVirtualNode()
+      // Todo: optional, do not set virtual property
+      setVirtualProperties(context, state, node)
+
+      context += key -> node
+    } else{
+      val node = state.query.createNode()
+
+      setProperties(context, state, node.getId)
+      setLabels(context, state, node.getId)
+      context += key -> node
+    }
+
+
+    //properties.contains("bar: baz");
     //node.setProperty()
     // optional: do not set virtual property
 
     //setProperties(context, state, node.getId)   // this has problems!
     //setLabels(context, state, node.getId)
-    context += key -> node
+
   }
+
+  private def setVirtualProperties(context: ExecutionContext, state: QueryState, node: Node) = {
+    properties.foreach { expr =>
+      expr(context)(state) match {
+        case _: Node | _: Relationship =>
+          throw new CypherTypeException("Parameter provided for node creation is not a Map")
+        case IsMap(f) =>
+          val propertiesMap: Map[String, Any] = f(state.query)
+          propertiesMap.foreach {
+            case (k, v) => {
+              // set virtual prop
+              if (v == null) {
+                //do not set properties for null values
+                handleNull(key)
+              } else{
+                node.setProperty(k,v)  // slight change
+              }
+            }
+          }
+        case _ =>
+          throw new CypherTypeException("Parameter provided for node creation is not a Map")
+      }
+    }
+  }
+
 
   private def setProperties(context: ExecutionContext, state: QueryState, nodeId: Long) = {
     properties.foreach { expr =>
@@ -58,7 +102,10 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
         case IsMap(f) =>
           val propertiesMap: Map[String, Any] = f(state.query)
           propertiesMap.foreach {
-            case (k, v) => setProperty(nodeId, k, v, state.query)
+            case (k, v) => {
+                // set real prop
+                setProperty(nodeId, k, v, state.query)
+            }
           }
         case _ =>
           throw new CypherTypeException("Parameter provided for node creation is not a Map")
@@ -71,8 +118,6 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     if (value == null) {
       handleNull(key)
     } else {
-
-
       val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
       qtx.nodeOps.setProperty(nodeId, propertyKeyId, makeValueNeoSafe(value))
     }
