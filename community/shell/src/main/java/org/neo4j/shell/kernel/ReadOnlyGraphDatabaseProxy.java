@@ -291,6 +291,11 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
         }
 
         @Override
+        public boolean isVirtual() {
+            return actual.isVirtual();
+        }
+
+        @Override
         public void delete()
         {
             readOnly();

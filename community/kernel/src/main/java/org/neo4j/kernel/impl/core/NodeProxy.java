@@ -65,10 +65,13 @@ public class NodeProxy
     private final NodeActions actions;
     private final long nodeId;
 
+    private final Map<String,Object> virtualProperties;
+
     public NodeProxy( NodeActions actions, long nodeId )
     {
         this.nodeId = nodeId;
         this.actions = actions;
+        virtualProperties = new HashMap<>();
     }
 
     @Override
@@ -254,47 +257,48 @@ public class NodeProxy
     @Override
     public void setProperty( String key, Object value )
     {
-        try ( Statement statement = actions.statement() )
-        {
-            int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName( key );
-            try
-            {
-                statement.dataWriteOperations().nodeSetProperty( nodeId, Property.property( propertyKeyId, value ) );
+        if(isVirtual()){
+            // this needs much more (constraint) checking ...
+            virtualProperties.put(key,value);
+
+        } else {
+            try (Statement statement = actions.statement()) {
+                int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName(key);
+                try {
+                    statement.dataWriteOperations().nodeSetProperty(nodeId, Property.property(propertyKeyId, value));
+                } catch (ConstraintValidationKernelException e) {
+                    throw new ConstraintViolationException(
+                            e.getUserMessage(new StatementTokenNameLookup(statement.readOperations())), e);
+                } catch (IllegalArgumentException e) {
+                    // Trying to set an illegal value is a critical error - fail this transaction
+                    actions.failTransaction();
+                    throw e;
+                }
+            } catch (EntityNotFoundException e) {
+                throw new NotFoundException(e);
+            } catch (IllegalTokenNameException e) {
+                throw new IllegalArgumentException(format("Invalid property key '%s'.", key), e);
+            } catch (InvalidTransactionTypeKernelException e) {
+                throw new ConstraintViolationException(e.getMessage(), e);
+            } catch (AutoIndexingKernelException e) {
+                throw new IllegalStateException("Auto indexing encountered a failure while setting property: "
+                        + e.getMessage(), e);
             }
-            catch ( ConstraintValidationKernelException e )
-            {
-                throw new ConstraintViolationException(
-                        e.getUserMessage( new StatementTokenNameLookup( statement.readOperations() ) ), e );
-            }
-            catch ( IllegalArgumentException e )
-            {
-                // Trying to set an illegal value is a critical error - fail this transaction
-                actions.failTransaction();
-                throw e;
-            }
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( e );
-        }
-        catch ( IllegalTokenNameException e )
-        {
-            throw new IllegalArgumentException( format( "Invalid property key '%s'.", key ), e );
-        }
-        catch ( InvalidTransactionTypeKernelException e )
-        {
-            throw new ConstraintViolationException( e.getMessage(), e );
-        }
-        catch ( AutoIndexingKernelException e )
-        {
-            throw new IllegalStateException( "Auto indexing encountered a failure while setting property: "
-                                             + e.getMessage(), e );
         }
     }
 
     @Override
     public Object removeProperty( String key ) throws NotFoundException
     {
+        if(isVirtual()) {
+            if(virtualProperties.containsKey(key)){
+                Object o = virtualProperties.get(key);
+                virtualProperties.remove(key);
+                return o;
+            } else{
+                throw new NotFoundException();
+            }
+        }
         try ( Statement statement = actions.statement() )
         {
             int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName( key );
@@ -327,6 +331,15 @@ public class NodeProxy
             throw new IllegalArgumentException( "(null) property key is not allowed" );
         }
 
+        if(isVirtual()) {
+            if(virtualProperties.containsKey(key)) {
+                Object o = virtualProperties.get(key);
+                return o;
+            }
+            else
+                return defaultValue;
+        }
+
         try ( Statement statement = actions.statement() )
         {
             int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
@@ -342,6 +355,9 @@ public class NodeProxy
     @Override
     public Iterable<String> getPropertyKeys()
     {
+        if(isVirtual())
+            return virtualProperties.keySet();
+
         try ( Statement statement = actions.statement() )
         {
             List<String> keys = new ArrayList<>();
@@ -375,6 +391,17 @@ public class NodeProxy
             return Collections.emptyMap();
         }
 
+        if(isVirtual()){
+            Map<String, Object> returnMap = new HashMap<>();
+            for(String k:keys){
+                if(virtualProperties.containsKey(k)){
+                    Object o = virtualProperties.get(k);
+                    returnMap.put(k,o);
+                }
+            }
+            return returnMap;
+        }
+
         try ( Statement statement = actions.statement() )
         {
             try ( Cursor<NodeItem> node = statement.readOperations().nodeCursor( nodeId ) )
@@ -396,6 +423,9 @@ public class NodeProxy
     @Override
     public Map<String, Object> getAllProperties()
     {
+        if(isVirtual())
+            return virtualProperties;
+
         try ( Statement statement = actions.statement() )
         {
             try ( Cursor<NodeItem> node = statement.readOperations().nodeCursor( nodeId ) )
@@ -436,6 +466,15 @@ public class NodeProxy
             throw new IllegalArgumentException( "(null) property key is not allowed" );
         }
 
+        if(isVirtual()){
+            if(virtualProperties.containsKey(key)){
+                Object o = virtualProperties.get(key);
+                return o;
+            } else{
+                throw new NotFoundException( format( "No such property, '%s'.", key ) );
+            }
+        }
+
         try ( Statement statement = actions.statement() )
         {
             try
@@ -468,6 +507,10 @@ public class NodeProxy
         if ( null == key )
         {
             return false;
+        }
+
+        if(isVirtual()){
+            return virtualProperties.containsKey(key);
         }
 
         try ( Statement statement = actions.statement() )
@@ -556,6 +599,7 @@ public class NodeProxy
     public Relationship createVirtualRelationshipTo(Node otherNode, RelationshipType type) {
         //TODO Sascha
 
+        // Do we really need a separate method?
         if ( otherNode == null )
         {
             throw new IllegalArgumentException( "Other node is null." );
@@ -585,6 +629,11 @@ public class NodeProxy
         {
             throw new ConstraintViolationException( e.getMessage(), e );
         }
+    }
+
+    @Override
+    public boolean isVirtual() {
+        return getId()<0;
     }
 
     @Override

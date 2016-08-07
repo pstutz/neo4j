@@ -374,6 +374,8 @@ class MonitoredNode(inner: Node, monitor: () => Unit) extends Node {
   def getDegree( relType:RelationshipType, direction:Direction ):Int = ???
 
   override def createVirtualRelationshipTo(otherNode: Node, `type`: RelationshipType): Relationship = ???
+
+  override def isVirtual: Boolean = ???
 }
 
 

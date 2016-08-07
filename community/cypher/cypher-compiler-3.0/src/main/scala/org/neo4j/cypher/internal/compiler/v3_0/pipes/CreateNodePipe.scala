@@ -42,8 +42,7 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     // TODO: SASCHA
     val node = state.query.createVirtualNode() // just for fun
     //properties.
-
-
+    //node.setProperty()
     // optional: do not set virtual property
 
     //setProperties(context, state, node.getId)   // this has problems!
@@ -72,6 +71,8 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     if (value == null) {
       handleNull(key)
     } else {
+
+
       val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
       qtx.nodeOps.setProperty(nodeId, propertyKeyId, makeValueNeoSafe(value))
     }
