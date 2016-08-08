@@ -241,7 +241,7 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     }
 
     public Iterable<Node> getVirtualNodesForLabel(String labelname){
-        List<Node> returnList = new ArrayList<Node>();
+        List<Node> returnList = new ArrayList<>();
         String transaction_ident = spi.currentTransaction().toString();
         try {
             Map<Integer,PropertyContainer> current_map = virtualNodes.get(transaction_ident);

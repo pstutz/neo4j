@@ -35,7 +35,7 @@ public class GraphDatabaseServiceExecuteTest
     {
         // given
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
-        final long before, after;
+        long before, after;
         try ( Transaction tx = graphDb.beginTx() )
         {
             before = Iterables.count( graphDb.getAllNodes() );
@@ -43,7 +43,18 @@ public class GraphDatabaseServiceExecuteTest
         }
 
         // when
-        Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})" );
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"}) RETURN n.bar" );
+            assertEquals("{n.bar=baz}",r.next().toString());
+
+            r = graphDb.execute("MATCH (n:Foo) RETURN n.bar, COUNT(n)");
+            System.out.println(r.next().toString());
+
+            after = Iterables.count( graphDb.getAllNodes() );
+            System.out.println(after);
+            tx.success();
+        }
 
         // then
         try ( Transaction tx = graphDb.beginTx() )

@@ -27,7 +27,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.mutation.{GraphElementPropertyFun
 import org.neo4j.cypher.internal.compiler.v3_0.spi.QueryContext
 import org.neo4j.cypher.internal.frontend.v3_0.symbols._
 import org.neo4j.cypher.internal.frontend.v3_0.{CypherTypeException, InvalidSemanticsException}
-import org.neo4j.graphdb.{Node, Relationship}
+import org.neo4j.graphdb.{Label, Node, Relationship}
 
 import scala.collection.Map
 
@@ -49,7 +49,7 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
       val node = state.query.createVirtualNode()
       // Todo: optional, do not set virtual property
       setVirtualProperties(context, state, node)
-
+      setVirtualLabels(node)
       context += key -> node
     } else{
       val node = state.query.createNode()
@@ -128,6 +128,14 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
   private def setLabels(context: ExecutionContext, state: QueryState, nodeId: Long) = {
     val labelIds = labels.map(_.getOrCreateId(state.query).id)
     state.query.setLabelsOnNode(nodeId, labelIds.iterator)
+  }
+
+  private def setVirtualLabels(node: Node) = {
+    val labelIterator = labels.iterator
+    while(labelIterator.hasNext){
+       val l = labelIterator.next()
+       node.addLabel(Label.label(l.name))
+    }
   }
 
   def symbols = src.symbols.add(key, CTNode)

@@ -19,12 +19,16 @@
  */
 package org.neo4j.cypher.internal.compiler.v3_0.pipes
 
+import java.util
+
 import org.neo4j.cypher.internal.compiler.v3_0._
 import org.neo4j.cypher.internal.compiler.v3_0.executionplan.{Effects, ReadsNodesWithLabels}
 import org.neo4j.cypher.internal.compiler.v3_0.planDescription.InternalPlanDescription.Arguments.LabelName
 import org.neo4j.cypher.internal.compiler.v3_0.planDescription.{NoChildren, PlanDescriptionImpl}
 import org.neo4j.cypher.internal.compiler.v3_0.symbols.SymbolTable
 import org.neo4j.cypher.internal.frontend.v3_0.symbols._
+
+import scala.collection.mutable.ListBuffer
 
 case class NodeByLabelScanPipe(ident: String, label: LazyLabel)
                               (val estimatedCardinality: Option[Double] = None)(implicit pipeMonitor: PipeMonitor)
@@ -40,14 +44,22 @@ case class NodeByLabelScanPipe(ident: String, label: LazyLabel)
         val nodes = state.query.getNodesByLabel(labelId.id)
         val baseContext = state.initialContext.getOrElse(ExecutionContext.empty)
         nodes.map(n => baseContext.newWith1(ident, n))
+
       case None =>
         // TODO: Sascha
         // than it could be also a virtual only label!
         //state.query
-        val nodes = state.query.getVirtualNodesForLabel(label.name);
+        val nodes = state.query.getVirtualNodesForLabel(label.name).iterator();
 
+        val baseContext = state.initialContext.getOrElse(ExecutionContext.empty)
+        val list = new ListBuffer[ExecutionContext]() // hmm
+        while(nodes.hasNext){
+          val id = nodes.next()
+          list += baseContext.newWith1(ident,id )
+        }
+        list.iterator
 
-        Iterator.empty
+        //Iterator.empty
     }
   }
 
