@@ -18,6 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.neo4j.cypher.internal.compiler.v3_0.profiler
+import java.lang.Iterable
 
 import org.neo4j.cypher.internal.compiler.v3_0._
 import org.neo4j.cypher.internal.compiler.v3_0.pipes.{Pipe, PipeDecorator, QueryState}
@@ -25,7 +26,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.planDescription.InternalPlanDescr
 import org.neo4j.cypher.internal.compiler.v3_0.planDescription.InternalPlanDescription.Arguments
 import org.neo4j.cypher.internal.compiler.v3_0.spi.{DelegatingOperations, DelegatingQueryContext, Operations, QueryContext}
 import org.neo4j.cypher.internal.frontend.v3_0.ProfilerStatisticsNotReadyException
-import org.neo4j.graphdb.{Node, PropertyContainer, Relationship}
+import org.neo4j.graphdb.{Label, Node, PropertyContainer, Relationship}
 
 import scala.collection.mutable
 
@@ -126,6 +127,8 @@ final class ProfilingQueryContext(inner: QueryContext, val p: Pipe)
 
   override def nodeOps: Operations[Node] = new ProfilerOperations(inner.nodeOps)
   override def relationshipOps: Operations[Relationship] = new ProfilerOperations(inner.relationshipOps)
+
+  override def getVirtualNodesForLabel(label: String): Iterable[Node] = inner.getVirtualNodesForLabel(label)
 }
 
 class ProfilingIterator(inner: Iterator[ExecutionContext], startValue: Long) extends Iterator[ExecutionContext] with Counter {

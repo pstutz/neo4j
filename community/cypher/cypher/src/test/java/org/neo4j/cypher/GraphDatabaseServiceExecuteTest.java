@@ -67,9 +67,17 @@ public class GraphDatabaseServiceExecuteTest
         }
 
         // when
-        Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"}) RETURN n.virtual" );
-        assertEquals("{n.virtual=baz}",r.next().toString());
-        
+
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"}) RETURN n.virtual" );
+            assertEquals("{n.virtual=baz}",r.next().toString());
+
+            r = graphDb.execute("MATCH (n:Foo) RETURN n.virtual, COUNT(n)");
+            System.out.println(r.next().toString());
+        }
+
         // then
         try ( Transaction tx = graphDb.beginTx() )
         {

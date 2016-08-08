@@ -19,6 +19,7 @@
  */
 package org.neo4j.cypher.internal.spi.v3_0
 
+import java.lang.Iterable
 import java.net.URL
 import java.util.function.Predicate
 
@@ -617,6 +618,8 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
     relationshipOps.getById(relId)
 
    */
+  override def getVirtualNodesForLabel(label: String): Iterable[Node] =
+    transactionalContext.graph.getVirtualNodesByLabel(label)
 }
 
 object TransactionBoundQueryContext {

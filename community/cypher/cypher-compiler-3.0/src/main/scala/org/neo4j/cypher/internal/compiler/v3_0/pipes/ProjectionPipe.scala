@@ -41,10 +41,6 @@ case class ProjectionPipe(source: Pipe, expressions: Map[String, Expression])(va
   protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) = {
     //register as parent so that stats are associated with this pipe
 
-    /*while(input.hasNext){
-      input.next().foreach(System.out.println)
-    }*/
-
     state.decorator.registerParentPipe(this)
     input.map {
       ctx =>

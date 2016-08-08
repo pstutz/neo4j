@@ -11,9 +11,7 @@ import org.neo4j.kernel.impl.core.RelationshipProxy;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.storageengine.api.EntityType;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 
 import static java.lang.String.format;
 
@@ -26,7 +24,7 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
     private Map<String, TreeMap<Integer, PropertyContainer>> virtualNodes; // TA -> Map ( Id -> Node)
     private Map<String,TreeMap<Integer,PropertyContainer>> virtualRelationships; // TA -> Map ( Id -> Relationship)
-    private Map<String,TreeMap<Integer,Label>> virtualLabels; // TA -> Map (NodeId -> Label)
+    //private Map<String,TreeMap<Integer,Label>> virtualLabels; // TA -> Map (NodeId -> Label)
 
     private int getFreeVirtualId(TreeMap<Integer,PropertyContainer> map){
         if(map.size()==0){
@@ -42,7 +40,7 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
 
         virtualNodes = new HashMap<>();
         virtualRelationships = new HashMap<>();
-        virtualLabels = new HashMap<>();
+        //virtualLabels = new HashMap<>();
     }
 
     public Node createVirtualNode(){
@@ -240,5 +238,22 @@ public class EnhancedGraphDatabaseFacade extends GraphDatabaseFacade {
     public ResourceIterator<Node> findNodes(Label myLabel) {
         // TODO search virtual nodes too
         return super.findNodes(myLabel);
+    }
+
+    public Iterable<Node> getVirtualNodesForLabel(String labelname){
+        List<Node> returnList = new ArrayList<Node>();
+        String transaction_ident = spi.currentTransaction().toString();
+        try {
+            Map<Integer,PropertyContainer> current_map = virtualNodes.get(transaction_ident);
+            for(PropertyContainer p : current_map.values()){
+                Node n = (Node) p;
+                if(n.hasLabel(Label.label(labelname))){ // not that great
+                    returnList.add(n);
+                }
+            }
+        } catch (NullPointerException e){
+
+        }
+        return returnList;
     }
 }

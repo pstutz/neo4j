@@ -19,12 +19,14 @@
  */
 package org.neo4j.cypher.internal.compiler.v3_0
 
+import java.lang.Iterable
+
 import org.neo4j.cypher.GraphDatabaseFunSuite
 import org.neo4j.cypher.internal.compiler.v3_0.commands.expressions.Literal
 import org.neo4j.cypher.internal.compiler.v3_0.commands.values.{KeyToken, TokenType}
 import org.neo4j.cypher.internal.compiler.v3_0.commands.{LabelAction, LabelSetOp}
 import org.neo4j.cypher.internal.compiler.v3_0.spi.{QueryContext, _}
-import org.neo4j.graphdb.{Node, Relationship}
+import org.neo4j.graphdb.{Label, Node, Relationship}
 
 import scala.collection.Iterator
 
@@ -86,4 +88,6 @@ class SnitchingQueryContext extends QueryContext with QueryContextAdaptation {
   override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship = ???
 
   override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship = ???
+
+  override def getVirtualNodesForLabel(label: String): Iterable[Node] = ???
 }

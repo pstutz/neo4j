@@ -68,6 +68,11 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
     }
 
     @Override
+    public Iterable<Node> getVirtualNodesByLabel(String labelname) {
+        return graph.getVirtualNodesForLabel(labelname);
+    }
+
+    @Override
     public Node getNodeById( long id )
     {
         return graph.getNodeById( id );

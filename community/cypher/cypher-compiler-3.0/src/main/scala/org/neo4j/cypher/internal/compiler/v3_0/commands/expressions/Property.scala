@@ -42,6 +42,7 @@ case class Property(mapExpr: Expression, propertyKey: KeyToken)
         state.query.nodeOps.getProperty(n.getId, propId)
       }
     case r: Relationship =>
+      // TODO: Sascha
       val propId = propertyKey.getOrCreateId(state.query)
       state.query.relationshipOps.getProperty(r.getId, propId)
     case IsMap(mapFunc) => try {

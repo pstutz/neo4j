@@ -20,11 +20,12 @@
 package org.neo4j.cypher.internal.compiler.v3_0.spi
 
 import java.net.URL
+import java.lang.Iterable
 
 import org.neo4j.cypher.internal.compiler.v3_0.commands.expressions.{Expander, KernelPredicate}
 import org.neo4j.cypher.internal.compiler.v3_0.pipes.matching.PatternNode
 import org.neo4j.cypher.internal.frontend.v3_0.SemanticDirection
-import org.neo4j.graphdb.{Node, Path, PropertyContainer, Relationship}
+import org.neo4j.graphdb._
 import org.neo4j.kernel.api.index.IndexDescriptor
 
 import scala.collection.Iterator
@@ -199,6 +200,8 @@ class DelegatingQueryContext(val inner: QueryContext) extends QueryContext {
 
   override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
     inner.createVirtualRelationship(start,end,relType)
+
+  override def getVirtualNodesForLabel(label: String): Iterable[Node] = inner.getVirtualNodesForLabel(label)
 }
 
 class DelegatingOperations[T <: PropertyContainer](protected val inner: Operations[T]) extends Operations[T] {

@@ -66,12 +66,14 @@ public class NodeProxy
     private final long nodeId;
 
     private final Map<String,Object> virtualProperties;
+    private final List<Label> virtualLabels;
 
     public NodeProxy( NodeActions actions, long nodeId )
     {
         this.nodeId = nodeId;
         this.actions = actions;
         virtualProperties = new HashMap<>();
+        virtualLabels = new ArrayList<>();
     }
 
     @Override
@@ -639,99 +641,93 @@ public class NodeProxy
     @Override
     public void addLabel( Label label )
     {
-        try ( Statement statement = actions.statement() )
-        {
-            try
-            {
-                statement.dataWriteOperations().nodeAddLabel( getId(),
-                        statement.tokenWriteOperations().labelGetOrCreateForName( label.name() ) );
+        if(isVirtual()) {
+            // TODO: Check stuff!!!
+            virtualLabels.add(label);
+
+        } else {
+            try (Statement statement = actions.statement()) {
+                try {
+                    statement.dataWriteOperations().nodeAddLabel(getId(),
+                            statement.tokenWriteOperations().labelGetOrCreateForName(label.name()));
+                } catch (ConstraintValidationKernelException e) {
+                    throw new ConstraintViolationException(
+                            e.getUserMessage(new StatementTokenNameLookup(statement.readOperations())), e);
+                }
+            } catch (IllegalTokenNameException e) {
+                throw new ConstraintViolationException(format("Invalid label name '%s'.", label.name()), e);
+            } catch (TooManyLabelsException e) {
+                throw new ConstraintViolationException("Unable to add label.", e);
+            } catch (EntityNotFoundException e) {
+                throw new NotFoundException("No node with id " + getId() + " found.", e);
+            } catch (InvalidTransactionTypeKernelException e) {
+                throw new ConstraintViolationException(e.getMessage(), e);
             }
-            catch ( ConstraintValidationKernelException e )
-            {
-                throw new ConstraintViolationException(
-                        e.getUserMessage( new StatementTokenNameLookup( statement.readOperations() ) ), e );
-            }
-        }
-        catch ( IllegalTokenNameException e )
-        {
-            throw new ConstraintViolationException( format( "Invalid label name '%s'.", label.name() ), e );
-        }
-        catch ( TooManyLabelsException e )
-        {
-            throw new ConstraintViolationException( "Unable to add label.", e );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "No node with id " + getId() + " found.", e );
-        }
-        catch ( InvalidTransactionTypeKernelException e )
-        {
-            throw new ConstraintViolationException( e.getMessage(), e );
         }
     }
 
     @Override
     public void removeLabel( Label label )
     {
-        try ( Statement statement = actions.statement() )
-        {
-            int labelId = statement.readOperations().labelGetForName( label.name() );
-            if ( labelId != KeyReadOperations.NO_SUCH_LABEL )
-            {
-                statement.dataWriteOperations().nodeRemoveLabel( getId(), labelId );
+        if(isVirtual()){
+            if (this.hasLabel(label)){
+                virtualLabels.remove(label);
+            } // else: do nothing, everything is fine (apparently)
+        } else {
+            try (Statement statement = actions.statement()) {
+                int labelId = statement.readOperations().labelGetForName(label.name());
+                if (labelId != KeyReadOperations.NO_SUCH_LABEL) {
+                    statement.dataWriteOperations().nodeRemoveLabel(getId(), labelId);
+                }
+            } catch (EntityNotFoundException e) {
+                throw new NotFoundException("No node with id " + getId() + " found.", e);
+            } catch (InvalidTransactionTypeKernelException e) {
+                throw new ConstraintViolationException(e.getMessage(), e);
             }
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "No node with id " + getId() + " found.", e );
-        }
-        catch ( InvalidTransactionTypeKernelException e )
-        {
-            throw new ConstraintViolationException( e.getMessage(), e );
         }
     }
 
     @Override
     public boolean hasLabel( Label label )
     {
-        try ( Statement statement = actions.statement() )
-        {
-            int labelId = statement.readOperations().labelGetForName( label.name() );
-            return statement.readOperations().nodeHasLabel( getId(), labelId );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            return false;
+        if(isVirtual()){
+            return virtualLabels.contains(label);
+        } else {
+            try (Statement statement = actions.statement()) {
+                int labelId = statement.readOperations().labelGetForName(label.name());
+                return statement.readOperations().nodeHasLabel(getId(), labelId);
+            } catch (EntityNotFoundException e) {
+                return false;
+            }
         }
     }
 
     @Override
     public Iterable<Label> getLabels()
     {
-        try ( Statement statement = actions.statement() )
-        {
-            PrimitiveIntIterator labels = statement.readOperations().nodeGetLabels( getId() );
-            List<Label> keys = new ArrayList<>();
-            while ( labels.hasNext() )
-            {
-                int labelId = labels.next();
-                keys.add( label( statement.readOperations().labelGetName( labelId ) ) );
+        if(isVirtual()) {
+            return virtualLabels;
+        } else {
+            try (Statement statement = actions.statement()) {
+                PrimitiveIntIterator labels = statement.readOperations().nodeGetLabels(getId());
+                List<Label> keys = new ArrayList<>();
+                while (labels.hasNext()) {
+                    int labelId = labels.next();
+                    keys.add(label(statement.readOperations().labelGetName(labelId)));
+                }
+                return keys;
+            } catch (EntityNotFoundException e) {
+                throw new NotFoundException("Node not found", e);
+            } catch (LabelNotFoundKernelException e) {
+                throw new IllegalStateException("Label retrieved through kernel API should exist.", e);
             }
-            return keys;
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found", e );
-        }
-        catch ( LabelNotFoundKernelException e )
-        {
-            throw new IllegalStateException( "Label retrieved through kernel API should exist.", e );
         }
     }
 
     @Override
     public int getDegree()
     {
+        // TODO Sascha
         try ( Statement statement = actions.statement() )
         {
             return statement.readOperations().nodeGetDegree( nodeId, Direction.BOTH );
@@ -745,6 +741,7 @@ public class NodeProxy
     @Override
     public int getDegree( RelationshipType type )
     {
+        // TODO Sascha
         try ( Statement statement = actions.statement() )
         {
             ReadOperations ops = statement.readOperations();
@@ -764,6 +761,7 @@ public class NodeProxy
     @Override
     public int getDegree( Direction direction )
     {
+        // TODO Sascha
         try ( Statement statement = actions.statement() )
         {
             ReadOperations ops = statement.readOperations();
@@ -778,6 +776,7 @@ public class NodeProxy
     @Override
     public int getDegree( RelationshipType type, Direction direction )
     {
+        // TODO Sascha
         try ( Statement statement = actions.statement() )
         {
             ReadOperations ops = statement.readOperations();
@@ -797,6 +796,7 @@ public class NodeProxy
     @Override
     public Iterable<RelationshipType> getRelationshipTypes()
     {
+        // TODO Sascha
         try ( Statement statement = actions.statement() )
         {
             ReadOperations ops = statement.readOperations();
@@ -810,6 +810,7 @@ public class NodeProxy
 
     private int[] relTypeIds( RelationshipType[] types, Statement statement )
     {
+        // TODO Sascha ?
         int[] ids = new int[types.length];
         int outIndex = 0;
         for ( int i = 0; i < types.length; i++ )
