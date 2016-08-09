@@ -87,12 +87,51 @@ public class GraphDatabaseServiceExecuteTest
 
             r = graphDb.execute("MATCH (n:Foo) RETURN n.virtual, COUNT(n)");
             System.out.println(r.next().toString());
+            tx.success();
         }
 
         // then
         try ( Transaction tx = graphDb.beginTx() )
         {
             after = Iterables.count( graphDb.getAllNodes() );
+            tx.success();
+        }
+        assertEquals( before , after );
+    }
+
+    @Test
+    public void shouldExecuteCypherWithVirtualRelationship() throws Exception
+    {
+        // given
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        long before, after;
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            before = Iterables.count( graphDb.getAllRelationships() );
+            tx.success();
+        }
+
+        // when
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Result r = graphDb.execute( "CREATE (n:Foo{virtual:true})-[t:TEST{virtual:true}]->" +
+                    "(m:Bar{virtual:true}) RETURN t.virtual" );
+
+            assertEquals("{t.virtual=true}",r.next().toString());
+
+            after = Iterables.count( graphDb.getAllRelationships());
+            System.out.println(after);
+
+            r = graphDb.execute("MATCH (:Foo)-[t]->(:Foo) RETURN COUNT(t)");
+            System.out.println(r.next().toString());
+            tx.success();
+        }
+
+        // then
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            after = Iterables.count( graphDb.getAllRelationships() );
             tx.success();
         }
         assertEquals( before , after );
