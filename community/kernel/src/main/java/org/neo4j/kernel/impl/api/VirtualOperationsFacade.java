@@ -21,110 +21,43 @@ package org.neo4j.kernel.impl.api;
 
 import org.neo4j.collection.RawIterator;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.Direction;
-import org.neo4j.kernel.api.*;
-import org.neo4j.kernel.api.SchemaWriteOperations;
-import org.neo4j.kernel.api.constraints.*;
+import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.LegacyIndexHits;
 import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.schema.*;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
+import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
+import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
+import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
-import org.neo4j.kernel.api.index.InternalIndexState;
-import org.neo4j.kernel.api.proc.CallableProcedure;
-import org.neo4j.kernel.api.proc.ProcedureSignature;
 import org.neo4j.kernel.api.proc.ProcedureSignature.ProcedureName;
 import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.api.security.AccessMode;
-import org.neo4j.kernel.impl.api.operations.*;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.register.Register.DoubleLongRegister;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.Token;
-import org.neo4j.storageengine.api.lock.ResourceType;
-import org.neo4j.storageengine.api.schema.PopulationProgress;
 
 import java.util.Iterator;
 import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
 
-public class OperationsFacade implements ReadOperations, DataWriteOperations, SchemaWriteOperations
+// TODO Sascha
+public class VirtualOperationsFacade extends OperationsFacade
 {
-    private final KernelTransaction tx;
-    private final KernelStatement statement;
-    private final StatementOperationParts operations;
-    private final Procedures procedures;
 
-    OperationsFacade( KernelTransaction tx, KernelStatement statement,
-                      StatementOperationParts operations, Procedures procedures )
-    {
-        this.tx = tx;
-        this.statement = statement;
-        this.operations = operations;
-        this.procedures = procedures;
-    }
 
-    final KeyReadOperations tokenRead()
+    VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
+                            StatementOperationParts operations, Procedures procedures )
     {
-        return operations.keyReadOperations();
-    }
+        super(tx,statement,operations,procedures);
 
-    final KeyWriteOperations tokenWrite()
-    {
-        return operations.keyWriteOperations();
-    }
-
-    final EntityReadOperations dataRead()
-    {
-        return operations.entityReadOperations();
-    }
-
-    final EntityWriteOperations dataWrite()
-    {
-        return operations.entityWriteOperations();
-    }
-
-    final LegacyIndexWriteOperations legacyIndexWrite()
-    {
-        return operations.legacyIndexWriteOperations();
-    }
-
-    final LegacyIndexReadOperations legacyIndexRead()
-    {
-        return operations.legacyIndexReadOperations();
-    }
-
-    final SchemaReadOperations schemaRead()
-    {
-        return operations.schemaReadOperations();
-    }
-
-    final org.neo4j.kernel.impl.api.operations.SchemaWriteOperations schemaWrite()
-    {
-        return operations.schemaWriteOperations();
-    }
-
-    final SchemaStateOperations schemaState()
-    {
-        return operations.schemaStateOperations();
-    }
-
-    final LockOperations locking()
-    {
-        return operations.locking();
-    }
-
-    final CountsOperations counting()
-    {
-        return operations.counting();
     }
 
     // <DataRead>
@@ -132,34 +65,30 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     @Override
     public PrimitiveLongIterator nodesGetAll()
     {
-        statement.assertOpen();
-        return dataRead().nodesGetAll( statement );
+        // TODO !
+        return super.nodesGetAll();
     }
 
     @Override
     public PrimitiveLongIterator relationshipsGetAll()
     {
-        statement.assertOpen();
-        return dataRead().relationshipsGetAll( statement );
+        // TODO !
+        return super.relationshipsGetAll();
     }
 
     @Override
     public PrimitiveLongIterator nodesGetForLabel( int labelId )
     {
-        statement.assertOpen();
-        if ( labelId == StatementConstants.NO_SUCH_LABEL )
-        {
-            return PrimitiveLongCollections.emptyIterator();
-        }
-        return dataRead().nodesGetForLabel( statement, labelId );
+        // TODO !
+        return super.nodesGetForLabel(labelId);
     }
 
     @Override
     public PrimitiveLongIterator nodesGetFromIndexSeek( IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexSeek( statement, index, value );
+        // TODO !
+        return super.nodesGetFromIndexSeek(index,value);
     }
 
     @Override
@@ -170,9 +99,8 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
             boolean includeUpper )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexRangeSeekByNumber( statement, index, lower, includeLower, upper,
-                includeUpper );
+        // TODO !
+        return super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper);
     }
 
     @Override
@@ -183,365 +111,258 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
             boolean includeUpper )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexRangeSeekByString( statement, index, lower, includeLower, upper,
-                includeUpper );
+        // TODO !
+        return super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper);
     }
 
     @Override
     public PrimitiveLongIterator nodesGetFromIndexRangeSeekByPrefix( IndexDescriptor index, String prefix )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexRangeSeekByPrefix( statement, index, prefix );
+        // TODO !
+        return super.nodesGetFromIndexRangeSeekByPrefix(index,prefix);
     }
 
     @Override
     public PrimitiveLongIterator nodesGetFromIndexScan( IndexDescriptor index )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexScan( statement, index );
+        // TODO !
+        return super.nodesGetFromIndexScan(index);
     }
 
     @Override
     public PrimitiveLongIterator nodesGetFromIndexContainsScan( IndexDescriptor index, String term )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexContainsScan( statement, index, term );
+        // TODO !
+        return super.nodesGetFromIndexContainsScan(index,term);
     }
 
     @Override
     public PrimitiveLongIterator nodesGetFromIndexEndsWithScan( IndexDescriptor index, String suffix )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesGetFromIndexEndsWithScan( statement, index, suffix );
+        // TODO !
+        return super.nodesGetFromIndexEndsWithScan(index,suffix);
     }
 
     @Override
     public long nodeGetFromUniqueIndexSeek( IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeGetFromUniqueIndexSeek( statement, index, value );
+        // TODO !
+        return super.nodeGetFromUniqueIndexSeek(index,value);
     }
 
     @Override
     public boolean nodeExists( long nodeId )
     {
-        statement.assertOpen();
-        return dataRead().nodeExists( statement, nodeId );
+        // TODO !
+        return super.nodeExists(nodeId);
     }
 
     @Override
     public boolean relationshipExists( long relId )
     {
-        statement.assertOpen();
-        try ( Cursor<RelationshipItem> cursor = relationshipCursor( relId ) )
-        {
-            return cursor.next();
-        }
+        // TODO !
+        return super.relationshipExists(relId);
     }
 
     @Override
     public boolean nodeHasLabel( long nodeId, int labelId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-
-        if ( labelId == StatementConstants.NO_SUCH_LABEL )
-        {
-            return false;
-        }
-
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().hasLabel( labelId );
-        }
+        // TODO !
+        return super.nodeHasLabel(nodeId,labelId);
     }
 
     @Override
     public PrimitiveIntIterator nodeGetLabels( long nodeId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().getLabels();
-        }
+        // TODO !
+        return super.nodeGetLabels(nodeId);
     }
 
     @Override
     public boolean nodeHasProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return false;
-        }
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().hasProperty( propertyKeyId );
-        }
+        // TODO !
+        return super.nodeHasProperty(nodeId,propertyKeyId);
     }
 
     @Override
     public Object nodeGetProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return null;
-        }
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().getProperty( propertyKeyId );
-        }
+        // TODO !
+        return super.nodeGetProperty(nodeId,propertyKeyId);
     }
 
     @Override
     public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction, int... relTypes )
             throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().getRelationships( direction( direction ), relTypes );
-        }
-    }
-
-    private org.neo4j.storageengine.api.Direction direction( Direction direction )
-    {
-        switch ( direction )
-        {
-        case OUTGOING: return org.neo4j.storageengine.api.Direction.OUTGOING;
-        case INCOMING: return org.neo4j.storageengine.api.Direction.INCOMING;
-        case BOTH: return org.neo4j.storageengine.api.Direction.BOTH;
-        default: throw new IllegalArgumentException( direction.name() );
-        }
+        // TODO !
+        return super.nodeGetRelationships(nodeId,direction,relTypes);
     }
 
     @Override
     public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction )
             throws EntityNotFoundException
     {
-        statement.assertOpen();
-
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().getRelationships( direction( direction ) );
-        }
+        // TODO !
+        return super.nodeGetRelationships(nodeId,direction);
     }
 
     @Override
     public int nodeGetDegree( long nodeId, Direction direction, int relType ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().degree( direction( direction ), relType );
-        }
+        // TODO !
+        return super.nodeGetDegree(nodeId,direction,relType);
     }
 
     @Override
     public int nodeGetDegree( long nodeId, Direction direction ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().degree( direction( direction ) );
-        }
+        // TODO !
+        return super.nodeGetDegree(nodeId,direction);
     }
 
     @Override
     public boolean nodeIsDense( long nodeId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().isDense();
-        }
+        // TODO !
+        return super.nodeIsDense(nodeId);
     }
 
     @Override
     public PrimitiveIntIterator nodeGetRelationshipTypes( long nodeId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().getRelationshipTypes();
-        }
+        // TODO !
+        return super.nodeGetRelationshipTypes(nodeId);
     }
 
     @Override
     public boolean relationshipHasProperty( long relationshipId, int propertyKeyId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return false;
-        }
-        try ( Cursor<RelationshipItem> relationship = dataRead().relationshipCursorById( statement, relationshipId ) )
-        {
-            return relationship.get().hasProperty( propertyKeyId );
-        }
+        // TODO !
+        return super.relationshipHasProperty(relationshipId,propertyKeyId);
     }
 
     @Override
     public Object relationshipGetProperty( long relationshipId, int propertyKeyId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return null;
-        }
-        try ( Cursor<RelationshipItem> relationship = dataRead().relationshipCursorById( statement, relationshipId ) )
-        {
-            return relationship.get().getProperty( propertyKeyId );
-        }
+        // TODO !
+        return super.relationshipGetProperty(relationshipId,propertyKeyId);
     }
 
     @Override
     public boolean graphHasProperty( int propertyKeyId )
     {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return false;
-        }
-        return dataRead().graphHasProperty( statement, propertyKeyId );
+        // TODO !
+        return super.graphHasProperty(propertyKeyId);
     }
 
     @Override
     public Object graphGetProperty( int propertyKeyId )
     {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return null;
-        }
-        return dataRead().graphGetProperty( statement, propertyKeyId );
+        // TODO !
+        return super.graphGetProperty(propertyKeyId);
     }
 
     @Override
     public PrimitiveIntIterator nodeGetPropertyKeys( long nodeId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
-        {
-            return node.get().getPropertyKeys();
-        }
+        // TODO !
+        return super.nodeGetPropertyKeys(nodeId);
     }
 
     @Override
     public PrimitiveIntIterator relationshipGetPropertyKeys( long relationshipId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        try ( Cursor<RelationshipItem> relationship = dataRead().relationshipCursorById( statement, relationshipId ) )
-        {
-            return relationship.get().getPropertyKeys();
-        }
+        // TODO !
+        return super.relationshipGetPropertyKeys(relationshipId);
     }
 
     @Override
     public PrimitiveIntIterator graphGetPropertyKeys()
     {
-        statement.assertOpen();
-        return dataRead().graphGetPropertyKeys( statement );
+        // TODO !
+        return super.graphGetPropertyKeys();
     }
 
     @Override
     public <EXCEPTION extends Exception> void relationshipVisit( long relId,
             RelationshipVisitor<EXCEPTION> visitor ) throws EntityNotFoundException, EXCEPTION
     {
-        statement.assertOpen();
-        dataRead().relationshipVisit( statement, relId, visitor );
+        // TODO !
+        super.relationshipVisit(relId,visitor);
     }
 
     @Override
     public long nodesGetCount()
     {
-        statement.assertOpen();
-        return dataRead().nodesGetCount( statement );
+        // TODO !
+        return super.nodesGetCount();
     }
 
     @Override
     public long relationshipsGetCount()
     {
-        statement.assertOpen();
-        return dataRead().relationshipsGetCount( statement );
+        // TODO !
+        return super.relationshipsGetCount();
     }
 
-    @Override
-    public ProcedureSignature procedureGet( ProcedureName name ) throws ProcedureException
-    {
-        statement.assertOpen();
-        return procedures.get( name );
-    }
-
-    @Override
-    public RawIterator<Object[], ProcedureException> procedureCallRead( ProcedureName name, Object[] input ) throws ProcedureException
-    {
-        return callProcedure( name, input, AccessMode.Static.READ );
-    }
-
-    @Override
-    public Set<ProcedureSignature> proceduresGetAll()
-    {
-        statement.assertOpen();
-        return procedures.getAll();
-    }
     // </DataRead>
 
     // <DataReadCursors>
     @Override
     public Cursor<NodeItem> nodeCursor( long nodeId )
     {
-        statement.assertOpen();
-        return dataRead().nodeCursor( statement, nodeId );
+        // TODO !
+        return super.nodeCursor(nodeId);
     }
 
     @Override
     public Cursor<RelationshipItem> relationshipCursor( long relId )
     {
-        statement.assertOpen();
-        return dataRead().relationshipCursor( statement, relId );
+        // TODO !
+        return super.relationshipCursor(relId);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetAll()
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetAll( statement );
+        // TODO !
+        return super.nodeCursorGetAll();
     }
 
     @Override
     public Cursor<RelationshipItem> relationshipCursorGetAll()
     {
-        statement.assertOpen();
-        return dataRead().relationshipCursorGetAll( statement );
+        // TODO !
+        return super.relationshipCursorGetAll();
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetForLabel( int labelId )
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetForLabel( statement, labelId );
+        // TODO !
+        return super.nodeCursorGetForLabel(labelId);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetFromIndexSeek( IndexDescriptor index,
             Object value ) throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetFromIndexSeek( statement, index, value );
+        // TODO !
+        return super.nodeCursorGetFromIndexSeek(index,value);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetFromIndexScan( IndexDescriptor index ) throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetFromIndexScan( statement, index );
+        // TODO !
+        return super.nodeCursorGetFromIndexScan(index);
     }
 
     @Override
@@ -550,9 +371,8 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
             Number upper, boolean includeUpper )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetFromIndexRangeSeekByNumber( statement, index, lower, includeLower, upper,
-                includeUpper );
+        // TODO !
+        return super.nodeCursorGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper);
     }
 
     @Override
@@ -561,38 +381,39 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
             String upper, boolean includeUpper )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetFromIndexRangeSeekByString( statement, index, lower, includeLower, upper,
-                includeUpper );
+        // TODO !
+        return super.nodeCursorGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByPrefix( IndexDescriptor index, String prefix )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetFromIndexRangeSeekByPrefix( statement, index, prefix );
+        // TODO !
+        return super.nodeCursorGetFromIndexRangeSeekByPrefix(index,prefix);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetFromUniqueIndexSeek( IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodeCursorGetFromUniqueIndexSeek( statement, index, value );
+        // TODO !
+        return super.nodeCursorGetFromUniqueIndexSeek(index,value);
     }
 
     @Override
     public long nodesCountIndexed( IndexDescriptor index, long nodeId, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
-        statement.assertOpen();
-        return dataRead().nodesCountIndexed( statement, index, nodeId, value );
+        // TODO !
+        return super.nodesCountIndexed(index,nodeId,value);
     }
 
     // </DataReadCursors>
 
     // <SchemaRead>
+    // TODO: Are they needed?
+    /*
     @Override
     public IndexDescriptor indexGetForLabelAndPropertyKey( int labelId, int propertyKeyId )
             throws SchemaRuleNotFoundException
@@ -742,91 +563,94 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         statement.assertOpen();
         return schemaRead().constraintsGetAll( statement );
     }
+    */
+
     // </SchemaRead>
+
 
     // <TokenRead>
     @Override
     public int labelGetForName( String labelName )
     {
-        statement.assertOpen();
-        return tokenRead().labelGetForName( statement, labelName );
+        // TODO !
+        return super.labelGetForName(labelName);
     }
 
     @Override
     public String labelGetName( int labelId ) throws LabelNotFoundKernelException
     {
-        statement.assertOpen();
-        return tokenRead().labelGetName( statement, labelId );
+        // TODO !
+        return super.labelGetName(labelId);
     }
 
     @Override
     public int propertyKeyGetForName( String propertyKeyName )
     {
-        statement.assertOpen();
-        return tokenRead().propertyKeyGetForName( statement, propertyKeyName );
+        // TODO !
+        return super.propertyKeyGetForName(propertyKeyName);
     }
 
     @Override
     public String propertyKeyGetName( int propertyKeyId ) throws PropertyKeyIdNotFoundKernelException
     {
-        statement.assertOpen();
-        return tokenRead().propertyKeyGetName( statement, propertyKeyId );
+        // TODO !
+        return super.propertyKeyGetName(propertyKeyId);
     }
 
     @Override
     public Iterator<Token> propertyKeyGetAllTokens()
     {
-        statement.assertOpen();
-        return tokenRead().propertyKeyGetAllTokens( statement );
+        // TODO !
+        return super.propertyKeyGetAllTokens();
     }
 
     @Override
     public Iterator<Token> labelsGetAllTokens()
     {
-        statement.assertOpen();
-        return tokenRead().labelsGetAllTokens( statement );
+        // TODO !
+        return super.labelsGetAllTokens();
     }
 
     @Override
     public Iterator<Token> relationshipTypesGetAllTokens()
     {
-        statement.assertOpen();
-        return tokenRead().relationshipTypesGetAllTokens( statement );
+        // TODO !
+        return super.relationshipTypesGetAllTokens();
     }
 
     @Override
     public int relationshipTypeGetForName( String relationshipTypeName )
     {
-        statement.assertOpen();
-        return tokenRead().relationshipTypeGetForName( statement, relationshipTypeName );
+        // TODO !
+        return super.relationshipTypeGetForName(relationshipTypeName);
     }
 
     @Override
     public String relationshipTypeGetName( int relationshipTypeId ) throws RelationshipTypeIdNotFoundKernelException
     {
-        statement.assertOpen();
-        return tokenRead().relationshipTypeGetName( statement, relationshipTypeId );
+        // TODO !
+        return super.relationshipTypeGetName(relationshipTypeId);
     }
 
     @Override
     public int labelCount()
     {
-        statement.assertOpen();
-        return tokenRead().labelCount( statement );
+        // TODO !
+        return super.labelCount();
     }
 
     @Override
     public int propertyKeyCount()
     {
-        statement.assertOpen();
-        return tokenRead().propertyKeyCount( statement );
+        // TODO !
+        return super.propertyKeyCount();
     }
 
     @Override
     public int relationshipTypeCount()
     {
-        statement.assertOpen();
-        return tokenRead().relationshipTypeCount( statement );
+        // TODO !
+        return super.relationshipTypeCount();
     }
 
     // </TokenRead>
@@ -835,31 +659,30 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     @Override
     public int labelGetOrCreateForName( String labelName ) throws IllegalTokenNameException, TooManyLabelsException
     {
-        statement.assertOpen();
-        return tokenWrite().labelGetOrCreateForName( statement, labelName );
+        // TODO !
+        return super.labelGetOrCreateForName(labelName);
     }
 
     @Override
     public int propertyKeyGetOrCreateForName( String propertyKeyName ) throws IllegalTokenNameException
     {
-        statement.assertOpen();
-        return tokenWrite().propertyKeyGetOrCreateForName( statement,
-                propertyKeyName );
+        // TODO !
+        return super.propertyKeyGetOrCreateForName(propertyKeyName);
     }
 
     @Override
     public int relationshipTypeGetOrCreateForName( String relationshipTypeName ) throws IllegalTokenNameException
     {
-        statement.assertOpen();
-        return tokenWrite().relationshipTypeGetOrCreateForName( statement, relationshipTypeName );
+        // TODO !
+        return super.relationshipTypeGetOrCreateForName(relationshipTypeName);
     }
 
     @Override
     public void labelCreateForName( String labelName, int id ) throws
             IllegalTokenNameException, TooManyLabelsException
     {
-        statement.assertOpen();
-        tokenWrite().labelCreateForName( statement, labelName, id );
+        // TODO !
+        super.labelCreateForName(labelName,id);
     }
 
     @Override
@@ -867,8 +690,8 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
             int id ) throws
             IllegalTokenNameException
     {
-        statement.assertOpen();
-        tokenWrite().propertyKeyCreateForName( statement, propertyKeyName, id );
+        // TODO !
+        super.propertyKeyCreateForName(propertyKeyName,id);
     }
 
     @Override
@@ -876,131 +699,117 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
             int id ) throws
             IllegalTokenNameException
     {
-        statement.assertOpen();
-        tokenWrite().relationshipTypeCreateForName( statement,
-                relationshipTypeName, id );
+        // TODO !
+        super.relationshipTypeCreateForName(relationshipTypeName,id);
     }
 
 
     // </TokenWrite>
 
-    // <SchemaState>
-    @Override
-    public <K, V> V schemaStateGetOrCreate( K key, Function<K,V> creator )
-    {
-        return schemaState().schemaStateGetOrCreate( statement, key, creator );
-    }
-
-
-    @Override
-    public void schemaStateFlush()
-    {
-        schemaState().schemaStateFlush( statement );
-    }
-    // </SchemaState>
-
     // <DataWrite>
     @Override
     public long nodeCreate()
     {
-        statement.assertOpen();
-        return dataWrite().nodeCreate( statement );
+        // TODO !
+        return super.nodeCreate();
     }
 
     @Override
     public void nodeDelete( long nodeId )
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
-        statement.assertOpen();
-        dataWrite().nodeDelete( statement, nodeId );
+        // TODO !
+        super.nodeDelete(nodeId);
     }
 
     @Override
     public long relationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException
     {
-        statement.assertOpen();
-        return dataWrite().relationshipCreate( statement, relationshipTypeId, startNodeId, endNodeId );
+        // TODO !
+        return super.relationshipCreate(relationshipTypeId,startNodeId,endNodeId);
     }
 
     @Override
     public void relationshipDelete( long relationshipId )
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
-        statement.assertOpen();
-        dataWrite().relationshipDelete( statement, relationshipId );
+        // TODO !
+        super.relationshipDelete(relationshipId);
     }
 
     @Override
     public boolean nodeAddLabel( long nodeId, int labelId )
             throws EntityNotFoundException, ConstraintValidationKernelException
     {
-        statement.assertOpen();
-        return dataWrite().nodeAddLabel( statement, nodeId, labelId );
+        // TODO !
+        return super.nodeAddLabel(nodeId,labelId);
     }
 
     @Override
     public boolean nodeRemoveLabel( long nodeId, int labelId ) throws EntityNotFoundException
     {
-        statement.assertOpen();
-        return dataWrite().nodeRemoveLabel( statement, nodeId, labelId );
+        // TODO !
+        return super.nodeRemoveLabel(nodeId,labelId);
     }
 
     @Override
     public Property nodeSetProperty( long nodeId, DefinedProperty property )
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
-        statement.assertOpen();
-        return dataWrite().nodeSetProperty( statement, nodeId, property );
+        // TODO !
+        return super.nodeSetProperty(nodeId,property);
     }
 
     @Override
     public Property relationshipSetProperty( long relationshipId, DefinedProperty property )
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
-        statement.assertOpen();
-        return dataWrite().relationshipSetProperty( statement, relationshipId, property );
+        // TODO !
+        return super.relationshipSetProperty(relationshipId,property);
     }
 
     @Override
     public Property graphSetProperty( DefinedProperty property )
     {
-        statement.assertOpen();
-        return dataWrite().graphSetProperty( statement, property );
+        // TODO !
+        return super.graphSetProperty(property);
     }
 
     @Override
     public Property nodeRemoveProperty( long nodeId, int propertyKeyId )
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
-        statement.assertOpen();
-        return dataWrite().nodeRemoveProperty( statement, nodeId, propertyKeyId );
+        // TODO !
+        return super.nodeRemoveProperty(nodeId,propertyKeyId);
     }
 
     @Override
     public Property relationshipRemoveProperty( long relationshipId, int propertyKeyId )
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
-        statement.assertOpen();
-        return dataWrite().relationshipRemoveProperty( statement, relationshipId, propertyKeyId );
+        // TODO !
+        return super.relationshipRemoveProperty(relationshipId,propertyKeyId);
     }
 
     @Override
     public Property graphRemoveProperty( int propertyKeyId )
     {
-        statement.assertOpen();
-        return dataWrite().graphRemoveProperty( statement, propertyKeyId );
+        // TODO !
+        return super.graphRemoveProperty(propertyKeyId);
     }
 
     @Override
     public RawIterator<Object[], ProcedureException> procedureCallWrite( ProcedureName name, Object[] input ) throws ProcedureException
     {
-        // FIXME: should this be AccessMode.Static.WRITE instead?
-        return callProcedure( name, input, AccessMode.Static.FULL );
+        // TODO ?
+        return super.procedureCallWrite(name,input);
     }
     // </DataWrite>
 
     // <SchemaWrite>
+    // TODO: Are they needed?
+    /*
     @Override
     public IndexDescriptor indexCreate( int labelId, int propertyKeyId )
             throws AlreadyIndexedException, AlreadyConstrainedException
@@ -1061,257 +870,226 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         statement.assertOpen();
         schemaWrite().uniqueIndexDrop( statement, descriptor );
     }
+    */
 
     // </SchemaWrite>
 
-    // <Locking>
-    @Override
-    public void acquireExclusive( ResourceType type, long id )
-    {
-        statement.assertOpen();
-        locking().acquireExclusive( statement, type, id );
-    }
-
-    @Override
-    public void acquireShared( ResourceType type, long id )
-    {
-        statement.assertOpen();
-        locking().acquireShared( statement, type, id );
-    }
-
-    @Override
-    public void releaseExclusive( ResourceType type, long id )
-    {
-        statement.assertOpen();
-        locking().releaseExclusive( statement, type, id );
-    }
-
-    @Override
-    public void releaseShared( ResourceType type, long id )
-    {
-        statement.assertOpen();
-        locking().releaseShared( statement, type, id );
-    }
-    // </Locking>
+    // There is no need for locking here
 
     // <Legacy index>
     @Override
     public LegacyIndexHits nodeLegacyIndexGet( String indexName, String key, Object value )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().nodeLegacyIndexGet( statement, indexName, key, value );
+        // TODO ?
+        return super.nodeLegacyIndexGet(indexName,key,value);
     }
 
     @Override
     public LegacyIndexHits nodeLegacyIndexQuery( String indexName, String key, Object queryOrQueryObject )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().nodeLegacyIndexQuery( statement, indexName, key, queryOrQueryObject );
+        // TODO ?
+        return super.nodeLegacyIndexQuery(indexName,key,queryOrQueryObject);
     }
 
     @Override
     public LegacyIndexHits nodeLegacyIndexQuery( String indexName, Object queryOrQueryObject )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().nodeLegacyIndexQuery( statement, indexName, queryOrQueryObject );
+        // TODO ?
+        return super.nodeLegacyIndexQuery(indexName,queryOrQueryObject);
     }
 
     @Override
     public LegacyIndexHits relationshipLegacyIndexGet( String indexName, String key, Object value,
             long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().relationshipLegacyIndexGet( statement, indexName, key, value, startNode, endNode );
+        // TODO ?
+        return super.relationshipLegacyIndexGet(indexName,key,value,startNode,endNode);
     }
 
     @Override
     public LegacyIndexHits relationshipLegacyIndexQuery( String indexName, String key, Object queryOrQueryObject,
             long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().relationshipLegacyIndexQuery( statement, indexName, key, queryOrQueryObject,
-                startNode, endNode );
+        // TODO ?
+        return super.relationshipLegacyIndexQuery(indexName,key,queryOrQueryObject,startNode,endNode);
     }
 
     @Override
     public LegacyIndexHits relationshipLegacyIndexQuery( String indexName, Object queryOrQueryObject,
             long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().relationshipLegacyIndexQuery( statement, indexName, queryOrQueryObject,
-                startNode, endNode );
+        // TODO ?
+        return super.relationshipLegacyIndexQuery(indexName,queryOrQueryObject,startNode,endNode);
     }
 
     @Override
     public void nodeLegacyIndexCreateLazily( String indexName, Map<String,String> customConfig )
     {
-        statement.assertOpen();
-        legacyIndexWrite().nodeLegacyIndexCreateLazily( statement, indexName, customConfig );
+        // TODO ?
+        super.nodeLegacyIndexCreateLazily(indexName,customConfig);
     }
 
     @Override
     public void nodeLegacyIndexCreate( String indexName, Map<String,String> customConfig )
     {
-        statement.assertOpen();
-
-        legacyIndexWrite().nodeLegacyIndexCreate( statement, indexName, customConfig );
+        // TODO ?
+        super.nodeLegacyIndexCreate(indexName,customConfig);
     }
 
     @Override
     public void relationshipLegacyIndexCreateLazily( String indexName, Map<String,String> customConfig )
     {
-        statement.assertOpen();
-        legacyIndexWrite().relationshipLegacyIndexCreateLazily( statement, indexName, customConfig );
+        // TODO ?
+        super.relationshipLegacyIndexCreateLazily(indexName,customConfig);
     }
 
     @Override
     public void relationshipLegacyIndexCreate( String indexName, Map<String,String> customConfig )
     {
-        statement.assertOpen();
-
-        legacyIndexWrite().relationshipLegacyIndexCreate( statement, indexName, customConfig );
+        // TODO ?
+        super.relationshipLegacyIndexCreate(indexName,customConfig);
     }
 
     @Override
     public void nodeAddToLegacyIndex( String indexName, long node, String key, Object value )
             throws EntityNotFoundException, LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().nodeAddToLegacyIndex( statement, indexName, node, key, value );
+        // TODO ?
+        super.nodeAddToLegacyIndex(indexName,node,key,value);
     }
 
     @Override
     public void nodeRemoveFromLegacyIndex( String indexName, long node, String key, Object value )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().nodeRemoveFromLegacyIndex( statement, indexName, node, key, value );
+        // TODO ?
+        super.nodeRemoveFromLegacyIndex(indexName,node,key,value);
     }
 
     @Override
     public void nodeRemoveFromLegacyIndex( String indexName, long node, String key )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().nodeRemoveFromLegacyIndex( statement, indexName, node, key );
+        // TODO ?
+        super.nodeRemoveFromLegacyIndex(indexName,node,key);
     }
 
     @Override
     public void nodeRemoveFromLegacyIndex( String indexName, long node ) throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().nodeRemoveFromLegacyIndex( statement, indexName, node );
+        // TODO ?
+        super.nodeRemoveFromLegacyIndex(indexName,node);
     }
 
     @Override
     public void relationshipAddToLegacyIndex( String indexName, long relationship, String key, Object value )
             throws EntityNotFoundException, LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().relationshipAddToLegacyIndex( statement, indexName, relationship, key, value );
+        // TODO ?
+        super.relationshipAddToLegacyIndex(indexName,relationship,key,value);
     }
 
     @Override
     public void relationshipRemoveFromLegacyIndex( String indexName, long relationship, String key, Object value )
             throws EntityNotFoundException, LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().relationshipRemoveFromLegacyIndex( statement, indexName, relationship, key, value );
+        // TODO ?
+        super.relationshipRemoveFromLegacyIndex(indexName,relationship,key,value);
     }
 
     @Override
     public void relationshipRemoveFromLegacyIndex( String indexName, long relationship, String key )
             throws LegacyIndexNotFoundKernelException, EntityNotFoundException
     {
-        statement.assertOpen();
-        legacyIndexWrite().relationshipRemoveFromLegacyIndex( statement, indexName, relationship, key );
+        // TODO ?
+        super.relationshipRemoveFromLegacyIndex(indexName,relationship,key);
     }
 
     @Override
     public void relationshipRemoveFromLegacyIndex( String indexName, long relationship )
             throws LegacyIndexNotFoundKernelException, EntityNotFoundException
     {
-        statement.assertOpen();
-        legacyIndexWrite().relationshipRemoveFromLegacyIndex( statement, indexName, relationship );
+        // TODO ?
+        super.relationshipRemoveFromLegacyIndex(indexName,relationship);
     }
 
     @Override
     public void nodeLegacyIndexDrop( String indexName ) throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().nodeLegacyIndexDrop( statement, indexName );
+        // TODO ?
+        super.nodeLegacyIndexDrop(indexName);
     }
 
     @Override
     public void relationshipLegacyIndexDrop( String indexName ) throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        legacyIndexWrite().relationshipLegacyIndexDrop( statement, indexName );
+        // TODO ?
+        super.relationshipLegacyIndexDrop(indexName);
     }
 
     @Override
     public Map<String,String> nodeLegacyIndexGetConfiguration( String indexName )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().nodeLegacyIndexGetConfiguration( statement, indexName );
+        // TODO ?
+        return super.nodeLegacyIndexGetConfiguration(indexName);
     }
 
     @Override
     public Map<String,String> relationshipLegacyIndexGetConfiguration( String indexName )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexRead().relationshipLegacyIndexGetConfiguration( statement, indexName );
+        // TODO ?
+        return super.relationshipLegacyIndexGetConfiguration(indexName);
     }
 
     @Override
     public String nodeLegacyIndexSetConfiguration( String indexName, String key, String value )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexWrite().nodeLegacyIndexSetConfiguration( statement, indexName, key, value );
+        // TODO ?
+        return super.nodeLegacyIndexSetConfiguration(indexName,key,value);
     }
 
     @Override
     public String relationshipLegacyIndexSetConfiguration( String indexName, String key, String value )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexWrite().relationshipLegacyIndexSetConfiguration( statement, indexName, key, value );
+        // TODO ?
+        return super.relationshipLegacyIndexSetConfiguration(indexName,key,value);
     }
 
     @Override
     public String nodeLegacyIndexRemoveConfiguration( String indexName, String key )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexWrite().nodeLegacyIndexRemoveConfiguration( statement, indexName, key );
+        // TODO ?
+        return super.nodeLegacyIndexRemoveConfiguration(indexName,key);
     }
 
     @Override
     public String relationshipLegacyIndexRemoveConfiguration( String indexName, String key )
             throws LegacyIndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return legacyIndexWrite().relationshipLegacyIndexRemoveConfiguration( statement, indexName, key );
+        // TODO ?
+        return super.relationshipLegacyIndexRemoveConfiguration(indexName,key);
     }
 
     @Override
     public String[] nodeLegacyIndexesGetAll()
     {
-        statement.assertOpen();
-        return legacyIndexRead().nodeLegacyIndexesGetAll( statement );
+        // TODO ?
+        return super.nodeLegacyIndexesGetAll();
     }
 
     @Override
     public String[] relationshipLegacyIndexesGetAll()
     {
-        statement.assertOpen();
-        return legacyIndexRead().relationshipLegacyIndexesGetAll( statement );
+        // TODO ?
+        return super.relationshipLegacyIndexesGetAll();
     }
     // </Legacy index>
 
@@ -1320,65 +1098,47 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     @Override
     public long countsForNode( int labelId )
     {
-        statement.assertOpen();
-        return counting().countsForNode( statement, labelId );
+        // TODO !!!
+        return super.countsForNode(labelId);
     }
 
     @Override
     public long countsForNodeWithoutTxState( int labelId )
     {
-        statement.assertOpen();
-        return counting().countsForNodeWithoutTxState( statement, labelId );
+        // TODO ?
+        return super.countsForNodeWithoutTxState(labelId);
     }
 
     @Override
     public long countsForRelationship( int startLabelId, int typeId, int endLabelId )
     {
-        statement.assertOpen();
-        return counting().countsForRelationship( statement, startLabelId, typeId, endLabelId );
+        // TODO !
+        return super.countsForRelationship(startLabelId,typeId,endLabelId);
     }
 
     @Override
     public long countsForRelationshipWithoutTxState( int startLabelId, int typeId, int endLabelId )
     {
-        statement.assertOpen();
-        return counting().countsForRelationshipWithoutTxState( statement, startLabelId, typeId, endLabelId );
+        // TODO ?
+        return super.countsForRelationshipWithoutTxState(startLabelId,typeId,endLabelId);
     }
 
     @Override
     public DoubleLongRegister indexUpdatesAndSize( IndexDescriptor index, DoubleLongRegister target )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return counting().indexUpdatesAndSize( statement, index, target );
+        // TODO ?
+        return super.indexUpdatesAndSize(index,target);
     }
 
     @Override
     public DoubleLongRegister indexSample( IndexDescriptor index, DoubleLongRegister target )
             throws IndexNotFoundKernelException
     {
-        statement.assertOpen();
-        return counting().indexSample( statement, index, target );
+        // TODO ?
+        return super.indexSample(index,target);
     }
 
     // </Counts>
 
-    // <Procedures>
-
-    private RawIterator<Object[],ProcedureException> callProcedure(
-            ProcedureName name, Object[] input, AccessMode mode )
-            throws ProcedureException
-    {
-        statement.assertOpen();
-
-        try ( KernelTransaction.Revertable revertable = tx.restrict( mode ) )
-        {
-            CallableProcedure.BasicContext ctx = new CallableProcedure.BasicContext();
-            ctx.put( CallableProcedure.Context.KERNEL_TRANSACTION, tx );
-            ctx.put( CallableProcedure.Context.THREAD, Thread.currentThread() );
-            return procedures.call( ctx, name, input );
-        }
-    }
-
-    // </Procedures>
 }
