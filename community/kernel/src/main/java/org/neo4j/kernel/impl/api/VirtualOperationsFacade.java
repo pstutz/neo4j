@@ -52,10 +52,10 @@ import java.util.*;
 public class VirtualOperationsFacade extends OperationsFacade
 {
 
-    private Map<Long,Long> virtualRelationshipToTypeId; // actualData and ref to types
+    private Map<Long,Integer> virtualRelationshipToTypeId; // actualData and ref to types
     private SortedSet<Long> virtualNodes;  // "actual data"
     private Map<Integer,String> virtualLabels; // actual data
-    private Map<Long,String> virtualRelationshipTypes; // actual data
+    private Map<Integer,String> virtualRelationshipTypes; // actual data
     private Map<Integer,Object> virtualProperties; // actual data
 
     private Map<Long,Set<Integer>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
@@ -192,7 +192,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeExists( long nodeId )
     {
-        if(nodeId<0){
+        if(isVirtual(nodeId)){
             return virtualNodes.contains(nodeId);
         } else {
             return super.nodeExists(nodeId);
@@ -202,7 +202,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean relationshipExists( long relId )
     {
-        if(relId<0){
+        if(isVirtual(relId)){
             return virtualRelationshipToTypeId.keySet().contains(relId);
         } else {
             return super.relationshipExists(relId);
@@ -212,7 +212,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeHasLabel( long nodeId, int labelId ) throws EntityNotFoundException
     {
-        if(nodeId<0){
+        if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
                 Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
                 if(labelIds==null){
@@ -230,7 +230,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveIntIterator nodeGetLabels( long nodeId ) throws EntityNotFoundException
     {
-        if(nodeId<0){
+        if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
                 Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
                 MergingPrimitiveIntIterator it = new MergingPrimitiveIntIterator(null,labelIds);
@@ -246,7 +246,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeHasProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
     {
-        if(nodeId<0){
+        if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
                 Set<Integer> propIds = virtualNodeIdToPropertyIds.get(nodeId);
                 if(propIds==null){
@@ -264,7 +264,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public Object nodeGetProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
     {
-        if(nodeId<0){
+        if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
                 // assert that the property belongs to this node
                 Set<Integer> props = virtualNodeIdToPropertyIds.get(nodeId);
@@ -321,8 +321,20 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveIntIterator nodeGetRelationshipTypes( long nodeId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeGetRelationshipTypes(nodeId);
+        if(isVirtual(nodeId)) {
+            if(nodeExists(nodeId)){
+                Set<Long> relIds = virtualNodeIdToConnectedRelationshipIds.get(nodeId);
+                Set<Integer> resultSet = new HashSet<>();
+                for(Long relId:relIds){
+                    resultSet.add(virtualRelationshipToTypeId.get(relId)); // this should not be null! TODO: Tests to ensure that
+                }
+                return new MergingPrimitiveIntIterator(null,resultSet);
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        } else{
+            return super.nodeGetRelationshipTypes(nodeId);
+        }
     }
 
     @Override
@@ -814,7 +826,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void nodeDelete( long nodeId )
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
-        if(nodeId<0) {
+        if(isVirtual(nodeId)) {
             if (virtualNodes.contains(nodeId)) {
                 //TODO: needs more checks!
 
@@ -1255,5 +1267,8 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     // </Counts>
-
+    
+    private boolean isVirtual(long entityId){
+        return entityId<0;
+    }
 }
