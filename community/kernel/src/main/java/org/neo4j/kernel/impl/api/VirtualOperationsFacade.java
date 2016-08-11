@@ -54,14 +54,14 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private Map<Long,Long> virtualRelationshipToTypeId; // actualData and ref to types
     private SortedSet<Long> virtualNodes;  // "actual data"
-    private Map<Long,String> virtualLabels; // actual data
+    private Map<Integer,String> virtualLabels; // actual data
     private Map<Long,String> virtualRelationshipTypes; // actual data
     private Map<Long,Object> virtualProperties; // actual data
 
     private Map<Long,List<Long>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
     private Map<Long,List<Long>> virtualNodeIdToConnectedRelationshipIds;
     private Map<Long,List<Long>> relationshipIdToPropertyIds;
-    private Map<Long,List<Long>> virtualNodeIdToLabelIds;
+    private Map<Long,List<Integer>> virtualNodeIdToLabelIds;
     private Map<Long,Long[]> relationshipToNodes; // Node[0] = from, Node[1] = to
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
@@ -87,22 +87,34 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveLongIterator nodesGetAll()
     {
-        // TODO !
-        return super.nodesGetAll();
+        PrimitiveLongIterator allRealNodes = super.nodesGetAll();
+        MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,virtualNodes);
+        return bothNodeIds;
     }
 
     @Override
     public PrimitiveLongIterator relationshipsGetAll()
     {
-        // TODO !
-        return super.relationshipsGetAll();
+        PrimitiveLongIterator allRealRels = super.relationshipsGetAll();
+        MergingPrimitiveLongIterator bothRelIds =
+                new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipToTypeId.keySet());
+        return bothRelIds;
     }
 
     @Override
     public PrimitiveLongIterator nodesGetForLabel( int labelId )
     {
-        // TODO !
-        return super.nodesGetForLabel(labelId);
+        ArrayList<Long> resultList = new ArrayList<>();
+
+        // TODO: Test this
+        // TODO: Improvements possible
+        for(Long nodeId : virtualNodeIdToLabelIds.keySet()) {
+            List<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+            if(labelIds.contains(labelId)){
+                resultList.add(nodeId);
+            }
+        }
+        return new MergingPrimitiveLongIterator(null,resultList);
     }
 
     @Override
@@ -180,29 +192,55 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeExists( long nodeId )
     {
-        // TODO !
-        return super.nodeExists(nodeId);
+        if(nodeId<0){
+            return virtualNodes.contains(nodeId);
+        } else {
+            return super.nodeExists(nodeId);
+        }
     }
 
     @Override
     public boolean relationshipExists( long relId )
     {
-        // TODO !
-        return super.relationshipExists(relId);
+        if(relId<0){
+            return virtualRelationshipToTypeId.keySet().contains(relId);
+        } else {
+            return super.relationshipExists(relId);
+        }
     }
 
     @Override
     public boolean nodeHasLabel( long nodeId, int labelId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeHasLabel(nodeId,labelId);
+        if(nodeId<0){
+            if(nodeExists(nodeId)){
+                List<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+                if(labelIds==null){
+                    return false;
+                }
+                return labelIds.contains(labelId);
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        } else {
+            return super.nodeHasLabel(nodeId, labelId);
+        }
     }
 
     @Override
     public PrimitiveIntIterator nodeGetLabels( long nodeId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeGetLabels(nodeId);
+        if(nodeId<0){
+            if(nodeExists(nodeId)){
+                List<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+                MergingPrimitiveIntIterator it = new MergingPrimitiveIntIterator(null,labelIds);
+                return it;
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        } else {
+            return super.nodeGetLabels(nodeId);
+        }
     }
 
     @Override
