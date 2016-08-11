@@ -56,12 +56,12 @@ public class VirtualOperationsFacade extends OperationsFacade
     private SortedSet<Long> virtualNodes;  // "actual data"
     private Map<Integer,String> virtualLabels; // actual data
     private Map<Long,String> virtualRelationshipTypes; // actual data
-    private Map<Long,Object> virtualProperties; // actual data
+    private Map<Integer,Object> virtualProperties; // actual data
 
-    private Map<Long,List<Long>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
-    private Map<Long,List<Long>> virtualNodeIdToConnectedRelationshipIds;
-    private Map<Long,List<Long>> relationshipIdToPropertyIds;
-    private Map<Long,List<Integer>> virtualNodeIdToLabelIds;
+    private Map<Long,Set<Integer>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
+    private Map<Long,Set<Long>> virtualNodeIdToConnectedRelationshipIds;
+    private Map<Long,Set<Integer>> relationshipIdToPropertyIds;
+    private Map<Long,Set<Integer>> virtualNodeIdToLabelIds;
     private Map<Long,Long[]> relationshipToNodes; // Node[0] = from, Node[1] = to
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
@@ -109,7 +109,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // TODO: Test this
         // TODO: Improvements possible
         for(Long nodeId : virtualNodeIdToLabelIds.keySet()) {
-            List<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+            Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
             if(labelIds.contains(labelId)){
                 resultList.add(nodeId);
             }
@@ -214,7 +214,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(nodeId<0){
             if(nodeExists(nodeId)){
-                List<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+                Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
                 if(labelIds==null){
                     return false;
                 }
@@ -232,7 +232,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(nodeId<0){
             if(nodeExists(nodeId)){
-                List<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+                Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
                 MergingPrimitiveIntIterator it = new MergingPrimitiveIntIterator(null,labelIds);
                 return it;
             } else{
@@ -246,15 +246,39 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeHasProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeHasProperty(nodeId,propertyKeyId);
+        if(nodeId<0){
+            if(nodeExists(nodeId)){
+                Set<Integer> propIds = virtualNodeIdToPropertyIds.get(nodeId);
+                if(propIds==null){
+                    return false;
+                }
+                return propIds.contains(propertyKeyId);
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        } else {
+            return super.nodeHasProperty(nodeId, propertyKeyId);
+        }
     }
 
     @Override
     public Object nodeGetProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeGetProperty(nodeId,propertyKeyId);
+        if(nodeId<0){
+            if(nodeExists(nodeId)){
+                // assert that the property belongs to this node
+                Set<Integer> props = virtualNodeIdToPropertyIds.get(nodeId);
+                if(props.contains(propertyKeyId)){
+                    return virtualProperties.get(propertyKeyId);
+                }
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+
+        } else {
+            return super.nodeGetProperty(nodeId, propertyKeyId);
+        }
     }
 
     @Override
@@ -779,9 +803,9 @@ public class VirtualOperationsFacade extends OperationsFacade
             new_id = smallest - 1;
         }
         virtualNodes.add(new_id);
-        virtualNodeIdToPropertyIds.put(new_id,new ArrayList<>());
-        virtualNodeIdToLabelIds.put(new_id,new ArrayList<>());
-        virtualNodeIdToConnectedRelationshipIds.put(new_id,new ArrayList<>());
+        virtualNodeIdToPropertyIds.put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToLabelIds.put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToConnectedRelationshipIds.put(new_id,new LinkedHashSet<>());
 
         return new_id;
     }
