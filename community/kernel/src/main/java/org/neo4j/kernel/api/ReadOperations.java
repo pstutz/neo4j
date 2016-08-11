@@ -19,11 +19,6 @@
  */
 package org.neo4j.kernel.api;
 
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.function.Function;
-
 import org.neo4j.collection.RawIterator;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
@@ -32,11 +27,7 @@ import org.neo4j.graphdb.Direction;
 import org.neo4j.kernel.api.constraints.NodePropertyConstraint;
 import org.neo4j.kernel.api.constraints.PropertyConstraint;
 import org.neo4j.kernel.api.constraints.RelationshipPropertyConstraint;
-import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
-import org.neo4j.kernel.api.exceptions.LabelNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.ProcedureException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.RelationshipTypeIdNotFoundKernelException;
+import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.schema.DuplicateIndexSchemaRuleException;
@@ -53,6 +44,11 @@ import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.Token;
 import org.neo4j.storageengine.api.lock.ResourceType;
 import org.neo4j.storageengine.api.schema.PopulationProgress;
+
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Defines all types of read operations that can be done from the {@link KernelAPI}.
@@ -576,4 +572,10 @@ public interface ReadOperations
 
     /** Invoke a read-only procedure by name */
     RawIterator<Object[], ProcedureException> procedureCallRead( ProcedureSignature.ProcedureName name, Object[] input ) throws ProcedureException;
+
+    //===========================================
+    //== VIRTUAL OPERATIONS ===================
+    //===========================================
+
+    long virtualNodeCreate() throws NoSuchMethodException;
 }

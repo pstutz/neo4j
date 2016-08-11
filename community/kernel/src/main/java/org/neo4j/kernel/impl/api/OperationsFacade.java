@@ -58,9 +58,9 @@ import java.util.function.Function;
 
 public class OperationsFacade implements ReadOperations, DataWriteOperations, SchemaWriteOperations
 {
-    private final KernelTransaction tx;
-    private final KernelStatement statement;
-    private final StatementOperationParts operations;
+    protected final KernelTransaction tx;
+    protected final KernelStatement statement;
+    protected final StatementOperationParts operations;
     private final Procedures procedures;
 
     OperationsFacade( KernelTransaction tx, KernelStatement statement,
@@ -483,6 +483,11 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     public RawIterator<Object[], ProcedureException> procedureCallRead( ProcedureName name, Object[] input ) throws ProcedureException
     {
         return callProcedure( name, input, AccessMode.Static.READ );
+    }
+
+    @Override
+    public long virtualNodeCreate() throws NoSuchMethodException {
+        throw new NoSuchMethodException("");
     }
 
     @Override

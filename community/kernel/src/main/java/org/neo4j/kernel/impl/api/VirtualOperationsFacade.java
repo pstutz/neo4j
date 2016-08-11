@@ -41,23 +41,45 @@ import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.register.Register.DoubleLongRegister;
+import org.neo4j.storageengine.api.EntityType;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.Token;
 
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 // TODO Sascha
 public class VirtualOperationsFacade extends OperationsFacade
 {
 
+    private Map<Long,Long> virtualRelationshipToTypeId; // actualData and ref to types
+    private SortedSet<Long> virtualNodes;  // "actual data"
+    private Map<Long,String> virtualLabels; // actual data
+    private Map<Long,String> virtualRelationshipTypes; // actual data
+    private Map<Long,Object> virtualProperties; // actual data
+
+    private Map<Long,List<Long>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
+    private Map<Long,List<Long>> virtualNodeIdToConnectedRelationshipIds;
+    private Map<Long,List<Long>> relationshipIdToPropertyIds;
+    private Map<Long,List<Long>> virtualNodeIdToLabelIds;
+    private Map<Long,Long[]> relationshipToNodes; // Node[0] = from, Node[1] = to
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             StatementOperationParts operations, Procedures procedures )
     {
         super(tx,statement,operations,procedures);
 
+
+        virtualRelationshipToTypeId = new TreeMap<>();
+        virtualNodes = new TreeSet<>();
+        virtualLabels = new TreeMap<>();
+        virtualRelationshipTypes = new TreeMap<>();
+        virtualProperties = new TreeMap<>();
+        virtualNodeIdToPropertyIds = new HashMap<>();
+        relationshipIdToPropertyIds = new HashMap<>();
+        virtualNodeIdToLabelIds = new HashMap<>();
+        relationshipToNodes = new HashMap<>();
+        virtualNodeIdToConnectedRelationshipIds = new HashMap<>();
     }
 
     // <DataRead>
@@ -708,18 +730,49 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     // <DataWrite>
     @Override
-    public long nodeCreate()
+    public long virtualNodeCreate()
     {
-        // TODO !
-        return super.nodeCreate();
+        statement.assertOpen();
+        long new_id;
+        if(virtualNodes.size()==0){
+            new_id = -1;
+        } else {
+            long smallest = virtualNodes.first();
+            new_id = smallest - 1;
+        }
+        virtualNodes.add(new_id);
+        virtualNodeIdToPropertyIds.put(new_id,new ArrayList<>());
+        virtualNodeIdToLabelIds.put(new_id,new ArrayList<>());
+        virtualNodeIdToConnectedRelationshipIds.put(new_id,new ArrayList<>());
+
+        return new_id;
     }
 
     @Override
     public void nodeDelete( long nodeId )
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
-        // TODO !
-        super.nodeDelete(nodeId);
+        if(nodeId<0) {
+            if (virtualNodes.contains(nodeId)) {
+                //TODO: needs more checks!
+
+                virtualNodes.remove(nodeId);
+
+                virtualNodeIdToLabelIds.remove(nodeId);
+                virtualNodeIdToPropertyIds.remove(nodeId);
+
+                // TODO: Remove refs that are returned from those calls
+
+                // AND rel prop
+
+                virtualNodeIdToConnectedRelationshipIds.remove(nodeId);
+
+            } else {
+                throw new EntityNotFoundException(EntityType.NODE, nodeId);
+            }
+        } else{
+            super.nodeDelete(nodeId);
+        }
     }
 
     @Override
