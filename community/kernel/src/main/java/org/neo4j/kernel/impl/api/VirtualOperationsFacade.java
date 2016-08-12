@@ -53,16 +53,19 @@ public class VirtualOperationsFacade extends OperationsFacade
 {
 
     private Map<Long,Integer> virtualRelationshipToTypeId; // actualData and ref to types
-    private SortedSet<Long> virtualNodes;  // "actual data"
+    private SortedSet<Long> virtualNodeIds;  // "actual data"
+    private SortedSet<Integer> virtualPropertyKeyIds;  // "actual data"
     private Map<Integer,String> virtualLabels; // actual data
     private Map<Integer,String> virtualRelationshipTypes; // actual data
-    private Map<Integer,Object> virtualProperties; // actual data
+    private Map<Integer,Object> virtualPropertiyIdsToObjectForNodes; // actual data
+    private Map<Integer,Object> virtualPropertiesIdsToObjectForRels; // actual data
+
 
     private Map<Long,Set<Integer>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
     private Map<Long,Set<Long>> virtualNodeIdToConnectedRelationshipIds;
-    private Map<Long,Set<Integer>> relationshipIdToPropertyIds;
+    private Map<Long,Set<Integer>> virtualRelationshipIdToPropertyIds;
     private Map<Long,Set<Integer>> virtualNodeIdToLabelIds;
-    private Map<Long,Long[]> relationshipToNodes; // Node[0] = from, Node[1] = to
+    private Map<Long,Long[]> virtualRelationshipToVirtualNodeIds; // Node[0] = from, Node[1] = to
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             StatementOperationParts operations, Procedures procedures )
@@ -71,15 +74,19 @@ public class VirtualOperationsFacade extends OperationsFacade
 
 
         virtualRelationshipToTypeId = new TreeMap<>();
-        virtualNodes = new TreeSet<>();
+        virtualNodeIds = new TreeSet<>();
+        virtualPropertyKeyIds = new TreeSet<>();
         virtualLabels = new TreeMap<>();
         virtualRelationshipTypes = new TreeMap<>();
-        virtualProperties = new TreeMap<>();
+        virtualPropertiyIdsToObjectForNodes = new TreeMap<>();
         virtualNodeIdToPropertyIds = new HashMap<>();
-        relationshipIdToPropertyIds = new HashMap<>();
+        virtualRelationshipIdToPropertyIds = new HashMap<>();
         virtualNodeIdToLabelIds = new HashMap<>();
-        relationshipToNodes = new HashMap<>();
+        virtualRelationshipToVirtualNodeIds = new HashMap<>();
         virtualNodeIdToConnectedRelationshipIds = new HashMap<>();
+
+        virtualPropertiyIdsToObjectForNodes = new HashMap<>();
+        virtualPropertiesIdsToObjectForRels = new HashMap<>();
     }
 
     // <DataRead>
@@ -88,7 +95,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public PrimitiveLongIterator nodesGetAll()
     {
         PrimitiveLongIterator allRealNodes = super.nodesGetAll();
-        MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,virtualNodes);
+        MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes, virtualNodeIds);
         return bothNodeIds;
     }
 
@@ -193,7 +200,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public boolean nodeExists( long nodeId )
     {
         if(isVirtual(nodeId)){
-            return virtualNodes.contains(nodeId);
+            return virtualNodeIds.contains(nodeId);
         } else {
             return super.nodeExists(nodeId);
         }
@@ -269,7 +276,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 // assert that the property belongs to this node
                 Set<Integer> props = virtualNodeIdToPropertyIds.get(nodeId);
                 if(props.contains(propertyKeyId)){
-                    return virtualProperties.get(propertyKeyId);
+                    return virtualPropertiyIdsToObjectForNodes.get(propertyKeyId);
                 }
                 throw new EntityNotFoundException(EntityType.NODE,nodeId);
             } else{
@@ -340,50 +347,107 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean relationshipHasProperty( long relationshipId, int propertyKeyId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.relationshipHasProperty(relationshipId,propertyKeyId);
+        if(isVirtual(relationshipId)){
+            if(relationshipExists(relationshipId)){
+                Set<Integer> propIds = virtualRelationshipIdToPropertyIds.get(relationshipId);
+                if(propIds==null){
+                    return false;
+                }
+                return propIds.contains(propertyKeyId);
+            } else{
+                throw new EntityNotFoundException(EntityType.RELATIONSHIP,relationshipId);
+            }
+        } else {
+            return super.relationshipHasProperty(relationshipId,propertyKeyId);
+        }
     }
 
     @Override
     public Object relationshipGetProperty( long relationshipId, int propertyKeyId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.relationshipGetProperty(relationshipId,propertyKeyId);
+        //TODO: Ensure that virtual entities can only got virtual props
+        if(isVirtual(relationshipId)){
+            if(relationshipExists(relationshipId)){
+                // assert that this rel has got that prop -> already covered by relationshipHasProperty but are they always chained?
+                Set<Integer> propIds = virtualRelationshipIdToPropertyIds.get(relationshipId);
+                if(propIds==null){
+                    return false;
+                }
+                if(propIds.contains(propertyKeyId)){
+                    return virtualPropertiesIdsToObjectForRels.get(propertyKeyId);
+                }
+                throw new EntityNotFoundException(EntityType.RELATIONSHIP,relationshipId); // hm.. not that good
+            } else{
+                throw new EntityNotFoundException(EntityType.RELATIONSHIP,relationshipId);
+            }
+        } else {
+            return super.relationshipGetProperty(relationshipId,propertyKeyId);
+        }
+
     }
 
     @Override
     public boolean graphHasProperty( int propertyKeyId )
     {
-        // TODO !
-        return super.graphHasProperty(propertyKeyId);
+        if(isVirtual(propertyKeyId)){
+            return virtualPropertyKeyIds.contains(propertyKeyId);
+        } else {
+            return super.graphHasProperty(propertyKeyId);
+        }
     }
 
     @Override
     public Object graphGetProperty( int propertyKeyId )
     {
-        // TODO !
-        return super.graphGetProperty(propertyKeyId);
+        // TODO: TEST THIS!!!!!
+        if(isVirtual(propertyKeyId)){
+            Iterator<Long> it = virtualNodeIds.iterator();
+            while(it.hasNext()){
+                long current_nodeId = it.next();
+                try{
+                    return nodeGetProperty(current_nodeId,propertyKeyId);
+                }catch (EntityNotFoundException e){
+                }
+            }
+            it = virtualRelationshipToTypeId.keySet().iterator();
+            while(it.hasNext()){
+                long current_relId = it.next();
+                try{
+                    return relationshipGetProperty(current_relId,propertyKeyId);
+                }catch (EntityNotFoundException e){
+                }
+            }
+
+            return null;
+        } else {
+            return super.graphGetProperty(propertyKeyId);
+        }
     }
 
     @Override
     public PrimitiveIntIterator nodeGetPropertyKeys( long nodeId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeGetPropertyKeys(nodeId);
+        if(isVirtual(nodeId)){
+            return new MergingPrimitiveIntIterator(null,virtualNodeIdToPropertyIds.get(nodeId));
+        } else {
+            return super.nodeGetPropertyKeys(nodeId);
+        }
     }
 
     @Override
     public PrimitiveIntIterator relationshipGetPropertyKeys( long relationshipId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.relationshipGetPropertyKeys(relationshipId);
+        if(isVirtual(relationshipId)){
+            return new MergingPrimitiveIntIterator(null,virtualRelationshipIdToPropertyIds.get(relationshipId));
+        } else {
+            return super.relationshipGetPropertyKeys(relationshipId);
+        }
     }
 
     @Override
     public PrimitiveIntIterator graphGetPropertyKeys()
     {
-        // TODO !
-        return super.graphGetPropertyKeys();
+        return new MergingPrimitiveIntIterator(super.graphGetPropertyKeys(),virtualPropertyKeyIds);
     }
 
     @Override
@@ -808,13 +872,13 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         statement.assertOpen();
         long new_id;
-        if(virtualNodes.size()==0){
+        if(virtualNodeIds.size()==0){
             new_id = -1;
         } else {
-            long smallest = virtualNodes.first();
+            long smallest = virtualNodeIds.first();
             new_id = smallest - 1;
         }
-        virtualNodes.add(new_id);
+        virtualNodeIds.add(new_id);
         virtualNodeIdToPropertyIds.put(new_id,new LinkedHashSet<>());
         virtualNodeIdToLabelIds.put(new_id,new LinkedHashSet<>());
         virtualNodeIdToConnectedRelationshipIds.put(new_id,new LinkedHashSet<>());
@@ -827,10 +891,10 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
         if(isVirtual(nodeId)) {
-            if (virtualNodes.contains(nodeId)) {
+            if (virtualNodeIds.contains(nodeId)) {
                 //TODO: needs more checks!
 
-                virtualNodes.remove(nodeId);
+                virtualNodeIds.remove(nodeId);
 
                 virtualNodeIdToLabelIds.remove(nodeId);
                 virtualNodeIdToPropertyIds.remove(nodeId);
