@@ -961,50 +961,83 @@ public class VirtualOperationsFacade extends OperationsFacade
         } else{
             newId = virtualLabels.firstKey()-1;
         }
-        virtualLabels.put(newId,labelName);
+        virtualLabelCreateForName(labelName,newId);
         return newId;
     }
 
     @Override
-    public int propertyKeyGetOrCreateForName( String propertyKeyName ) throws IllegalTokenNameException
+    public int virtualPropertyKeyGetOrCreateForName( String propertyKeyName ) throws IllegalTokenNameException
     {
-        // TODO !
-        return super.propertyKeyGetOrCreateForName(propertyKeyName);
+        // Try getting the proplId
+        // TODO: might be faster with contains?
+        Iterator<Integer> it = virtualPropertyIds().iterator();
+        while(it.hasNext()){
+            int key = it.next();
+            if(virtualPropertyKeyIdsToName.get(key).equals(propertyKeyName)){
+                return key;
+            }
+        }
+
+        // not found, need to create
+        int newId;
+        if(virtualPropertyIds().size()==0){
+            newId = -1;
+        } else{
+            newId = virtualPropertyKeyIdsToName.firstKey()-1;
+        }
+        virtualPropertyKeyCreateForName(propertyKeyName,newId);
+        return newId;
     }
 
     @Override
-    public int relationshipTypeGetOrCreateForName( String relationshipTypeName ) throws IllegalTokenNameException
+    public int virtualRelationshipTypeGetOrCreateForName( String relationshipTypeName ) throws IllegalTokenNameException
     {
-        // TODO !
-        return super.relationshipTypeGetOrCreateForName(relationshipTypeName);
+        // Try getting the relId
+        // TODO: might be faster with contains?
+        Iterator<Integer> it = virtualRelationshipTypes.keySet().iterator();
+        while(it.hasNext()){
+            int key = it.next();
+            if(virtualRelationshipTypes.get(key).equals(relationshipTypeName)){
+                return key;
+            }
+        }
+
+        // not found, need to create
+        int newId;
+        if(virtualRelationshipTypes.size()==0){
+            newId = -1;
+        } else{
+            newId = virtualRelationshipTypes.firstKey()-1;
+        }
+        virtualRelationshipTypeCreateForName(relationshipTypeName,newId);
+        return newId;
     }
 
     @Override
-    public void labelCreateForName( String labelName, int id ) throws
+    public void virtualLabelCreateForName( String labelName, int id ) throws
             IllegalTokenNameException, TooManyLabelsException
     {
-        // TODO !
-        super.labelCreateForName(labelName,id);
+        //TODO: Token name checking missing
+        virtualLabels.put(id,labelName);
     }
 
     @Override
-    public void propertyKeyCreateForName( String propertyKeyName,
+    public void virtualPropertyKeyCreateForName( String propertyKeyName,
             int id ) throws
             IllegalTokenNameException
     {
-        // TODO !
-        super.propertyKeyCreateForName(propertyKeyName,id);
+        //TODO: Token name checking missing
+        virtualPropertyKeyIdsToName.put(id,propertyKeyName);
     }
 
     @Override
-    public void relationshipTypeCreateForName( String relationshipTypeName,
+    public void virtualRelationshipTypeCreateForName( String relationshipTypeName,
             int id ) throws
             IllegalTokenNameException
     {
-        // TODO !
-        super.relationshipTypeCreateForName(relationshipTypeName,id);
+        //TODO: Token name checking missing
+        virtualRelationshipTypes.put(id,relationshipTypeName);
     }
-
 
     // </TokenWrite>
 

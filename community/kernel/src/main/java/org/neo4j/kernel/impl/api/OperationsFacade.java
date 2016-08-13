@@ -496,6 +496,31 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
+    public int virtualPropertyKeyGetOrCreateForName(String propertyKeyName) throws IllegalTokenNameException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
+    public int virtualRelationshipTypeGetOrCreateForName(String relationshipTypeName) throws IllegalTokenNameException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
+    public void virtualLabelCreateForName(String labelName, int id) throws IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
+    public void virtualPropertyKeyCreateForName(String propertyKeyName, int id) throws IllegalTokenNameException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
+    public void virtualRelationshipTypeCreateForName(String relationshipTypeName, int id) throws IllegalTokenNameException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
     public Set<ProcedureSignature> proceduresGetAll()
     {
         statement.assertOpen();

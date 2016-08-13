@@ -576,5 +576,21 @@ public interface ReadOperations
     //===========================================
 
     long virtualNodeCreate() throws NoSuchMethodException;
+
     int virtualLabelGetOrCreateForName( String labelName ) throws IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
+
+    int virtualPropertyKeyGetOrCreateForName( String propertyKeyName ) throws IllegalTokenNameException, NoSuchMethodException;
+
+    int virtualRelationshipTypeGetOrCreateForName( String relationshipTypeName ) throws IllegalTokenNameException, NoSuchMethodException;
+
+
+    void virtualLabelCreateForName( String labelName, int id ) throws
+            IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
+
+    void virtualPropertyKeyCreateForName( String propertyKeyName,
+                                                 int id ) throws IllegalTokenNameException, NoSuchMethodException;
+
+
+    void virtualRelationshipTypeCreateForName( String relationshipTypeName,int id ) throws
+            IllegalTokenNameException, NoSuchMethodException;
 }
