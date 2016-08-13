@@ -30,9 +30,7 @@ import org.neo4j.kernel.api.constraints.RelationshipPropertyConstraint;
 import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.schema.DuplicateIndexSchemaRuleException;
-import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
-import org.neo4j.kernel.api.exceptions.schema.SchemaRuleNotFoundException;
+import org.neo4j.kernel.api.exceptions.schema.*;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
@@ -578,4 +576,5 @@ public interface ReadOperations
     //===========================================
 
     long virtualNodeCreate() throws NoSuchMethodException;
+    int virtualLabelGetOrCreateForName( String labelName ) throws IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
 }

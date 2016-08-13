@@ -19,6 +19,7 @@
  */
 package org.neo4j.kernel.impl.api;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.neo4j.collection.RawIterator;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
@@ -40,11 +41,9 @@ import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.storageengine.api.EntityType;
-import org.neo4j.storageengine.api.NodeItem;
-import org.neo4j.storageengine.api.RelationshipItem;
-import org.neo4j.storageengine.api.Token;
+import org.neo4j.storageengine.api.*;
 
 import java.util.*;
 
@@ -52,14 +51,50 @@ import java.util.*;
 public class VirtualOperationsFacade extends OperationsFacade
 {
 
-    private Map<Long,Integer> virtualRelationshipToTypeId; // actualData and ref to types
-    private SortedSet<Long> virtualNodeIds;  // "actual data"
-    private SortedSet<Integer> virtualPropertyKeyIds;  // "actual data"
-    private Map<Integer,String> virtualLabels; // actual data
-    private Map<Integer,String> virtualRelationshipTypes; // actual data
-    private Map<Integer,Object> virtualPropertiyIdsToObjectForNodes; // actual data
-    private Map<Integer,Object> virtualPropertiesIdsToObjectForRels; // actual data
+    class PropertyValueId {
 
+        private long entityId;
+        private int propKeyId;
+
+        public PropertyValueId(long entity, int prop){
+            this.entityId = entity;
+            this.propKeyId = prop;
+        }
+
+        public long getEntityId(){
+            return entityId;
+        }
+
+        public int getPropertyKeyId(){
+            return propKeyId;
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if(obj.getClass()==this.getClass()){
+                PropertyValueId other = (PropertyValueId) obj;
+                if((this.entityId==other.entityId) && (this.propKeyId == other.propKeyId)){
+                    return true;
+                }
+                return false;
+            } else{
+                return false;
+            }
+        }
+    }
+
+    private TreeMap<Long,Integer> virtualRelationshipToTypeId; // actualData and ref to types
+    private SortedSet<Long> virtualNodeIds;  // "actual data"
+    private TreeMap<Integer,String> virtualPropertyKeyIdsToName;  // "actual data"
+    private TreeMap<Integer,String> virtualLabels; // actual data
+    private TreeMap<Integer,String> virtualRelationshipTypes; // actual data
+
+    //entityId + propKeyId -> value
+    private Map<PropertyValueId,Object> virtualPropertyIdToValueForNodes;
+    private Map<PropertyValueId,Object> virtualPropertyIdToValueForRels;
+
+    //private Map<Integer,Object> virtualPropertiyIdsToObjectForNodes; // actual data
+    //private Map<Integer,Object> virtualPropertiyIdsToObjectForRels; // actual data
 
     private Map<Long,Set<Integer>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
     private Map<Long,Set<Long>> virtualNodeIdToConnectedRelationshipIds;
@@ -75,18 +110,21 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         virtualRelationshipToTypeId = new TreeMap<>();
         virtualNodeIds = new TreeSet<>();
-        virtualPropertyKeyIds = new TreeSet<>();
+        virtualPropertyKeyIdsToName = new TreeMap<>();
         virtualLabels = new TreeMap<>();
         virtualRelationshipTypes = new TreeMap<>();
-        virtualPropertiyIdsToObjectForNodes = new TreeMap<>();
+
         virtualNodeIdToPropertyIds = new HashMap<>();
         virtualRelationshipIdToPropertyIds = new HashMap<>();
         virtualNodeIdToLabelIds = new HashMap<>();
         virtualRelationshipToVirtualNodeIds = new HashMap<>();
         virtualNodeIdToConnectedRelationshipIds = new HashMap<>();
 
-        virtualPropertiyIdsToObjectForNodes = new HashMap<>();
-        virtualPropertiesIdsToObjectForRels = new HashMap<>();
+        virtualPropertyIdToValueForNodes = new HashMap<>();
+        virtualPropertyIdToValueForRels = new HashMap<>();
+
+        //virtualPropertiyKeyIdsToObjectForNodes = new HashMap<>();
+        //virtualPropertiyKeyIdsToObjectForRels = new HashMap<>();
     }
 
     // <DataRead>
@@ -104,7 +142,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         PrimitiveLongIterator allRealRels = super.relationshipsGetAll();
         MergingPrimitiveLongIterator bothRelIds =
-                new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipToTypeId.keySet());
+                new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipIds());
         return bothRelIds;
     }
 
@@ -210,7 +248,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public boolean relationshipExists( long relId )
     {
         if(isVirtual(relId)){
-            return virtualRelationshipToTypeId.keySet().contains(relId);
+            return virtualRelationshipIds().contains(relId);
         } else {
             return super.relationshipExists(relId);
         }
@@ -276,7 +314,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 // assert that the property belongs to this node
                 Set<Integer> props = virtualNodeIdToPropertyIds.get(nodeId);
                 if(props.contains(propertyKeyId)){
-                    return virtualPropertiyIdsToObjectForNodes.get(propertyKeyId);
+                    return getPropertyValueForNodes(nodeId,propertyKeyId); //TODO: Test this! Might need some improvements
                 }
                 throw new EntityNotFoundException(EntityType.NODE,nodeId);
             } else{
@@ -374,7 +412,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                     return false;
                 }
                 if(propIds.contains(propertyKeyId)){
-                    return virtualPropertiesIdsToObjectForRels.get(propertyKeyId);
+                    return getPropertyValueForRels(relationshipId,propertyKeyId);
                 }
                 throw new EntityNotFoundException(EntityType.RELATIONSHIP,relationshipId); // hm.. not that good
             } else{
@@ -390,7 +428,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public boolean graphHasProperty( int propertyKeyId )
     {
         if(isVirtual(propertyKeyId)){
-            return virtualPropertyKeyIds.contains(propertyKeyId);
+            return virtualPropertyIds().contains(propertyKeyId);
         } else {
             return super.graphHasProperty(propertyKeyId);
         }
@@ -409,7 +447,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 }catch (EntityNotFoundException e){
                 }
             }
-            it = virtualRelationshipToTypeId.keySet().iterator();
+            it = virtualRelationshipIds().iterator();
             while(it.hasNext()){
                 long current_relId = it.next();
                 try{
@@ -447,7 +485,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveIntIterator graphGetPropertyKeys()
     {
-        return new MergingPrimitiveIntIterator(super.graphGetPropertyKeys(),virtualPropertyKeyIds);
+        return new MergingPrimitiveIntIterator(super.graphGetPropertyKeys(), virtualPropertyIds());
     }
 
     @Override
@@ -461,15 +499,13 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public long nodesGetCount()
     {
-        // TODO !
-        return super.nodesGetCount();
+        return super.nodesGetCount() + virtualNodeIds.size();
     }
 
     @Override
     public long relationshipsGetCount()
     {
-        // TODO !
-        return super.relationshipsGetCount();
+        return super.relationshipsGetCount() + virtualRelationshipIds().size();
     }
 
     // </DataRead>
@@ -478,27 +514,58 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public Cursor<NodeItem> nodeCursor( long nodeId )
     {
-        // TODO !
+        // TODO: Test this
+        if(isVirtual(nodeId)) {
+            statement.assertOpen(); // from super
+            return MyStubCursors.asNodeCursor(nodeId); // this might not be a good solution?
+        }
         return super.nodeCursor(nodeId);
     }
 
     @Override
     public Cursor<RelationshipItem> relationshipCursor( long relId )
     {
-        // TODO !
+        //TODO: Finish this
+        if(isVirtual(relId)){
+            return null; //MyStubCursors.asRelationship() ...
+        }
         return super.relationshipCursor(relId);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetAll()
     {
-        // TODO !
-        return super.nodeCursorGetAll();
+        // take the normal cursor and add to it the virtual nodes
+        statement.assertOpen(); // from super
+        ArrayList<Long> list = new ArrayList<>();
+        PrimitiveLongIterator it = nodesGetAll();
+        while(it.hasNext()){
+            long l = it.next();
+            list.add(l);
+        }
+        long[] array = ArrayUtils.toPrimitive((Long[])list.toArray()); // TODO: Test this !!!
+        return MyStubCursors.asNodeCursor(array);
+
+        // this might not be a good solution
     }
 
     @Override
     public Cursor<RelationshipItem> relationshipCursorGetAll()
     {
+        statement.assertOpen(); // from super
+        ArrayList<Long> list = new ArrayList<>();
+        PrimitiveLongIterator it = relationshipsGetAll();
+        while(it.hasNext()){
+            long l = it.next();
+            list.add(l);
+        }
+        long[] array = ArrayUtils.toPrimitive((Long[])list.toArray()); // TODO: Test this !!!
+        //return MyStubCursors.asRelationshipCursor(array); // won't work
+
+        // TODO: finish this
+        // Need an array of RelationshipItems
+        Cursors.cursor();
+
         // TODO !
         return super.relationshipCursorGetAll();
     }
@@ -732,95 +799,170 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public int labelGetForName( String labelName )
     {
-        // TODO !
+        //TODO: Might be faster with contains?
+        Iterator<Integer> it = virtualLabels.keySet().iterator();
+        while(it.hasNext()){
+            int key = it.next();
+            if(virtualLabels.get(key).equals(labelName)){
+                return key;
+            }
+        }
+
         return super.labelGetForName(labelName);
     }
 
     @Override
     public String labelGetName( int labelId ) throws LabelNotFoundKernelException
     {
-        // TODO !
+        if(isVirtual(labelId)){
+            if(virtualLabels.containsKey(labelId)){
+                return virtualLabels.get(labelId);
+            }
+            throw new LabelNotFoundKernelException("No virtual Label found for id: "+labelId,new Exception());
+        }
+
         return super.labelGetName(labelId);
     }
 
     @Override
     public int propertyKeyGetForName( String propertyKeyName )
     {
-        // TODO !
+        Iterator<Integer> it = virtualPropertyIds().iterator();
+        while(it.hasNext()){
+            int key = it.next();
+            if(virtualPropertyKeyIdsToName.get(key).equals(propertyKeyName)){
+                return key;
+            }
+        }
         return super.propertyKeyGetForName(propertyKeyName);
     }
 
     @Override
     public String propertyKeyGetName( int propertyKeyId ) throws PropertyKeyIdNotFoundKernelException
     {
-        // TODO !
+        if(isVirtual(propertyKeyId)){
+            if(virtualPropertyIds().contains(propertyKeyId)){
+                return virtualPropertyKeyIdsToName.get(propertyKeyId);
+            }
+            throw new PropertyKeyIdNotFoundKernelException(propertyKeyId,new Exception());
+        }
+
         return super.propertyKeyGetName(propertyKeyId);
     }
 
     @Override
     public Iterator<Token> propertyKeyGetAllTokens()
     {
-        // TODO !
-        return super.propertyKeyGetAllTokens();
+        Iterator<Token> realOnes = super.propertyKeyGetAllTokens();
+        ArrayList<Token> virtualOnes = new ArrayList<>();
+
+        for(int key:virtualPropertyIds()){
+            String name = virtualPropertyKeyIdsToName.get(key);
+            virtualOnes.add(new Token(name,key)); // TODO: Definitely need to test this
+        }
+        return new MergingTokenIterator(realOnes,virtualOnes);
     }
 
     @Override
     public Iterator<Token> labelsGetAllTokens()
     {
-        // TODO !
-        return super.labelsGetAllTokens();
+        Iterator<Token> realOnes = super.labelsGetAllTokens();
+
+        ArrayList<Token> virtualOnes = new ArrayList<>();
+        for(int key:virtualLabels()){
+            String name = virtualLabels.get(key);
+            virtualOnes.add(new Token(name,key));
+        }
+        return new MergingTokenIterator(realOnes,virtualOnes);
     }
 
     @Override
     public Iterator<Token> relationshipTypesGetAllTokens()
     {
-        // TODO !
-        return super.relationshipTypesGetAllTokens();
+        Iterator<Token> realOnes = super.relationshipTypesGetAllTokens();
+        ArrayList<Token> virtualOnes = new ArrayList<>();
+        for(int key:virtualRelationshipTypes.keySet()){
+            String name = virtualRelationshipTypes.get(key);
+            virtualOnes.add(new Token(name,key));
+        }
+        return new MergingTokenIterator(realOnes,virtualOnes);
     }
 
     @Override
     public int relationshipTypeGetForName( String relationshipTypeName )
     {
-        // TODO !
+        // TODO: Improvements with contains?
+        Iterator<Integer> it = virtualRelationshipTypes.keySet().iterator();
+        while(it.hasNext()){
+            int key = it.next();
+            if(virtualRelationshipTypes.get(key).equals(relationshipTypeName)){
+                return key;
+            }
+        }
+
         return super.relationshipTypeGetForName(relationshipTypeName);
     }
 
     @Override
     public String relationshipTypeGetName( int relationshipTypeId ) throws RelationshipTypeIdNotFoundKernelException
     {
-        // TODO !
+        if(isVirtual(relationshipTypeId)){
+            if(virtualRelationshipTypes.keySet().contains(relationshipTypeId)){
+                return virtualRelationshipTypes.get(relationshipTypeId);
+            }
+            throw new RelationshipTypeIdNotFoundKernelException(relationshipTypeId,new Exception());
+        }
+
         return super.relationshipTypeGetName(relationshipTypeId);
     }
 
     @Override
     public int labelCount()
     {
-        // TODO !
-        return super.labelCount();
+        // TODO: Solution without counting same type twice if in both collections
+        return super.labelCount() + virtualLabels().size();
     }
 
     @Override
     public int propertyKeyCount()
     {
-        // TODO !
-        return super.propertyKeyCount();
+        // TODO: Solution without counting same type twice if in both collections
+        return super.propertyKeyCount() + virtualPropertyIds().size();
     }
 
     @Override
     public int relationshipTypeCount()
     {
-        // TODO !
-        return super.relationshipTypeCount();
+        // TODO: Solution without counting same type twice if in both collections
+        return super.relationshipTypeCount() + virtualRelationshipTypes.keySet().size();
     }
 
     // </TokenRead>
 
     // <TokenWrite>
     @Override
-    public int labelGetOrCreateForName( String labelName ) throws IllegalTokenNameException, TooManyLabelsException
+    public int virtualLabelGetOrCreateForName( String labelName ) throws IllegalTokenNameException,
+            TooManyLabelsException, NoSuchMethodException
     {
-        // TODO !
-        return super.labelGetOrCreateForName(labelName);
+        // Try getting the labelId
+        // TODO: might be faster with contains?
+        Iterator<Integer> it = virtualLabels.keySet().iterator();
+        while(it.hasNext()){
+            int key = it.next();
+            if(virtualLabels.get(key).equals(labelName)){
+                return key;
+            }
+        }
+
+        // not found, need to create
+        int newId;
+        if(virtualLabels().size()==0){
+            newId = -1;
+        } else{
+            newId = virtualLabels.firstKey()-1;
+        }
+        virtualLabels.put(newId,labelName);
+        return newId;
     }
 
     @Override
@@ -1334,5 +1476,41 @@ public class VirtualOperationsFacade extends OperationsFacade
     
     private boolean isVirtual(long entityId){
         return entityId<0;
+    }
+
+    private Set<Long> virtualRelationshipIds(){
+        return virtualRelationshipToTypeId.keySet();
+    }
+
+    private Set<Integer> virtualPropertyIds(){
+        return virtualPropertyKeyIdsToName.keySet();
+    }
+
+    private Set<Integer> virtualLabels(){
+        return virtualLabels.keySet();
+    }
+
+    private Object getPropertyValueForNodes(long nodeId, int propertykey){
+        Iterator<PropertyValueId> it = virtualPropertyIdToValueForNodes.keySet().iterator();
+        while(it.hasNext()){
+            PropertyValueId pId = it.next();
+            if(pId.getEntityId()==nodeId && pId.getPropertyKeyId()==propertykey){
+                // success!
+                return virtualPropertyIdToValueForNodes.get(pId);
+            }
+        }
+        return null;
+    }
+
+    private Object getPropertyValueForRels(long relId, int propertykey){
+        Iterator<PropertyValueId> it =virtualPropertyIdToValueForRels.keySet().iterator();
+        while(it.hasNext()){
+            PropertyValueId pId = it.next();
+            if(pId.getEntityId()==relId && pId.getPropertyKeyId()==propertykey){
+                // success!
+                return virtualPropertyIdToValueForRels.get(pId);
+            }
+        }
+        return null;
     }
 }

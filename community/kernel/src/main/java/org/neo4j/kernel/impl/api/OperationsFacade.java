@@ -491,6 +491,11 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
+    public int virtualLabelGetOrCreateForName(String labelName) throws IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
     public Set<ProcedureSignature> proceduresGetAll()
     {
         statement.assertOpen();
