@@ -521,6 +521,11 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
+    public long virtualRelationshipCreate(int relationshipTypeId, long startNodeId, long endNodeId) throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
     public Set<ProcedureSignature> proceduresGetAll()
     {
         statement.assertOpen();

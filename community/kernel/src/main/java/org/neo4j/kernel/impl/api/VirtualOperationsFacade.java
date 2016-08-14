@@ -96,11 +96,11 @@ public class VirtualOperationsFacade extends OperationsFacade
     //private Map<Integer,Object> virtualPropertiyIdsToObjectForNodes; // actual data
     //private Map<Integer,Object> virtualPropertiyIdsToObjectForRels; // actual data
 
-    private Map<Long,Set<Integer>> virtualNodeIdToPropertyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
+    private Map<Long,Set<Integer>> virtualNodeIdToPropertyKeyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
     private Map<Long,Set<Long>> virtualNodeIdToConnectedRelationshipIds;
     private Map<Long,Set<Integer>> virtualRelationshipIdToPropertyIds;
     private Map<Long,Set<Integer>> virtualNodeIdToLabelIds;
-    private Map<Long,Long[]> virtualRelationshipToVirtualNodeIds; // Node[0] = from, Node[1] = to
+    private Map<Long,Long[]> virtualRelationshipIdToVirtualNodeIds; // Node[0] = from, Node[1] = to
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             StatementOperationParts operations, Procedures procedures )
@@ -114,10 +114,10 @@ public class VirtualOperationsFacade extends OperationsFacade
         virtualLabels = new TreeMap<>();
         virtualRelationshipTypes = new TreeMap<>();
 
-        virtualNodeIdToPropertyIds = new HashMap<>();
+        virtualNodeIdToPropertyKeyIds = new HashMap<>();
         virtualRelationshipIdToPropertyIds = new HashMap<>();
         virtualNodeIdToLabelIds = new HashMap<>();
-        virtualRelationshipToVirtualNodeIds = new HashMap<>();
+        virtualRelationshipIdToVirtualNodeIds = new HashMap<>();
         virtualNodeIdToConnectedRelationshipIds = new HashMap<>();
 
         virtualPropertyIdToValueForNodes = new HashMap<>();
@@ -293,7 +293,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
-                Set<Integer> propIds = virtualNodeIdToPropertyIds.get(nodeId);
+                Set<Integer> propIds = virtualNodeIdToPropertyKeyIds.get(nodeId);
                 if(propIds==null){
                     return false;
                 }
@@ -312,7 +312,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
                 // assert that the property belongs to this node
-                Set<Integer> props = virtualNodeIdToPropertyIds.get(nodeId);
+                Set<Integer> props = virtualNodeIdToPropertyKeyIds.get(nodeId);
                 if(props.contains(propertyKeyId)){
                     return getPropertyValueForNodes(nodeId,propertyKeyId); //TODO: Test this! Might need some improvements
                 }
@@ -428,7 +428,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public boolean graphHasProperty( int propertyKeyId )
     {
         if(isVirtual(propertyKeyId)){
-            return virtualPropertyIds().contains(propertyKeyId);
+            return virtualPropertyKeyIds().contains(propertyKeyId);
         } else {
             return super.graphHasProperty(propertyKeyId);
         }
@@ -466,7 +466,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public PrimitiveIntIterator nodeGetPropertyKeys( long nodeId ) throws EntityNotFoundException
     {
         if(isVirtual(nodeId)){
-            return new MergingPrimitiveIntIterator(null,virtualNodeIdToPropertyIds.get(nodeId));
+            return new MergingPrimitiveIntIterator(null, virtualNodeIdToPropertyKeyIds.get(nodeId));
         } else {
             return super.nodeGetPropertyKeys(nodeId);
         }
@@ -485,7 +485,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveIntIterator graphGetPropertyKeys()
     {
-        return new MergingPrimitiveIntIterator(super.graphGetPropertyKeys(), virtualPropertyIds());
+        return new MergingPrimitiveIntIterator(super.graphGetPropertyKeys(), virtualPropertyKeyIds());
     }
 
     @Override
@@ -827,7 +827,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public int propertyKeyGetForName( String propertyKeyName )
     {
-        Iterator<Integer> it = virtualPropertyIds().iterator();
+        Iterator<Integer> it = virtualPropertyKeyIds().iterator();
         while(it.hasNext()){
             int key = it.next();
             if(virtualPropertyKeyIdsToName.get(key).equals(propertyKeyName)){
@@ -841,7 +841,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String propertyKeyGetName( int propertyKeyId ) throws PropertyKeyIdNotFoundKernelException
     {
         if(isVirtual(propertyKeyId)){
-            if(virtualPropertyIds().contains(propertyKeyId)){
+            if(virtualPropertyKeyIds().contains(propertyKeyId)){
                 return virtualPropertyKeyIdsToName.get(propertyKeyId);
             }
             throw new PropertyKeyIdNotFoundKernelException(propertyKeyId,new Exception());
@@ -856,7 +856,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         Iterator<Token> realOnes = super.propertyKeyGetAllTokens();
         ArrayList<Token> virtualOnes = new ArrayList<>();
 
-        for(int key:virtualPropertyIds()){
+        for(int key: virtualPropertyKeyIds()){
             String name = virtualPropertyKeyIdsToName.get(key);
             virtualOnes.add(new Token(name,key)); // TODO: Definitely need to test this
         }
@@ -927,7 +927,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public int propertyKeyCount()
     {
         // TODO: Solution without counting same type twice if in both collections
-        return super.propertyKeyCount() + virtualPropertyIds().size();
+        return super.propertyKeyCount() + virtualPropertyKeyIds().size();
     }
 
     @Override
@@ -970,7 +970,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // Try getting the proplId
         // TODO: might be faster with contains?
-        Iterator<Integer> it = virtualPropertyIds().iterator();
+        Iterator<Integer> it = virtualPropertyKeyIds().iterator();
         while(it.hasNext()){
             int key = it.next();
             if(virtualPropertyKeyIdsToName.get(key).equals(propertyKeyName)){
@@ -980,7 +980,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         // not found, need to create
         int newId;
-        if(virtualPropertyIds().size()==0){
+        if(virtualPropertyKeyIds().size()==0){
             newId = -1;
         } else{
             newId = virtualPropertyKeyIdsToName.firstKey()-1;
@@ -1054,7 +1054,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             new_id = smallest - 1;
         }
         virtualNodeIds.add(new_id);
-        virtualNodeIdToPropertyIds.put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToPropertyKeyIds.put(new_id,new LinkedHashSet<>());
         virtualNodeIdToLabelIds.put(new_id,new LinkedHashSet<>());
         virtualNodeIdToConnectedRelationshipIds.put(new_id,new LinkedHashSet<>());
 
@@ -1072,7 +1072,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 virtualNodeIds.remove(nodeId);
 
                 virtualNodeIdToLabelIds.remove(nodeId);
-                virtualNodeIdToPropertyIds.remove(nodeId);
+                virtualNodeIdToPropertyKeyIds.remove(nodeId);
 
                 // TODO: Remove refs that are returned from those calls
 
@@ -1089,42 +1089,118 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public long relationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
+    public long virtualRelationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException
     {
-        // TODO !
-        return super.relationshipCreate(relationshipTypeId,startNodeId,endNodeId);
+        //TODO: Test it with all possible inputs
+        if(isVirtual(startNodeId)||isVirtual(endNodeId)){
+
+            // create a new relId
+            long newId;
+            if(virtualRelationshipToTypeId.size()==0) {
+                newId =-1;
+            } else {
+                newId = virtualRelationshipToTypeId.firstKey() - 1;
+            }
+            virtualRelationshipToTypeId.put(newId,relationshipTypeId);
+
+            Long[] nodes = new Long[2];
+            nodes[0] = startNodeId;
+            nodes[1] = endNodeId;
+
+            virtualRelationshipIdToVirtualNodeIds.put(newId,nodes);
+
+            return newId;
+        } else {
+            return super.relationshipCreate(relationshipTypeId, startNodeId, endNodeId);
+        }
     }
 
     @Override
     public void relationshipDelete( long relationshipId )
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
-        // TODO !
-        super.relationshipDelete(relationshipId);
+        if(isVirtual(relationshipId)){
+
+            if(relationshipExists(relationshipId)){
+                virtualRelationshipToTypeId.remove(relationshipId);
+                virtualRelationshipIdToPropertyIds.remove(relationshipId);
+                virtualRelationshipIdToVirtualNodeIds.remove(relationshipId);
+            } else{
+                throw new EntityNotFoundException(EntityType.RELATIONSHIP,relationshipId);
+            }
+
+        } else {
+            super.relationshipDelete(relationshipId);
+        }
     }
 
     @Override
     public boolean nodeAddLabel( long nodeId, int labelId )
             throws EntityNotFoundException, ConstraintValidationKernelException
     {
-        // TODO !
+        if(isVirtual(nodeId)){
+            if(nodeExists(nodeId)){
+                // Todo: check if this labelId exist?
+
+                virtualNodeIdToLabelIds.get(nodeId).add(labelId);
+                return true;
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        }
         return super.nodeAddLabel(nodeId,labelId);
     }
 
     @Override
     public boolean nodeRemoveLabel( long nodeId, int labelId ) throws EntityNotFoundException
     {
-        // TODO !
-        return super.nodeRemoveLabel(nodeId,labelId);
+        if(isVirtual(nodeId)){
+            if(nodeExists(nodeId)){
+                // Todo: check if this labelId exist?
+
+                virtualNodeIdToLabelIds.get(nodeId).remove(labelId);
+                return true;
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        } else {
+            return super.nodeRemoveLabel(nodeId, labelId);
+        }
     }
 
     @Override
     public Property nodeSetProperty( long nodeId, DefinedProperty property )
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
-        // TODO !
-        return super.nodeSetProperty(nodeId,property);
+        if(isVirtual(nodeId)){
+            if(nodeExists(nodeId)){
+                // Todo: check if this propId exist?
+
+                PropertyValueId key=null;
+                Iterator<PropertyValueId> it = virtualPropertyIdToValueForNodes.keySet().iterator();
+                while(it.hasNext()){
+                    PropertyValueId pId = it.next();
+                    if(pId.getEntityId()==nodeId && pId.getPropertyKeyId()==property.propertyKeyId()){
+                        // found it
+                        key = pId;
+                        break;
+                    }
+                }
+                if(key==null){
+                    // not already set
+                    key = new PropertyValueId(nodeId,property.propertyKeyId());
+                }
+
+                virtualPropertyIdToValueForNodes.put(key,property.value());
+                virtualNodeIdToPropertyKeyIds.get(nodeId).add(property.propertyKeyId());
+                return property;
+            } else{
+                throw new EntityNotFoundException(EntityType.NODE,nodeId);
+            }
+        } else {
+            return super.nodeSetProperty(nodeId, property);
+        }
     }
 
     @Override
@@ -1515,7 +1591,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         return virtualRelationshipToTypeId.keySet();
     }
 
-    private Set<Integer> virtualPropertyIds(){
+    private Set<Integer> virtualPropertyKeyIds(){
         return virtualPropertyKeyIdsToName.keySet();
     }
 

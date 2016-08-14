@@ -583,14 +583,15 @@ public interface ReadOperations
 
     int virtualRelationshipTypeGetOrCreateForName( String relationshipTypeName ) throws IllegalTokenNameException, NoSuchMethodException;
 
-
     void virtualLabelCreateForName( String labelName, int id ) throws
             IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
 
     void virtualPropertyKeyCreateForName( String propertyKeyName,
                                                  int id ) throws IllegalTokenNameException, NoSuchMethodException;
 
-
     void virtualRelationshipTypeCreateForName( String relationshipTypeName,int id ) throws
             IllegalTokenNameException, NoSuchMethodException;
+
+    long virtualRelationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
+            throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException, NoSuchMethodException;
 }
