@@ -26,11 +26,9 @@ import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.LegacyIndexHits;
 import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
-import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
 import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
 import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
@@ -83,7 +81,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         }
     }
 
-    private TreeMap<Long,Integer> virtualRelationshipToTypeId; // actualData and ref to types
+    private TreeMap<Long,Integer> virtualRelationshipIdToTypeId; // actualData and ref to types
     private SortedSet<Long> virtualNodeIds;  // "actual data"
     private TreeMap<Integer,String> virtualPropertyKeyIdsToName;  // "actual data"
     private TreeMap<Integer,String> virtualLabels; // actual data
@@ -108,7 +106,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         super(tx,statement,operations,procedures);
 
 
-        virtualRelationshipToTypeId = new TreeMap<>();
+        virtualRelationshipIdToTypeId = new TreeMap<>();
         virtualNodeIds = new TreeSet<>();
         virtualPropertyKeyIdsToName = new TreeMap<>();
         virtualLabels = new TreeMap<>();
@@ -371,7 +369,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 Set<Long> relIds = virtualNodeIdToConnectedRelationshipIds.get(nodeId);
                 Set<Integer> resultSet = new HashSet<>();
                 for(Long relId:relIds){
-                    resultSet.add(virtualRelationshipToTypeId.get(relId)); // this should not be null! TODO: Tests to ensure that
+                    resultSet.add(virtualRelationshipIdToTypeId.get(relId)); // this should not be null! TODO: Tests to ensure that
                 }
                 return new MergingPrimitiveIntIterator(null,resultSet);
             } else{
@@ -1097,12 +1095,12 @@ public class VirtualOperationsFacade extends OperationsFacade
 
             // create a new relId
             long newId;
-            if(virtualRelationshipToTypeId.size()==0) {
+            if(virtualRelationshipIdToTypeId.size()==0) {
                 newId =-1;
             } else {
-                newId = virtualRelationshipToTypeId.firstKey() - 1;
+                newId = virtualRelationshipIdToTypeId.firstKey() - 1;
             }
-            virtualRelationshipToTypeId.put(newId,relationshipTypeId);
+            virtualRelationshipIdToTypeId.put(newId,relationshipTypeId);
 
             Long[] nodes = new Long[2];
             nodes[0] = startNodeId;
@@ -1123,7 +1121,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(isVirtual(relationshipId)){
 
             if(relationshipExists(relationshipId)){
-                virtualRelationshipToTypeId.remove(relationshipId);
+                virtualRelationshipIdToTypeId.remove(relationshipId);
                 virtualRelationshipIdToPropertyKeyIds.remove(relationshipId);
                 virtualRelationshipIdToVirtualNodeIds.remove(relationshipId);
             } else{
@@ -1253,7 +1251,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Property graphSetProperty( DefinedProperty property )
     {
         // TODO !
-
+        /*
 
         if(isVirtual(property.propertyKeyId())){
 
@@ -1263,8 +1261,8 @@ public class VirtualOperationsFacade extends OperationsFacade
             return super.graphSetProperty(property);
         }
 
-
-
+        */
+        return super.graphSetProperty(property);
     }
 
     @Override
@@ -1647,15 +1645,15 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public long countsForRelationship( int startLabelId, int typeId, int endLabelId )
     {
-        // TODO !
-        return super.countsForRelationship(startLabelId,typeId,endLabelId);
+        return countVirtualRelationships(startLabelId,typeId,endLabelId) +
+                super.countsForRelationship(startLabelId,typeId,endLabelId);
     }
 
     @Override
     public long countsForRelationshipWithoutTxState( int startLabelId, int typeId, int endLabelId )
     {
-        // TODO ?
-        return super.countsForRelationshipWithoutTxState(startLabelId,typeId,endLabelId);
+        return countVirtualRelationships(startLabelId,typeId,endLabelId) +
+                super.countsForRelationshipWithoutTxState(startLabelId,typeId,endLabelId);
     }
 
     @Override
@@ -1684,7 +1682,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     private Set<Long> virtualRelationshipIds(){
-        return virtualRelationshipToTypeId.keySet();
+        return virtualRelationshipIdToTypeId.keySet();
     }
 
     private Set<Integer> virtualPropertyKeyIds(){
@@ -1729,5 +1727,67 @@ public class VirtualOperationsFacade extends OperationsFacade
             }
         }
         return count;
+    }
+
+    private int countVirtualRelationships( int startLabelId, int typeId, int endLabelId ){
+        int count = 0;
+        int ANY_LABEL = -1;
+        int ANY_REL = -1;
+
+        Set<Long> possibleStartNodes;
+        Set<Long> possibleEndNodes;
+
+        // prepare possibleStartNodes
+        if(startLabelId==ANY_LABEL){
+            possibleStartNodes = virtualNodeIds;
+        } else{
+            // specific startLabelId
+            possibleStartNodes = getVirtualNodesForLabel(startLabelId);
+        }
+
+        // prepare possibleEndNodes
+        if(endLabelId==ANY_LABEL){
+            possibleEndNodes = virtualNodeIds;
+        } else{
+            // specific endLabelId
+            possibleEndNodes = getVirtualNodesForLabel(endLabelId);
+        }
+
+        if((possibleStartNodes.size()==0)||(possibleEndNodes.size()==0)){
+            return 0;
+        }
+
+        // do the actual counting
+        Iterator<Long> relIdIterator = virtualRelationshipIdToVirtualNodeIds.keySet().iterator();
+        while(relIdIterator.hasNext()){
+            Long relId = relIdIterator.next();
+            Long[] nodes = virtualRelationshipIdToVirtualNodeIds.get(relId);
+            if((possibleStartNodes.contains(nodes[0]))&&
+                    (possibleEndNodes.contains(nodes[1]))){
+                if(typeId== ANY_REL){
+                    // ALL
+                    count++;
+                } else{
+                    // only typeId
+                    if(virtualRelationshipIdToTypeId.get(relId)==typeId){
+                        count++;
+                    }
+                }
+            }
+        }
+
+        return count;
+    }
+
+    private Set<Long> getVirtualNodesForLabel(int labelId){
+        Set<Long> returnSet = new TreeSet<>();
+        Iterator<Long> nodeIdIterator = virtualNodeIdToLabelIds.keySet().iterator();
+        while(nodeIdIterator.hasNext()){
+            Long id = nodeIdIterator.next();
+            if(virtualNodeIdToLabelIds.get(id).contains(labelId)){
+                returnSet.add(id);
+            }
+        }
+        return returnSet;
     }
 }
