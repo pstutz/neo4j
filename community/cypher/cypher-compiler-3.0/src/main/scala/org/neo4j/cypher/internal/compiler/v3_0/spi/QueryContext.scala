@@ -58,7 +58,7 @@ trait QueryContext extends TokenContext {
 
   def relationshipOps: Operations[Relationship]
 
-  def createNode(): Node
+  def createNode(real: java.lang.Boolean): Node
 
   //def createVirtualNode(): Node
 

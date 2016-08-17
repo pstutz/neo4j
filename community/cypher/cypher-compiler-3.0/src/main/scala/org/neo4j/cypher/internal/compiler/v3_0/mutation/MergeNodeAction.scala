@@ -73,9 +73,11 @@ case class MergeNodeAction(variable: String,
     // TODO get rid of double evaluation of property expressions
     ensureNoNullNodeProperties(context, state)
 
+    // TODO: Sascha
+
     if (foundNodes.isEmpty) {
       val query: QueryContext = state.query
-      val createdNode: Node = query.createNode()
+      val createdNode: Node = query.createNode(true)
       val newContext = context += (variable -> createdNode)
 
       onCreate.foreach {

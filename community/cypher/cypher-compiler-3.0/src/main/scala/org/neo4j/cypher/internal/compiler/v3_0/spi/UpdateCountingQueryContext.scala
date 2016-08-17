@@ -57,9 +57,9 @@ class UpdateCountingQueryContext(inner: QueryContext) extends DelegatingQueryCon
 
   override def getOptStatistics = Some(getStatistics)
 
-  override def createNode() = {
+  override def createNode(real:java.lang.Boolean) = {
     nodesCreated.increase()
-    inner.createNode()
+    inner.createNode(real)
   }
 
   override def nodeOps: Operations[Node] = new CountingOps[Node](inner.nodeOps, nodesDeleted)

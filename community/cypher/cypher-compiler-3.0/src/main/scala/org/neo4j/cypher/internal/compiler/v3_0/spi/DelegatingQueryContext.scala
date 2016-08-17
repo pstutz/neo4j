@@ -44,7 +44,7 @@ class DelegatingQueryContext(val inner: QueryContext) extends QueryContext {
   override def setLabelsOnNode(node: Long, labelIds: Iterator[Int]): Int =
     singleDbHit(inner.setLabelsOnNode(node, labelIds))
 
-  override def createNode(): Node = singleDbHit(inner.createNode())
+  override def createNode(real:java.lang.Boolean): Node = singleDbHit(inner.createNode(real))
 
   override def createRelationship(start: Node, end: Node, relType: String): Relationship = singleDbHit(inner
     .createRelationship(start, end, relType))

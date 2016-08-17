@@ -37,7 +37,7 @@ import java.net.URL;
 public interface GraphDatabaseQueryService
 {
     DependencyResolver getDependencyResolver();
-    //Node createVirtualNode();
+    Node createVirtualNode() throws NoSuchMethodException;
     Node createNode();
     //Node createVirtualNode( Label... labels );
     Node createNode( Label... labels );

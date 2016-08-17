@@ -88,8 +88,13 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
     }
   }
 
-  override def createNode(): Node =
-    transactionalContext.graph.createNode()
+  override def createNode(real:java.lang.Boolean): Node =
+    if(real){
+      transactionalContext.graph.createNode()
+    } else {
+      transactionalContext.graph.createVirtualNode()
+    }
+
 
   override def createRelationship(start: Node, end: Node, relType: String) =
     start.createRelationshipTo(end, withName(relType))

@@ -45,20 +45,17 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     // (dirty) check if prop is set (to String)
 
     val virtual = properties.toList.toString().contains("virtual -> {  AUTOSTRING")
+    var node:Node = null
     if(virtual) {
-      val node = state.query.createVirtualNode()
+      //val node = state.query.createVirtualNode()
       // Todo: optional, do not set virtual property
-      setVirtualProperties(context, state, node)
-      setVirtualLabels(node)
-      context += key -> node
+      node = state.query.createNode(false)
     } else{
-      val node = state.query.createNode()
-
-      setProperties(context, state, node.getId)
-      setLabels(context, state, node.getId)
-      context += key -> node
+      node = state.query.createNode(true)
     }
-
+    setProperties(context, state, node.getId)
+    setLabels(context, state, node.getId)
+    context += key -> node
 
     //properties.contains("bar: baz");
     //node.setProperty()

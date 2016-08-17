@@ -47,7 +47,7 @@ case class CreateNode(key: String, properties: Map[String, Expression], labels: 
     }
 
     def createNodeWithPropertiesAndLabels(props: Map[String, Expression]): ExecutionContext = {
-      val node = state.query.createNode()
+      val node = state.query.createNode(true)
       setProperties(node, props, context, state)
 
       val queryCtx = state.query

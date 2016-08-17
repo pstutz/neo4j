@@ -39,7 +39,7 @@ trait QueryContextAdaptation {
 
   override def createNodePropertyExistenceConstraint(labelId: Int, propertyKeyId: Int): IdempotentResult[NodePropertyExistenceConstraint] = ???
 
-  override def createNode(): Node = ???
+  override def createNode(real:java.lang.Boolean): Node = ???
 
   override def dropRelationshipPropertyExistenceConstraint(relTypeId: Int, propertyKeyId: Int): Unit = ???
 

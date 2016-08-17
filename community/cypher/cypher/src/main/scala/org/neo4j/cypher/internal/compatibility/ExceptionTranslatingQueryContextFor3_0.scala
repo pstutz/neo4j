@@ -42,8 +42,8 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def setLabelsOnNode(node: Long, labelIds: Iterator[Int]): Int =
     translateException(inner.setLabelsOnNode(node, labelIds))
 
-  override def createNode(): Node =
-    translateException(inner.createNode())
+  override def createNode(real:java.lang.Boolean): Node =
+    translateException(inner.createNode(real))
 
   override def createRelationship(start: Node, end: Node, relType: String): Relationship =
     translateException(inner.createRelationship(start, end, relType))
@@ -256,14 +256,14 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
     override def close(success: Boolean) { translateException(super.close(success)) }
   }
 
-  override def createVirtualNode(): Node = translateException(inner.createVirtualNode())
+  //override def createVirtualNode(): Node = translateException(inner.createVirtualNode())
 
-  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
-    translateException(inner.createVirtualRelationship(start,end,relType))
+  //override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
+  //  translateException(inner.createVirtualRelationship(start,end,relType))
 
-  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
-    translateException(inner.createVirtualRelationship(start,end,relType))
+  //override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
+  //  translateException(inner.createVirtualRelationship(start,end,relType))
 
-  override def getVirtualNodesForLabel(label: String): Iterable[Node] = translateException(inner.getVirtualNodesForLabel(label))
+  //override def getVirtualNodesForLabel(label: String): Iterable[Node] = translateException(inner.getVirtualNodesForLabel(label))
 }
 

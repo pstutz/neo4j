@@ -83,11 +83,11 @@ class SnitchingQueryContext extends QueryContext with QueryContextAdaptation {
 
   override def getOptLabelId(labelName: String): Option[Int] = labels.get(labelName)
 
-  override def createVirtualNode(): Node = ???
+  //override def createVirtualNode(): Node = ???
 
-  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship = ???
+  //override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship = ???
 
-  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship = ???
+  //override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship = ???
 
-  override def getVirtualNodesForLabel(label: String): Iterable[Node] = ???
+  //override def getVirtualNodesForLabel(label: String): Iterable[Node] = ???
 }

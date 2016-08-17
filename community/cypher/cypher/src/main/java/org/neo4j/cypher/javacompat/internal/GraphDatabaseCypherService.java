@@ -44,10 +44,10 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
         return graph.getDependencyResolver();
     }
 
-    /*@Override
-    public Node createVirtualNode() {
+    @Override
+    public Node createVirtualNode() throws NoSuchMethodException {
         return graph.createVirtualNode();
-    }*/
+    }
 
     @Override
     public Node createNode()

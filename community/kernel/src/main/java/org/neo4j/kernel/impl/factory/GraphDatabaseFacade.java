@@ -186,9 +186,12 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     }
 
     @Override
-    public Node createVirtualNode() throws Exception {
+    public Node createVirtualNode() throws NoSuchMethodException {
 
-        throw new Exception("Can't handle virtual entities in GraphDatabaseFacade");
+        try ( Statement statement = spi.currentStatement() )
+        {
+            return new NodeProxy( nodeActions, statement.readOperations().virtualNodeCreate());
+        }
     }
 
     @Override
