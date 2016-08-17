@@ -128,7 +128,7 @@ final class ProfilingQueryContext(inner: QueryContext, val p: Pipe)
   override def nodeOps: Operations[Node] = new ProfilerOperations(inner.nodeOps)
   override def relationshipOps: Operations[Relationship] = new ProfilerOperations(inner.relationshipOps)
 
-  override def getVirtualNodesForLabel(label: String): Iterable[Node] = inner.getVirtualNodesForLabel(label)
+  //override def getVirtualNodesForLabel(label: String): Iterable[Node] = inner.getVirtualNodesForLabel(label)
 }
 
 class ProfilingIterator(inner: Iterator[ExecutionContext], startValue: Long) extends Iterator[ExecutionContext] with Counter {

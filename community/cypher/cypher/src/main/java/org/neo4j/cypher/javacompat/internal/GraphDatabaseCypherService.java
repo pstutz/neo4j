@@ -26,17 +26,16 @@ import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
-import org.neo4j.kernel.impl.factory.virtual.EnhancedGraphDatabaseFacade;
 
 import java.net.URL;
 
 public class GraphDatabaseCypherService implements GraphDatabaseQueryService
 {
-    private EnhancedGraphDatabaseFacade graph;
+    private GraphDatabaseFacade graph;
 
     public GraphDatabaseCypherService( GraphDatabaseService graph )
     {
-        this.graph = (EnhancedGraphDatabaseFacade) graph;
+        this.graph = (GraphDatabaseFacade) graph;
     }
 
     @Override
@@ -45,10 +44,10 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
         return graph.getDependencyResolver();
     }
 
-    @Override
+    /*@Override
     public Node createVirtualNode() {
         return graph.createVirtualNode();
-    }
+    }*/
 
     @Override
     public Node createNode()
@@ -56,22 +55,22 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
         return graph.createNode();
     }
 
-    @Override
+    /*@Override
     public Node createVirtualNode(Label... labels) {
         return graph.createVirtualNode(labels);
     }
-
+    */
     @Override
     public Node createNode( Label... labels )
     {
         return graph.createNode( labels );
     }
 
-    @Override
+    /*@Override
     public Iterable<Node> getVirtualNodesByLabel(String labelname) {
         return graph.getVirtualNodesForLabel(labelname);
     }
-
+    */
     @Override
     public Node getNodeById( long id )
     {

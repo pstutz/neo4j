@@ -49,6 +49,8 @@ case class NodeByLabelScanPipe(ident: String, label: LazyLabel)
         // TODO: Sascha
         // than it could be also a virtual only label!
         //state.query
+
+        /*
         val nodes = state.query.getVirtualNodesForLabel(label.name).iterator();
 
         val baseContext = state.initialContext.getOrElse(ExecutionContext.empty)
@@ -58,8 +60,8 @@ case class NodeByLabelScanPipe(ident: String, label: LazyLabel)
           list += baseContext.newWith1(ident,id )
         }
         list.iterator
-
-        //Iterator.empty
+        */
+        Iterator.empty
     }
   }
 

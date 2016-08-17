@@ -60,15 +60,15 @@ trait QueryContext extends TokenContext {
 
   def createNode(): Node
 
-  def createVirtualNode(): Node
+  //def createVirtualNode(): Node
 
   def createRelationship(start: Node, end: Node, relType: String): Relationship
 
-  def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship
+  //def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship
 
   def createRelationship(start: Long, end: Long, relType: Int): Relationship
 
-  def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship
+  //def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship
 
   def getOrCreateRelTypeId(relTypeName: String): Int
 
@@ -78,7 +78,7 @@ trait QueryContext extends TokenContext {
 
   def getLabelsForNode(node: Long): Iterator[Int]
 
-  def getVirtualNodesForLabel(label: String):Iterable[Node]
+  //def getVirtualNodesForLabel(label: String):Iterable[Node]
 
   def isLabelSetOnNode(label: Int, node: Long): Boolean
 

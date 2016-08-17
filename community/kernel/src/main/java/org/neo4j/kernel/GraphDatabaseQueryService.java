@@ -37,11 +37,11 @@ import java.net.URL;
 public interface GraphDatabaseQueryService
 {
     DependencyResolver getDependencyResolver();
-    Node createVirtualNode();
+    //Node createVirtualNode();
     Node createNode();
-    Node createVirtualNode( Label... labels );
+    //Node createVirtualNode( Label... labels );
     Node createNode( Label... labels );
-    Iterable<Node> getVirtualNodesByLabel(String labelname);
+    //Iterable<Node> getVirtualNodesByLabel(String labelname);
     Node getNodeById(long id);
     Relationship getRelationshipById(long id);
     InternalTransaction beginTransaction( KernelTransaction.Type type, AccessMode accessMode );
