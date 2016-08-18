@@ -259,11 +259,12 @@ public class NodeProxy
     @Override
     public void setProperty( String key, Object value )
     {
-        if(isVirtual()){
+        // TODO: Work if virtual!
+        //if(isVirtual()){
             // this needs much more (constraint) checking ...
-            virtualProperties.put(key,value);
+            //virtualProperties.put(key,value);
 
-        } else {
+        //} else {
             try (Statement statement = actions.statement()) {
                 int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName(key);
                 try {
@@ -286,7 +287,7 @@ public class NodeProxy
                 throw new IllegalStateException("Auto indexing encountered a failure while setting property: "
                         + e.getMessage(), e);
             }
-        }
+        //}
     }
 
     @Override
@@ -468,6 +469,8 @@ public class NodeProxy
             throw new IllegalArgumentException( "(null) property key is not allowed" );
         }
 
+        // TODO: Sascha ?
+        /*
         if(isVirtual()){
             if(virtualProperties.containsKey(key)){
                 Object o = virtualProperties.get(key);
@@ -475,7 +478,7 @@ public class NodeProxy
             } else{
                 throw new NotFoundException( format( "No such property, '%s'.", key ) );
             }
-        }
+        }*/
 
         try ( Statement statement = actions.statement() )
         {

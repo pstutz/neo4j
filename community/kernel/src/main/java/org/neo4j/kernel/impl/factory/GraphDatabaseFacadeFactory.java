@@ -26,7 +26,6 @@ import org.neo4j.kernel.AvailabilityGuard;
 import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.coreapi.CoreAPIAvailabilityGuard;
-import org.neo4j.kernel.impl.factory.virtual.EnhancedGraphDatabaseFacade;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.LogProvider;
@@ -102,7 +101,8 @@ public abstract class GraphDatabaseFacadeFactory
      */
     public GraphDatabaseFacade newFacade( File storeDir, Map<String, String> params, final Dependencies dependencies )
     {
-        return newFacade( storeDir, params, dependencies, new EnhancedGraphDatabaseFacade() );
+        //return newFacade( storeDir, params, dependencies, new EnhancedGraphDatabaseFacade() );
+        return newFacade( storeDir, params, dependencies, new GraphDatabaseFacade() );
     }
 
     /**

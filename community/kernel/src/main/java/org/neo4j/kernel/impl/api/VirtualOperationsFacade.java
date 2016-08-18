@@ -53,10 +53,12 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         private long entityId;
         private int propKeyId;
+        private int transactionId;
 
-        public PropertyValueId(long entity, int prop){
+        public PropertyValueId(long entity, int prop, int ta_id){
             this.entityId = entity;
             this.propKeyId = prop;
+            this.transactionId = ta_id;
         }
 
         public long getEntityId(){
@@ -67,11 +69,14 @@ public class VirtualOperationsFacade extends OperationsFacade
             return propKeyId;
         }
 
+        public int getTransactionId(){ return transactionId;};
+
         @Override
         public boolean equals(Object obj) {
             if(obj.getClass()==this.getClass()){
                 PropertyValueId other = (PropertyValueId) obj;
-                if((this.entityId==other.entityId) && (this.propKeyId == other.propKeyId)){
+                if((this.entityId==other.entityId) && (this.propKeyId == other.propKeyId) &&
+                        (this.transactionId==other.transactionId)){
                     return true;
                 }
                 return false;
@@ -81,11 +86,11 @@ public class VirtualOperationsFacade extends OperationsFacade
         }
     }
 
-    private TreeMap<Long,Integer> virtualRelationshipIdToTypeId; // actualData and ref to types
-    private SortedSet<Long> virtualNodeIds;  // "actual data"
-    private TreeMap<Integer,String> virtualPropertyKeyIdsToName;  // "actual data"
-    private TreeMap<Integer,String> virtualLabels; // actual data
-    private TreeMap<Integer,String> virtualRelationshipTypes; // actual data
+    private Map<Integer,TreeMap<Long,Integer>> virtualRelationshipIdToTypeId; // actualData and ref to types
+    private Map<Integer,SortedSet<Long>> virtualNodeIds;  // "actual data"
+    private Map<Integer,TreeMap<Integer,String>> virtualPropertyKeyIdsToName;  // "actual data"
+    private Map<Integer,TreeMap<Integer,String>> virtualLabels; // actual data
+    private Map<Integer,TreeMap<Integer,String>> virtualRelationshipTypes; // actual data
 
     //entityId + propKeyId -> value
     private Map<PropertyValueId,Object> virtualPropertyIdToValueForNodes;
@@ -94,11 +99,13 @@ public class VirtualOperationsFacade extends OperationsFacade
     //private Map<Integer,Object> virtualPropertiyIdsToObjectForNodes; // actual data
     //private Map<Integer,Object> virtualPropertiyIdsToObjectForRels; // actual data
 
-    private Map<Long,Set<Integer>> virtualNodeIdToPropertyKeyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
-    private Map<Long,Set<Long>> virtualNodeIdToConnectedRelationshipIds;
-    private Map<Long,Set<Integer>> virtualRelationshipIdToPropertyKeyIds;
-    private Map<Long,Set<Integer>> virtualNodeIdToLabelIds;
-    private Map<Long,Long[]> virtualRelationshipIdToVirtualNodeIds; // Node[0] = from, Node[1] = to
+    private Map<Integer,Map<Long,Set<Integer>>> virtualNodeIdToPropertyKeyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
+    private Map<Integer,Map<Long,Set<Long>>> virtualNodeIdToConnectedRelationshipIds;
+    private Map<Integer,Map<Long,Set<Integer>>> virtualRelationshipIdToPropertyKeyIds;
+    private Map<Integer,Map<Long,Set<Integer>>> virtualNodeIdToLabelIds;
+    private Map<Integer,Map<Long,Long[]>> virtualRelationshipIdToVirtualNodeIds; // Node[0] = from, Node[1] = to
+
+    private SortedSet<Integer> knowntransactionIds;
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             StatementOperationParts operations, Procedures procedures )
@@ -106,11 +113,11 @@ public class VirtualOperationsFacade extends OperationsFacade
         super(tx,statement,operations,procedures);
 
 
-        virtualRelationshipIdToTypeId = new TreeMap<>();
-        virtualNodeIds = new TreeSet<>();
-        virtualPropertyKeyIdsToName = new TreeMap<>();
-        virtualLabels = new TreeMap<>();
-        virtualRelationshipTypes = new TreeMap<>();
+        virtualRelationshipIdToTypeId = new HashMap<>();
+        virtualNodeIds = new HashMap<>();
+        virtualPropertyKeyIdsToName = new HashMap<>();
+        virtualLabels = new HashMap<>();
+        virtualRelationshipTypes = new HashMap<>();
 
         virtualNodeIdToPropertyKeyIds = new HashMap<>();
         virtualRelationshipIdToPropertyKeyIds = new HashMap<>();
@@ -120,6 +127,8 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         virtualPropertyIdToValueForNodes = new HashMap<>();
         virtualPropertyIdToValueForRels = new HashMap<>();
+
+        knowntransactionIds = new TreeSet<>();
 
         //virtualPropertiyKeyIdsToObjectForNodes = new HashMap<>();
         //virtualPropertiyKeyIdsToObjectForRels = new HashMap<>();
@@ -131,7 +140,8 @@ public class VirtualOperationsFacade extends OperationsFacade
     public PrimitiveLongIterator nodesGetAll()
     {
         PrimitiveLongIterator allRealNodes = super.nodesGetAll();
-        MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes, virtualNodeIds);
+        MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,
+                virtualNodeIds.get(authenticate()));
         return bothNodeIds;
     }
 
@@ -151,8 +161,8 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         // TODO: Test this
         // TODO: Improvements possible
-        for(Long nodeId : virtualNodeIdToLabelIds.keySet()) {
-            Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+        for(Long nodeId : virtualNodeIdToLabelIds.get(authenticate()).keySet()) {
+            Set<Integer> labelIds = virtualNodeIdToLabelIds.get(authenticate()).get(nodeId);
             if(labelIds.contains(labelId)){
                 resultList.add(nodeId);
             }
@@ -236,7 +246,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public boolean nodeExists( long nodeId )
     {
         if(isVirtual(nodeId)){
-            return virtualNodeIds.contains(nodeId);
+            return virtualNodeIds.get(authenticate()).contains(nodeId);
         } else {
             return super.nodeExists(nodeId);
         }
@@ -257,7 +267,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
-                Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+                Set<Integer> labelIds = virtualNodeIdToLabelIds.get(authenticate()).get(nodeId);
                 if(labelIds==null){
                     return false;
                 }
@@ -275,7 +285,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
-                Set<Integer> labelIds = virtualNodeIdToLabelIds.get(nodeId);
+                Set<Integer> labelIds = virtualNodeIdToLabelIds.get(authenticate()).get(nodeId);
                 MergingPrimitiveIntIterator it = new MergingPrimitiveIntIterator(null,labelIds);
                 return it;
             } else{
@@ -291,7 +301,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
-                Set<Integer> propIds = virtualNodeIdToPropertyKeyIds.get(nodeId);
+                Set<Integer> propIds = virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId);
                 if(propIds==null){
                     return false;
                 }
@@ -310,7 +320,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
                 // assert that the property belongs to this node
-                Set<Integer> props = virtualNodeIdToPropertyKeyIds.get(nodeId);
+                Set<Integer> props = virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId);
                 if(props.contains(propertyKeyId)){
                     return getPropertyValueForNodes(nodeId,propertyKeyId); //TODO: Test this! Might need some improvements
                 }
@@ -328,7 +338,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction, int... relTypes )
             throws EntityNotFoundException
     {
-        // TODO !
+        // TODO SASCHA
         return super.nodeGetRelationships(nodeId,direction,relTypes);
     }
 
@@ -336,28 +346,28 @@ public class VirtualOperationsFacade extends OperationsFacade
     public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction )
             throws EntityNotFoundException
     {
-        // TODO !
+        // TODO SASCHA
         return super.nodeGetRelationships(nodeId,direction);
     }
 
     @Override
     public int nodeGetDegree( long nodeId, Direction direction, int relType ) throws EntityNotFoundException
     {
-        // TODO !
+        // TODO SASCHA
         return super.nodeGetDegree(nodeId,direction,relType);
     }
 
     @Override
     public int nodeGetDegree( long nodeId, Direction direction ) throws EntityNotFoundException
     {
-        // TODO !
+        // TODO SASCHA
         return super.nodeGetDegree(nodeId,direction);
     }
 
     @Override
     public boolean nodeIsDense( long nodeId ) throws EntityNotFoundException
     {
-        // TODO !
+        // TODO SASCHA
         return super.nodeIsDense(nodeId);
     }
 
@@ -366,10 +376,10 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(nodeId)) {
             if(nodeExists(nodeId)){
-                Set<Long> relIds = virtualNodeIdToConnectedRelationshipIds.get(nodeId);
+                Set<Long> relIds = virtualNodeIdToConnectedRelationshipIds.get(authenticate()).get(nodeId);
                 Set<Integer> resultSet = new HashSet<>();
                 for(Long relId:relIds){
-                    resultSet.add(virtualRelationshipIdToTypeId.get(relId)); // this should not be null! TODO: Tests to ensure that
+                    resultSet.add(virtualRelationshipIdToTypeId.get(authenticate()).get(relId)); // this should not be null! TODO: Tests to ensure that
                 }
                 return new MergingPrimitiveIntIterator(null,resultSet);
             } else{
@@ -385,7 +395,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(relationshipId)){
             if(relationshipExists(relationshipId)){
-                Set<Integer> propIds = virtualRelationshipIdToPropertyKeyIds.get(relationshipId);
+                Set<Integer> propIds = virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId);
                 if(propIds==null){
                     return false;
                 }
@@ -405,7 +415,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(isVirtual(relationshipId)){
             if(relationshipExists(relationshipId)){
                 // assert that this rel has got that prop -> already covered by relationshipHasProperty but are they always chained?
-                Set<Integer> propIds = virtualRelationshipIdToPropertyKeyIds.get(relationshipId);
+                Set<Integer> propIds = virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId);
                 if(propIds==null){
                     return false;
                 }
@@ -437,7 +447,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO: TEST THIS!!!!!
         if(isVirtual(propertyKeyId)){
-            Iterator<Long> it = virtualNodeIds.iterator();
+            Iterator<Long> it = virtualNodeIds.get(authenticate()).iterator();
             while(it.hasNext()){
                 long current_nodeId = it.next();
                 try{
@@ -464,7 +474,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public PrimitiveIntIterator nodeGetPropertyKeys( long nodeId ) throws EntityNotFoundException
     {
         if(isVirtual(nodeId)){
-            return new MergingPrimitiveIntIterator(null, virtualNodeIdToPropertyKeyIds.get(nodeId));
+            return new MergingPrimitiveIntIterator(null, virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId));
         } else {
             return super.nodeGetPropertyKeys(nodeId);
         }
@@ -474,7 +484,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public PrimitiveIntIterator relationshipGetPropertyKeys( long relationshipId ) throws EntityNotFoundException
     {
         if(isVirtual(relationshipId)){
-            return new MergingPrimitiveIntIterator(null, virtualRelationshipIdToPropertyKeyIds.get(relationshipId));
+            return new MergingPrimitiveIntIterator(null, virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId));
         } else {
             return super.relationshipGetPropertyKeys(relationshipId);
         }
@@ -798,10 +808,10 @@ public class VirtualOperationsFacade extends OperationsFacade
     public int labelGetForName( String labelName )
     {
         //TODO: Might be faster with contains?
-        Iterator<Integer> it = virtualLabels.keySet().iterator();
+        Iterator<Integer> it = virtualLabels.get(authenticate()).keySet().iterator();
         while(it.hasNext()){
             int key = it.next();
-            if(virtualLabels.get(key).equals(labelName)){
+            if(virtualLabels.get(authenticate()).get(key).equals(labelName)){
                 return key;
             }
         }
@@ -813,8 +823,8 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String labelGetName( int labelId ) throws LabelNotFoundKernelException
     {
         if(isVirtual(labelId)){
-            if(virtualLabels.containsKey(labelId)){
-                return virtualLabels.get(labelId);
+            if(virtualLabels.get(authenticate()).containsKey(labelId)){
+                return virtualLabels.get(authenticate()).get(labelId);
             }
             throw new LabelNotFoundKernelException("No virtual Label found for id: "+labelId,new Exception());
         }
@@ -828,7 +838,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         Iterator<Integer> it = virtualPropertyKeyIds().iterator();
         while(it.hasNext()){
             int key = it.next();
-            if(virtualPropertyKeyIdsToName.get(key).equals(propertyKeyName)){
+            if(virtualPropertyKeyIdsToName.get(authenticate()).get(key).equals(propertyKeyName)){
                 return key;
             }
         }
@@ -840,7 +850,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         if(isVirtual(propertyKeyId)){
             if(virtualPropertyKeyIds().contains(propertyKeyId)){
-                return virtualPropertyKeyIdsToName.get(propertyKeyId);
+                return virtualPropertyKeyIdsToName.get(authenticate()).get(propertyKeyId);
             }
             throw new PropertyKeyIdNotFoundKernelException(propertyKeyId,new Exception());
         }
@@ -855,7 +865,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         ArrayList<Token> virtualOnes = new ArrayList<>();
 
         for(int key: virtualPropertyKeyIds()){
-            String name = virtualPropertyKeyIdsToName.get(key);
+            String name = virtualPropertyKeyIdsToName.get(authenticate()).get(key);
             virtualOnes.add(new Token(name,key)); // TODO: Definitely need to test this
         }
         return new MergingTokenIterator(realOnes,virtualOnes);
@@ -868,7 +878,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         ArrayList<Token> virtualOnes = new ArrayList<>();
         for(int key:virtualLabels()){
-            String name = virtualLabels.get(key);
+            String name = virtualLabels.get(authenticate()).get(key);
             virtualOnes.add(new Token(name,key));
         }
         return new MergingTokenIterator(realOnes,virtualOnes);
@@ -879,8 +889,8 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         Iterator<Token> realOnes = super.relationshipTypesGetAllTokens();
         ArrayList<Token> virtualOnes = new ArrayList<>();
-        for(int key:virtualRelationshipTypes.keySet()){
-            String name = virtualRelationshipTypes.get(key);
+        for(int key:virtualRelationshipTypes.get(authenticate()).keySet()){
+            String name = virtualRelationshipTypes.get(authenticate()).get(key);
             virtualOnes.add(new Token(name,key));
         }
         return new MergingTokenIterator(realOnes,virtualOnes);
@@ -890,10 +900,10 @@ public class VirtualOperationsFacade extends OperationsFacade
     public int relationshipTypeGetForName( String relationshipTypeName )
     {
         // TODO: Improvements with contains?
-        Iterator<Integer> it = virtualRelationshipTypes.keySet().iterator();
+        Iterator<Integer> it = virtualRelationshipTypes.get(authenticate()).keySet().iterator();
         while(it.hasNext()){
             int key = it.next();
-            if(virtualRelationshipTypes.get(key).equals(relationshipTypeName)){
+            if(virtualRelationshipTypes.get(authenticate()).get(key).equals(relationshipTypeName)){
                 return key;
             }
         }
@@ -905,8 +915,8 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String relationshipTypeGetName( int relationshipTypeId ) throws RelationshipTypeIdNotFoundKernelException
     {
         if(isVirtual(relationshipTypeId)){
-            if(virtualRelationshipTypes.keySet().contains(relationshipTypeId)){
-                return virtualRelationshipTypes.get(relationshipTypeId);
+            if(virtualRelationshipTypes.get(authenticate()).keySet().contains(relationshipTypeId)){
+                return virtualRelationshipTypes.get(authenticate()).get(relationshipTypeId);
             }
             throw new RelationshipTypeIdNotFoundKernelException(relationshipTypeId,new Exception());
         }
@@ -944,10 +954,10 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // Try getting the labelId
         // TODO: might be faster with contains?
-        Iterator<Integer> it = virtualLabels.keySet().iterator();
+        Iterator<Integer> it = virtualLabels.get(authenticate()).keySet().iterator();
         while(it.hasNext()){
             int key = it.next();
-            if(virtualLabels.get(key).equals(labelName)){
+            if(virtualLabels.get(authenticate()).get(key).equals(labelName)){
                 return key;
             }
         }
@@ -957,7 +967,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(virtualLabels().size()==0){
             newId = -1;
         } else{
-            newId = virtualLabels.firstKey()-1;
+            newId = virtualLabels.get(authenticate()).firstKey()-1;
         }
         virtualLabelCreateForName(labelName,newId);
         return newId;
@@ -971,7 +981,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         Iterator<Integer> it = virtualPropertyKeyIds().iterator();
         while(it.hasNext()){
             int key = it.next();
-            if(virtualPropertyKeyIdsToName.get(key).equals(propertyKeyName)){
+            if(virtualPropertyKeyIdsToName.get(authenticate()).get(key).equals(propertyKeyName)){
                 return key;
             }
         }
@@ -981,7 +991,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(virtualPropertyKeyIds().size()==0){
             newId = -1;
         } else{
-            newId = virtualPropertyKeyIdsToName.firstKey()-1;
+            newId = virtualPropertyKeyIdsToName.get(authenticate()).firstKey()-1;
         }
         virtualPropertyKeyCreateForName(propertyKeyName,newId);
         return newId;
@@ -992,20 +1002,20 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // Try getting the relId
         // TODO: might be faster with contains?
-        Iterator<Integer> it = virtualRelationshipTypes.keySet().iterator();
+        Iterator<Integer> it = virtualRelationshipTypes.get(authenticate()).keySet().iterator();
         while(it.hasNext()){
             int key = it.next();
-            if(virtualRelationshipTypes.get(key).equals(relationshipTypeName)){
+            if(virtualRelationshipTypes.get(authenticate()).get(key).equals(relationshipTypeName)){
                 return key;
             }
         }
 
         // not found, need to create
         int newId;
-        if(virtualRelationshipTypes.size()==0){
+        if(virtualRelationshipTypes.get(authenticate()).size()==0){
             newId = -1;
         } else{
-            newId = virtualRelationshipTypes.firstKey()-1;
+            newId = virtualRelationshipTypes.get(authenticate()).firstKey()-1;
         }
         virtualRelationshipTypeCreateForName(relationshipTypeName,newId);
         return newId;
@@ -1016,7 +1026,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             IllegalTokenNameException, TooManyLabelsException
     {
         //TODO: Token name checking missing
-        virtualLabels.put(id,labelName);
+        virtualLabels.get(authenticate()).put(id,labelName);
     }
 
     @Override
@@ -1025,7 +1035,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             IllegalTokenNameException
     {
         //TODO: Token name checking missing
-        virtualPropertyKeyIdsToName.put(id,propertyKeyName);
+        virtualPropertyKeyIdsToName.get(authenticate()).put(id,propertyKeyName);
     }
 
     @Override
@@ -1034,7 +1044,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             IllegalTokenNameException
     {
         //TODO: Token name checking missing
-        virtualRelationshipTypes.put(id,relationshipTypeName);
+        virtualRelationshipTypes.get(authenticate()).put(id,relationshipTypeName);
     }
 
     // </TokenWrite>
@@ -1045,16 +1055,16 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         statement.assertOpen();
         long new_id;
-        if(virtualNodeIds.size()==0){
+        if(virtualNodeIds.get(authenticate()).size()==0){
             new_id = -1;
         } else {
-            long smallest = virtualNodeIds.first();
+            long smallest = virtualNodeIds.get(authenticate()).first();
             new_id = smallest - 1;
         }
-        virtualNodeIds.add(new_id);
-        virtualNodeIdToPropertyKeyIds.put(new_id,new LinkedHashSet<>());
-        virtualNodeIdToLabelIds.put(new_id,new LinkedHashSet<>());
-        virtualNodeIdToConnectedRelationshipIds.put(new_id,new LinkedHashSet<>());
+        virtualNodeIds.get(authenticate()).add(new_id);
+        virtualNodeIdToPropertyKeyIds.get(authenticate()).put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToLabelIds.get(authenticate()).put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToConnectedRelationshipIds.get(authenticate()).put(new_id,new LinkedHashSet<>());
 
         return new_id;
     }
@@ -1064,19 +1074,19 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
         if(isVirtual(nodeId)) {
-            if (virtualNodeIds.contains(nodeId)) {
+            if (virtualNodeIds.get(authenticate()).contains(nodeId)) {
                 //TODO: needs more checks!
 
-                virtualNodeIds.remove(nodeId);
+                virtualNodeIds.get(authenticate()).remove(nodeId);
 
-                virtualNodeIdToLabelIds.remove(nodeId);
-                virtualNodeIdToPropertyKeyIds.remove(nodeId);
+                virtualNodeIdToLabelIds.get(authenticate()).remove(nodeId);
+                virtualNodeIdToPropertyKeyIds.get(authenticate()).remove(nodeId);
 
                 // TODO: Remove refs that are returned from those calls
 
                 // AND rel prop
 
-                virtualNodeIdToConnectedRelationshipIds.remove(nodeId);
+                virtualNodeIdToConnectedRelationshipIds.get(authenticate()).remove(nodeId);
 
             } else {
                 throw new EntityNotFoundException(EntityType.NODE, nodeId);
@@ -1095,18 +1105,18 @@ public class VirtualOperationsFacade extends OperationsFacade
 
             // create a new relId
             long newId;
-            if(virtualRelationshipIdToTypeId.size()==0) {
+            if(virtualRelationshipIdToTypeId.get(authenticate()).size()==0) {
                 newId =-1;
             } else {
-                newId = virtualRelationshipIdToTypeId.firstKey() - 1;
+                newId = virtualRelationshipIdToTypeId.get(authenticate()).firstKey() - 1;
             }
-            virtualRelationshipIdToTypeId.put(newId,relationshipTypeId);
+            virtualRelationshipIdToTypeId.get(authenticate()).put(newId,relationshipTypeId);
 
             Long[] nodes = new Long[2];
             nodes[0] = startNodeId;
             nodes[1] = endNodeId;
 
-            virtualRelationshipIdToVirtualNodeIds.put(newId,nodes);
+            virtualRelationshipIdToVirtualNodeIds.get(authenticate()).put(newId,nodes);
 
             return newId;
         } else {
@@ -1121,9 +1131,9 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(isVirtual(relationshipId)){
 
             if(relationshipExists(relationshipId)){
-                virtualRelationshipIdToTypeId.remove(relationshipId);
-                virtualRelationshipIdToPropertyKeyIds.remove(relationshipId);
-                virtualRelationshipIdToVirtualNodeIds.remove(relationshipId);
+                virtualRelationshipIdToTypeId.get(authenticate()).remove(relationshipId);
+                virtualRelationshipIdToPropertyKeyIds.get(authenticate()).remove(relationshipId);
+                virtualRelationshipIdToVirtualNodeIds.get(authenticate()).remove(relationshipId);
             } else{
                 throw new EntityNotFoundException(EntityType.RELATIONSHIP,relationshipId);
             }
@@ -1141,7 +1151,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             if(nodeExists(nodeId)){
                 // Todo: check if this labelId exist?
 
-                virtualNodeIdToLabelIds.get(nodeId).add(labelId);
+                virtualNodeIdToLabelIds.get(authenticate()).get(nodeId).add(labelId);
                 return true;
             } else{
                 throw new EntityNotFoundException(EntityType.NODE,nodeId);
@@ -1157,7 +1167,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             if(nodeExists(nodeId)){
                 // Todo: check if this labelId exist?
 
-                virtualNodeIdToLabelIds.get(nodeId).remove(labelId);
+                virtualNodeIdToLabelIds.get(authenticate()).get(nodeId).remove(labelId);
                 return true;
             } else{
                 throw new EntityNotFoundException(EntityType.NODE,nodeId);
@@ -1180,7 +1190,8 @@ public class VirtualOperationsFacade extends OperationsFacade
                 Iterator<PropertyValueId> it = virtualPropertyIdToValueForNodes.keySet().iterator();
                 while(it.hasNext()){
                     PropertyValueId pId = it.next();
-                    if(pId.getEntityId()==nodeId && pId.getPropertyKeyId()==property.propertyKeyId()){
+                    if(pId.getEntityId()==nodeId && pId.getPropertyKeyId()==property.propertyKeyId() &&
+                            (pId.getTransactionId()==getTransactionId())){
                         // found it
                         key = pId;
                         oldValue = virtualPropertyIdToValueForNodes.get(pId);
@@ -1189,11 +1200,11 @@ public class VirtualOperationsFacade extends OperationsFacade
                 }
                 if(key==null){
                     // not already set
-                    key = new PropertyValueId(nodeId,property.propertyKeyId());
+                    key = new PropertyValueId(nodeId,property.propertyKeyId(),getTransactionId());
                 }
 
                 virtualPropertyIdToValueForNodes.put(key,property.value());
-                virtualNodeIdToPropertyKeyIds.get(nodeId).add(property.propertyKeyId());
+                virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId).add(property.propertyKeyId());
                 if(oldValue!=null){
                     return Property.property(key.getPropertyKeyId(),oldValue);
                 } else{
@@ -1220,7 +1231,8 @@ public class VirtualOperationsFacade extends OperationsFacade
                 Iterator<PropertyValueId> it = virtualPropertyIdToValueForRels.keySet().iterator();
                 while(it.hasNext()){
                     PropertyValueId pId = it.next();
-                    if(pId.getEntityId()==relationshipId && pId.getPropertyKeyId()==property.propertyKeyId()){
+                    if(pId.getEntityId()==relationshipId && pId.getPropertyKeyId()==property.propertyKeyId()&&
+                            (pId.getTransactionId()==getTransactionId())){
                         // found it
                         key = pId;
                         oldValue = virtualPropertyIdToValueForRels.get(pId);
@@ -1229,11 +1241,11 @@ public class VirtualOperationsFacade extends OperationsFacade
                 }
                 if(key==null){
                     // not already set
-                    key = new PropertyValueId(relationshipId,property.propertyKeyId());
+                    key = new PropertyValueId(relationshipId,property.propertyKeyId(),getTransactionId());
                 }
 
                 virtualPropertyIdToValueForRels.put(key,property.value());
-                virtualRelationshipIdToPropertyKeyIds.get(relationshipId).add(property.propertyKeyId());
+                virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId).add(property.propertyKeyId());
                 if(oldValue!=null){
                     return Property.property(key.getPropertyKeyId(),oldValue);
                 } else{
@@ -1278,9 +1290,9 @@ public class VirtualOperationsFacade extends OperationsFacade
                     return returnProp;
                 }
                 returnProp = Property.property(propertyKeyId,value);
-                virtualNodeIdToPropertyKeyIds.get(nodeId).remove(propertyKeyId);
+                virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId).remove(propertyKeyId);
 
-                PropertyValueId p = new PropertyValueId(nodeId,propertyKeyId);
+                PropertyValueId p = new PropertyValueId(nodeId,propertyKeyId,getTransactionId());
                 virtualPropertyIdToValueForNodes.remove(p); // TODO: Test this
 
                 return returnProp;
@@ -1306,9 +1318,9 @@ public class VirtualOperationsFacade extends OperationsFacade
                     return returnProp;
                 }
                 returnProp = Property.property(propertyKeyId,value);
-                virtualRelationshipIdToPropertyKeyIds.get(relationshipId).remove(propertyKeyId);
+                virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId).remove(propertyKeyId);
 
-                PropertyValueId p = new PropertyValueId(relationshipId,propertyKeyId);
+                PropertyValueId p = new PropertyValueId(relationshipId,propertyKeyId,getTransactionId());
                 virtualPropertyIdToValueForRels.remove(p); // TODO: Test this
 
                 return returnProp;
@@ -1413,7 +1425,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public LegacyIndexHits nodeLegacyIndexGet( String indexName, String key, Object value )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.nodeLegacyIndexGet(indexName,key,value);
     }
 
@@ -1421,7 +1432,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public LegacyIndexHits nodeLegacyIndexQuery( String indexName, String key, Object queryOrQueryObject )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.nodeLegacyIndexQuery(indexName,key,queryOrQueryObject);
     }
 
@@ -1429,7 +1439,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public LegacyIndexHits nodeLegacyIndexQuery( String indexName, Object queryOrQueryObject )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.nodeLegacyIndexQuery(indexName,queryOrQueryObject);
     }
 
@@ -1437,7 +1446,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public LegacyIndexHits relationshipLegacyIndexGet( String indexName, String key, Object value,
             long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.relationshipLegacyIndexGet(indexName,key,value,startNode,endNode);
     }
 
@@ -1445,7 +1453,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public LegacyIndexHits relationshipLegacyIndexQuery( String indexName, String key, Object queryOrQueryObject,
             long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.relationshipLegacyIndexQuery(indexName,key,queryOrQueryObject,startNode,endNode);
     }
 
@@ -1453,35 +1460,30 @@ public class VirtualOperationsFacade extends OperationsFacade
     public LegacyIndexHits relationshipLegacyIndexQuery( String indexName, Object queryOrQueryObject,
             long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.relationshipLegacyIndexQuery(indexName,queryOrQueryObject,startNode,endNode);
     }
 
     @Override
     public void nodeLegacyIndexCreateLazily( String indexName, Map<String,String> customConfig )
     {
-        // TODO ?
         super.nodeLegacyIndexCreateLazily(indexName,customConfig);
     }
 
     @Override
     public void nodeLegacyIndexCreate( String indexName, Map<String,String> customConfig )
     {
-        // TODO ?
         super.nodeLegacyIndexCreate(indexName,customConfig);
     }
 
     @Override
     public void relationshipLegacyIndexCreateLazily( String indexName, Map<String,String> customConfig )
     {
-        // TODO ?
         super.relationshipLegacyIndexCreateLazily(indexName,customConfig);
     }
 
     @Override
     public void relationshipLegacyIndexCreate( String indexName, Map<String,String> customConfig )
-    {
-        // TODO ?
+
         super.relationshipLegacyIndexCreate(indexName,customConfig);
     }
 
@@ -1489,7 +1491,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void nodeAddToLegacyIndex( String indexName, long node, String key, Object value )
             throws EntityNotFoundException, LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.nodeAddToLegacyIndex(indexName,node,key,value);
     }
 
@@ -1497,7 +1498,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void nodeRemoveFromLegacyIndex( String indexName, long node, String key, Object value )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.nodeRemoveFromLegacyIndex(indexName,node,key,value);
     }
 
@@ -1505,14 +1505,12 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void nodeRemoveFromLegacyIndex( String indexName, long node, String key )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.nodeRemoveFromLegacyIndex(indexName,node,key);
     }
 
     @Override
     public void nodeRemoveFromLegacyIndex( String indexName, long node ) throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.nodeRemoveFromLegacyIndex(indexName,node);
     }
 
@@ -1520,7 +1518,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void relationshipAddToLegacyIndex( String indexName, long relationship, String key, Object value )
             throws EntityNotFoundException, LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.relationshipAddToLegacyIndex(indexName,relationship,key,value);
     }
 
@@ -1528,7 +1525,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void relationshipRemoveFromLegacyIndex( String indexName, long relationship, String key, Object value )
             throws EntityNotFoundException, LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.relationshipRemoveFromLegacyIndex(indexName,relationship,key,value);
     }
 
@@ -1536,7 +1532,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void relationshipRemoveFromLegacyIndex( String indexName, long relationship, String key )
             throws LegacyIndexNotFoundKernelException, EntityNotFoundException
     {
-        // TODO ?
         super.relationshipRemoveFromLegacyIndex(indexName,relationship,key);
     }
 
@@ -1544,21 +1539,18 @@ public class VirtualOperationsFacade extends OperationsFacade
     public void relationshipRemoveFromLegacyIndex( String indexName, long relationship )
             throws LegacyIndexNotFoundKernelException, EntityNotFoundException
     {
-        // TODO ?
         super.relationshipRemoveFromLegacyIndex(indexName,relationship);
     }
 
     @Override
     public void nodeLegacyIndexDrop( String indexName ) throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.nodeLegacyIndexDrop(indexName);
     }
 
     @Override
     public void relationshipLegacyIndexDrop( String indexName ) throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         super.relationshipLegacyIndexDrop(indexName);
     }
 
@@ -1566,7 +1558,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Map<String,String> nodeLegacyIndexGetConfiguration( String indexName )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.nodeLegacyIndexGetConfiguration(indexName);
     }
 
@@ -1574,7 +1565,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Map<String,String> relationshipLegacyIndexGetConfiguration( String indexName )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.relationshipLegacyIndexGetConfiguration(indexName);
     }
 
@@ -1582,7 +1572,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String nodeLegacyIndexSetConfiguration( String indexName, String key, String value )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.nodeLegacyIndexSetConfiguration(indexName,key,value);
     }
 
@@ -1590,7 +1579,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String relationshipLegacyIndexSetConfiguration( String indexName, String key, String value )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.relationshipLegacyIndexSetConfiguration(indexName,key,value);
     }
 
@@ -1598,7 +1586,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String nodeLegacyIndexRemoveConfiguration( String indexName, String key )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.nodeLegacyIndexRemoveConfiguration(indexName,key);
     }
 
@@ -1606,24 +1593,20 @@ public class VirtualOperationsFacade extends OperationsFacade
     public String relationshipLegacyIndexRemoveConfiguration( String indexName, String key )
             throws LegacyIndexNotFoundKernelException
     {
-        // TODO ?
         return super.relationshipLegacyIndexRemoveConfiguration(indexName,key);
     }
 
     @Override
     public String[] nodeLegacyIndexesGetAll()
     {
-        // TODO ?
         return super.nodeLegacyIndexesGetAll();
     }
 
     @Override
     public String[] relationshipLegacyIndexesGetAll()
     {
-        // TODO ?
         return super.relationshipLegacyIndexesGetAll();
     }
-
     */
     // </Legacy index>
 
@@ -1682,15 +1665,15 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     private Set<Long> virtualRelationshipIds(){
-        return virtualRelationshipIdToTypeId.keySet();
+        return virtualRelationshipIdToTypeId.get(authenticate()).keySet();
     }
 
     private Set<Integer> virtualPropertyKeyIds(){
-        return virtualPropertyKeyIdsToName.keySet();
+        return virtualPropertyKeyIdsToName.get(authenticate()).keySet();
     }
 
     private Set<Integer> virtualLabels(){
-        return virtualLabels.keySet();
+        return virtualLabels.get(authenticate()).keySet();
     }
 
     private Object getPropertyValueForNodes(long nodeId, int propertykey){
@@ -1719,7 +1702,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private int countVirtualNodes(int labelId){
         int count = 0;
-        Iterator<Set<Integer>> it = virtualNodeIdToLabelIds.values().iterator();
+        Iterator<Set<Integer>> it = virtualNodeIdToLabelIds.get(authenticate()).values().iterator();
         while(it.hasNext()){
             Set<Integer> set = it.next();
             if(set.contains(labelId)){
@@ -1739,7 +1722,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         // prepare possibleStartNodes
         if(startLabelId==ANY_LABEL){
-            possibleStartNodes = virtualNodeIds;
+            possibleStartNodes = virtualNodeIds.get(authenticate());
         } else{
             // specific startLabelId
             possibleStartNodes = getVirtualNodesForLabel(startLabelId);
@@ -1747,7 +1730,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         // prepare possibleEndNodes
         if(endLabelId==ANY_LABEL){
-            possibleEndNodes = virtualNodeIds;
+            possibleEndNodes = virtualNodeIds.get(authenticate());
         } else{
             // specific endLabelId
             possibleEndNodes = getVirtualNodesForLabel(endLabelId);
@@ -1758,10 +1741,10 @@ public class VirtualOperationsFacade extends OperationsFacade
         }
 
         // do the actual counting
-        Iterator<Long> relIdIterator = virtualRelationshipIdToVirtualNodeIds.keySet().iterator();
+        Iterator<Long> relIdIterator = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet().iterator();
         while(relIdIterator.hasNext()){
             Long relId = relIdIterator.next();
-            Long[] nodes = virtualRelationshipIdToVirtualNodeIds.get(relId);
+            Long[] nodes = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId);
             if((possibleStartNodes.contains(nodes[0]))&&
                     (possibleEndNodes.contains(nodes[1]))){
                 if(typeId== ANY_REL){
@@ -1769,7 +1752,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                     count++;
                 } else{
                     // only typeId
-                    if(virtualRelationshipIdToTypeId.get(relId)==typeId){
+                    if(virtualRelationshipIdToTypeId.get(authenticate()).get(relId)==typeId){
                         count++;
                     }
                 }
@@ -1781,13 +1764,57 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private Set<Long> getVirtualNodesForLabel(int labelId){
         Set<Long> returnSet = new TreeSet<>();
-        Iterator<Long> nodeIdIterator = virtualNodeIdToLabelIds.keySet().iterator();
+        Iterator<Long> nodeIdIterator = virtualNodeIdToLabelIds.get(authenticate()).keySet().iterator();
         while(nodeIdIterator.hasNext()){
             Long id = nodeIdIterator.next();
-            if(virtualNodeIdToLabelIds.get(id).contains(labelId)){
+            if(virtualNodeIdToLabelIds.get(authenticate()).get(id).contains(labelId)){
                 returnSet.add(id);
             }
         }
         return returnSet;
     }
+
+    private int getTransactionId(){
+        String txString = tx.toString();
+
+        //"KernelTransaction[" + this.locks.getLockSessionId() + "]";
+        int posStart = txString.indexOf("[");
+        int posEnd = txString.indexOf("]");
+        txString = txString.substring(posStart+1,posEnd);
+
+        return Integer.parseInt(txString);
+    }
+
+    private int authenticate(){
+
+        int taId = getTransactionId();
+        if(knowntransactionIds.contains(taId)){
+            // all is fine
+
+        } else{
+            // new id
+            virtualRelationshipIdToTypeId.put(taId,new TreeMap<>());
+            virtualNodeIds.put(taId,new TreeSet<>());
+            virtualPropertyKeyIdsToName.put(taId, new TreeMap<>());
+            virtualLabels.put(taId, new TreeMap<>());
+            virtualRelationshipTypes.put(taId, new TreeMap<>());
+
+            virtualNodeIdToPropertyKeyIds.put(taId, new HashMap<>());
+            virtualRelationshipIdToPropertyKeyIds.put(taId, new HashMap<>());
+            virtualNodeIdToLabelIds.put(taId, new HashMap<>());
+            virtualRelationshipIdToVirtualNodeIds.put(taId, new HashMap<>());
+            virtualNodeIdToConnectedRelationshipIds.put(taId, new HashMap<>());
+
+            virtualPropertyIdToValueForNodes = new HashMap<>();
+            virtualPropertyIdToValueForRels = new HashMap<>();
+
+            knowntransactionIds.add(taId);
+
+            // TODO: might do clean up of old ids here, only if they are done
+        }
+
+        return taId;
+    }
+
+
 }

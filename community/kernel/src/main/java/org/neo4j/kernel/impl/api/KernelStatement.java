@@ -63,6 +63,9 @@ public class KernelStatement implements TxStateHolder, Statement
     private Locks.Client locks;
     private int referenceCount;
 
+    private StatementOperationParts operations;
+    private Procedures procedures;
+
     public KernelStatement( KernelTransactionImplementation transaction,
             TxStateHolder txStateHolder,
             StatementOperationParts operations, StorageStatement storeStatement, Procedures procedures )
@@ -70,6 +73,7 @@ public class KernelStatement implements TxStateHolder, Statement
         this.transaction = transaction;
         this.txStateHolder = txStateHolder;
         this.storeStatement = storeStatement;
+
         this.facade = new VirtualOperationsFacade( transaction, this, operations, procedures );
     }
 
