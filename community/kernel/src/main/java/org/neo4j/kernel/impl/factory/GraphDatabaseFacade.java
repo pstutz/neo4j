@@ -249,11 +249,11 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public Node getNodeById( long id )
     {
-        if ( id < 0 )
+        /*if ( id < 0 )
         {
             throw new NotFoundException( format( "Node %d not found", id ),
                     new EntityNotFoundException( EntityType.NODE, id ) );
-        }
+        }*/
         try ( Statement statement = spi.currentStatement() )
         {
             if ( !statement.readOperations().nodeExists( id ) )

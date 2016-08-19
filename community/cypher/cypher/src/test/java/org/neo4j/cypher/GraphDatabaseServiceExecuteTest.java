@@ -45,8 +45,8 @@ public class GraphDatabaseServiceExecuteTest
         // when
         try ( Transaction tx = graphDb.beginTx() )
         {
-            Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"}) RETURN n.bar" );
-            assertEquals("{n.bar=baz}",r.next().toString());
+            Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"}) RETURN n.bar, id(n)" );
+            assertEquals("{id(n)=0, n.bar=baz}",r.next().toString());
 
             r = graphDb.execute("MATCH (n:Foo) RETURN n.bar, COUNT(n)");
             System.out.println(r.next().toString());

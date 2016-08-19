@@ -41,7 +41,10 @@ import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.storageengine.api.*;
+import org.neo4j.storageengine.api.EntityType;
+import org.neo4j.storageengine.api.NodeItem;
+import org.neo4j.storageengine.api.RelationshipItem;
+import org.neo4j.storageengine.api.Token;
 
 import java.util.*;
 
@@ -157,9 +160,11 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveLongIterator nodesGetForLabel( int labelId )
     {
+
+        PrimitiveLongIterator originalIT = super.nodesGetForLabel(labelId);
+
         ArrayList<Long> resultList = new ArrayList<>();
 
-        // TODO: Test this
         // TODO: Improvements possible
         for(Long nodeId : virtualNodeIdToLabelIds.get(authenticate()).keySet()) {
             Set<Integer> labelIds = virtualNodeIdToLabelIds.get(authenticate()).get(nodeId);
@@ -167,7 +172,11 @@ public class VirtualOperationsFacade extends OperationsFacade
                 resultList.add(nodeId);
             }
         }
-        return new MergingPrimitiveLongIterator(null,resultList);
+        //long[] items = ArrayUtils.toPrimitive(resultList.toArray(new Long[resultList.size()]));
+
+        //return PrimitiveLongCollections.iterator(items);
+
+        return new MergingPrimitiveLongIterator(originalIT,resultList);
     }
 
     @Override
