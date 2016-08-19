@@ -355,8 +355,11 @@ public class VirtualOperationsFacade extends OperationsFacade
     public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction )
             throws EntityNotFoundException
     {
-        // TODO SASCHA
-        return super.nodeGetRelationships(nodeId,direction);
+        RelationshipIterator real = super.nodeGetRelationships(nodeId,direction);
+        
+        return new MergingRelationshipIterator(real,new MergingPrimitiveLongIterator(null,));
+        // TODO: Sascha, finish this
+
     }
 
     @Override
@@ -509,8 +512,26 @@ public class VirtualOperationsFacade extends OperationsFacade
     public <EXCEPTION extends Exception> void relationshipVisit( long relId,
             RelationshipVisitor<EXCEPTION> visitor ) throws EntityNotFoundException, EXCEPTION
     {
-        // TODO !
-        super.relationshipVisit(relId,visitor);
+        if(isVirtual(relId)){
+            // this might do the job -> TODO test that
+            if(relationshipExists(relId)){
+                return;
+            } else{
+                throw new EntityNotFoundException(EntityType.RELATIONSHIP,relId);
+            }
+        } else{
+            super.relationshipVisit(relId,visitor);
+        }
+
+        /*
+        // TODO Please don't create a record for this, it's ridiculous
+        RelationshipRecord record = relationshipStore.newRecord();
+        if ( !relationshipStore.getRecord( relationshipId, record, FORCE ).inUse() )
+        {
+            throw new EntityNotFoundException( EntityType.RELATIONSHIP, relationshipId );
+        }
+        relationshipVisitor.visit( relationshipId, record.getType(), record.getFirstNode(), record.getSecondNode() );
+         */
     }
 
     @Override
@@ -1254,7 +1275,14 @@ public class VirtualOperationsFacade extends OperationsFacade
                 }
 
                 virtualPropertyIdToValueForRels.put(key,property.value());
-                virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId).add(property.propertyKeyId());
+
+                Set<Integer> set = virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId);
+                if(set==null){
+                    set = new TreeSet<>();
+                }
+                set.add(property.propertyKeyId());
+                virtualRelationshipIdToPropertyKeyIds.get(authenticate()).put(relationshipId,set);
+
                 if(oldValue!=null){
                     return Property.property(key.getPropertyKeyId(),oldValue);
                 } else{

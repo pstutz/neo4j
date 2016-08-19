@@ -42,7 +42,16 @@ abstract class BaseRelationshipPipe(src: Pipe, key: String, startNode: String, t
     val start = getNode(context, startNode)
     val end = getNode(context, endNode)
     val typeId = typ.typ(state.query)
-    val relationship = state.query.createRelationship(start.getId, end.getId, typeId)
+
+    //TODO: Sascha
+    val virtual = properties.toList.toString().contains("virtual -> {  AUTOSTRING") // change later for real virtual prop
+    var relationship:Relationship = null
+    if(virtual) {
+      relationship = state.query.createRelationship(start.getId, end.getId, typeId,false)
+    } else{
+      relationship = state.query.createRelationship(start.getId, end.getId, typeId,true)
+    }
+
     setProperties(context, state, relationship.getId)
     context += key -> relationship
   }

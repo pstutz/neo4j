@@ -417,7 +417,7 @@ class MergeIntoPipeTest extends CypherFunSuite {
   }
 
   private def setUpCreationOfRelationship(from: Node, to: Node, rel: Relationship)(implicit query: QueryContext) {
-    when(query.createRelationship(from.getId, to.getId, rel.getType.name().hashCode)).thenReturn(rel)
+    when(query.createRelationship(from.getId, to.getId, rel.getType.name().hashCode,true)).thenReturn(rel)
   }
 
   private def newMockedNode(id: Int) = {

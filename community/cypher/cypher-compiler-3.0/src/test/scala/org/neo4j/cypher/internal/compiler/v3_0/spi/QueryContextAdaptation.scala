@@ -132,9 +132,9 @@ trait QueryContextAdaptation {
 
   override def removeLabelsFromNode(node: Long, labelIds: scala.Iterator[Int]): Int = ???
 
-  override def createRelationship(start: Node, end: Node, relType: String): Relationship = ???
+  override def createRelationship(start: Node, end: Node, relType: String, real:java.lang.Boolean): Relationship = ???
 
-  override def createRelationship(start: Long, end: Long, relType: Int): Relationship = ???
+  override def createRelationship(start: Long, end: Long, relType: Int, real:java.lang.Boolean): Relationship = ???
 
   override def nodeCountByCountStore(labelId: Int): Long = ???
 

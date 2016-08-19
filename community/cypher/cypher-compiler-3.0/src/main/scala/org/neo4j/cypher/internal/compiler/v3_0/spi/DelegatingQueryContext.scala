@@ -46,11 +46,11 @@ class DelegatingQueryContext(val inner: QueryContext) extends QueryContext {
 
   override def createNode(real:java.lang.Boolean): Node = singleDbHit(inner.createNode(real))
 
-  override def createRelationship(start: Node, end: Node, relType: String): Relationship = singleDbHit(inner
-    .createRelationship(start, end, relType))
+  override def createRelationship(start: Node, end: Node, relType: String, real:java.lang.Boolean): Relationship = singleDbHit(inner
+    .createRelationship(start, end, relType,real))
 
-  override def createRelationship(start: Long, end: Long, relType: Int): Relationship =
-    singleDbHit(inner.createRelationship(start, end, relType))
+  override def createRelationship(start: Long, end: Long, relType: Int, real:java.lang.Boolean): Relationship =
+    singleDbHit(inner.createRelationship(start, end, relType,real))
 
   override def getOrCreateRelTypeId(relTypeName: String): Int = singleDbHit(inner.getOrCreateRelTypeId(relTypeName))
 

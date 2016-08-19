@@ -88,19 +88,33 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
     }
   }
 
-  override def createNode(real:java.lang.Boolean): Node =
-    if(real){
+  override def createNode(real: java.lang.Boolean): Node =
+    if (real) {
       transactionalContext.graph.createNode()
     } else {
       transactionalContext.graph.createVirtualNode()
     }
 
 
-  override def createRelationship(start: Node, end: Node, relType: String) =
-    start.createRelationshipTo(end, withName(relType))
+  override def createRelationship(start: Node, end: Node, relType: String, real: java.lang.Boolean) = {
+    if(real) {
+      start.createRelationshipTo(end, withName(relType))
+    } else{
+      //TODO SASCHA???
+      // Test this
+      val relTypeId = getOrCreateRelTypeId(relType)
+      createRelationship(start.getId,end.getId,relTypeId,real)
+    }
+  }
 
-  override def createRelationship(start: Long, end: Long, relType: Int) = {
-    val relId = transactionalContext.statement.dataWriteOperations().relationshipCreate(relType, start, end)
+  override def createRelationship(start: Long, end: Long, relType: Int, real:java.lang.Boolean) = {
+    val relId:Long =
+    if(real) {
+      transactionalContext.statement.dataWriteOperations().relationshipCreate(relType, start, end)
+    } else{
+      //TODO SASCHA
+      transactionalContext.statement.readOperations().virtualRelationshipCreate(relType, start, end)
+    }
     relationshipOps.getById(relId)
   }
 

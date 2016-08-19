@@ -69,9 +69,9 @@ case class MergeIntoPipe(source: Pipe,
 
           if (relationships.isEmpty) {
             val relationship = if (dir == SemanticDirection.INCOMING)
-              state.query.createRelationship(toNode.getId, fromNode.getId, typeId)
+              state.query.createRelationship(toNode.getId, fromNode.getId, typeId,true)
             else
-              state.query.createRelationship(fromNode.getId, toNode.getId, typeId)
+              state.query.createRelationship(fromNode.getId, toNode.getId, typeId,true)
             setPropertiesOnRelationship(row, relationship, state, props)
             val newContext = row.newWith2(relName, relationship, toName, toNode)
             onCreateActions.foreach(_.exec(newContext, state))

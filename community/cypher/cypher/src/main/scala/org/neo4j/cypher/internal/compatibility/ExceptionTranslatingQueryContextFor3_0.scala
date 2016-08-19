@@ -45,8 +45,8 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def createNode(real:java.lang.Boolean): Node =
     translateException(inner.createNode(real))
 
-  override def createRelationship(start: Node, end: Node, relType: String): Relationship =
-    translateException(inner.createRelationship(start, end, relType))
+  override def createRelationship(start: Node, end: Node, relType: String, real:java.lang.Boolean): Relationship =
+    translateException(inner.createRelationship(start, end, relType,real))
 
   override def getLabelsForNode(node: Long): Iterator[Int] =
     translateException(inner.getLabelsForNode(node))
@@ -168,8 +168,8 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def relationshipEndNode(rel: Relationship) =
     translateException(inner.relationshipEndNode(rel))
 
-  override def createRelationship(start: Long, end: Long, relType: Int) =
-    translateException(inner.createRelationship(start, end, relType))
+  override def createRelationship(start: Long, end: Long, relType: Int, real:java.lang.Boolean) =
+    translateException(inner.createRelationship(start, end, relType,real))
 
   override def getOrCreateRelTypeId(relTypeName: String) =
     translateException(inner.getOrCreateRelTypeId(relTypeName))

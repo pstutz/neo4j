@@ -100,6 +100,44 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
+    public void shouldExecuteCypherWithRealRelationship() throws Exception
+    {
+        // given
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        long before, after;
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            before = Iterables.count( graphDb.getAllRelationships() );
+            tx.success();
+        }
+
+        // when
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Result r = graphDb.execute( "CREATE (n:Foo{bar:true})-[t:TEST{bar:true}]->" +
+                    "(m:Bar{bar:true}) RETURN t.bar" );
+
+            assertEquals("{t.bar=true}",r.next().toString());
+
+            after = Iterables.count( graphDb.getAllRelationships());
+            assertEquals("There should be one Relationship present",before+1,after);
+            r = graphDb.execute("MATCH (:Foo)-[t]->(:Foo) RETURN COUNT(t)");
+            System.out.println(r.next().toString()); // WHAT?!
+            tx.success();
+        }
+
+        // then
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            after = Iterables.count( graphDb.getAllRelationships() );
+            tx.success();
+        }
+        assertEquals("There should still be one relationship present after the TA endet it was created in",
+                before+1 , after );
+    }
+
+    @Test
     public void shouldExecuteCypherWithVirtualRelationship() throws Exception
     {
         // given
@@ -115,16 +153,16 @@ public class GraphDatabaseServiceExecuteTest
 
         try ( Transaction tx = graphDb.beginTx() )
         {
-            Result r = graphDb.execute( "CREATE (n:Foo{virtual:true})-[t:TEST{virtual:true}]->" +
-                    "(m:Bar{virtual:true}) RETURN t.virtual" );
+            Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
+                    "(m:Bar{virtual:\"baz\"}) RETURN t.virtual" );
 
-            assertEquals("{t.virtual=true}",r.next().toString());
+            assertEquals("{t.virtual=baz}",r.next().toString());
 
             after = Iterables.count( graphDb.getAllRelationships());
             System.out.println(after);
-
+            assertEquals("There should be one (virtual) Relationship present",before+1,after);
             r = graphDb.execute("MATCH (:Foo)-[t]->(:Foo) RETURN COUNT(t)");
-            System.out.println(r.next().toString());
+            System.out.println(r.next().toString()); // TODO: WHAT?
             tx.success();
         }
 

@@ -269,11 +269,12 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public Relationship getRelationshipById( long id )
     {
+        /*
         if ( id < 0 )
         {
             throw new NotFoundException( format( "Relationship %d not found", id ),
                     new EntityNotFoundException( EntityType.RELATIONSHIP, id ) );
-        }
+        }*/
         try ( Statement statement = spi.currentStatement() )
         {
             try

@@ -73,14 +73,14 @@ class UpdateCountingQueryContext(inner: QueryContext) extends DelegatingQueryCon
     added
   }
 
-  override def createRelationship(start: Node, end: Node, relType: String) = {
+  override def createRelationship(start: Node, end: Node, relType: String, real:java.lang.Boolean) = {
     relationshipsCreated.increase()
-    inner.createRelationship(start, end, relType)
+    inner.createRelationship(start, end, relType,real)
   }
 
-  override def createRelationship(start: Long, end: Long, relType: Int) = {
+  override def createRelationship(start: Long, end: Long, relType: Int, real:java.lang.Boolean) = {
     relationshipsCreated.increase()
-    inner.createRelationship(start, end, relType)
+    inner.createRelationship(start, end, relType,real)
   }
 
   override def removeLabelsFromNode(node: Long, labelIds: Iterator[Int]): Int = {
