@@ -1243,7 +1243,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException
     {
         //TODO: Test it with all possible inputs
-        if(isVirtual(startNodeId)||isVirtual(endNodeId)){
+        //if(isVirtual(startNodeId)||isVirtual(endNodeId)){
 
             // create a new relId
             long newId;
@@ -1261,9 +1261,9 @@ public class VirtualOperationsFacade extends OperationsFacade
             virtualRelationshipIdToVirtualNodeIds.get(authenticate()).put(newId,nodes);
 
             return newId;
-        } else {
-            return super.relationshipCreate(relationshipTypeId, startNodeId, endNodeId);
-        }
+        //} else {
+        //    return super.relationshipCreate(relationshipTypeId, startNodeId, endNodeId);
+        //}
     }
 
     @Override

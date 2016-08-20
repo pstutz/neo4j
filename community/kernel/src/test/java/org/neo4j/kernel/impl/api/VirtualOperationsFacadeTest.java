@@ -76,6 +76,7 @@ public class VirtualOperationsFacadeTest {
             assertEquals("Start node should be correct",n.getId(),r.getStartNode().getId());
             assertEquals("End node should be correct",m.getId(),r.getEndNode().getId());
             assertEquals("Type should be correct",type,r.getType());
+
             tx.success();
         }
         assertEquals("Virtual relationship should appear in transaction", before+1, after );

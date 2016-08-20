@@ -65,7 +65,7 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
-    public void shouldExecuteCypherWithVirtualNode() throws Exception
+    public void shouldExecuteCypherWithOnlyVirtualNode() throws Exception
     {
         // given
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
@@ -138,7 +138,7 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
-    public void shouldExecuteCypherWithVirtualRelationship() throws Exception
+    public void shouldExecuteCypherWithOnlyVirtualRelationship() throws Exception
     {
         // given
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
@@ -185,6 +185,7 @@ public class GraphDatabaseServiceExecuteTest
 
         try ( Transaction tx = graphDb.beginTx() )
         {
+
             Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
                     "(m:Bar{virtual:\"baz\"}) RETURN t.virtual, id(t)" );
 
@@ -192,6 +193,25 @@ public class GraphDatabaseServiceExecuteTest
 
             r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
+
+            r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})<-[t:TEST{virtual:\"baz\"}]-" +
+                    "(m:Bar{bar:\"baz\"}) RETURN t.virtual, id(t)" );
+            assertEquals("{id(t)=-2, t.virtual=baz}",r.next().toString());
+
+            r = graphDb.execute("MATCH (:Foo)<-[t:TEST]-(:Bar) RETURN COUNT(t)");
+            assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
+
+            r = graphDb.execute("MATCH (:Foo)-[t:TEST]-(:Bar) RETURN COUNT(t)");
+            assertEquals("The query should return two matching (virtual) relationship","{COUNT(t)=2}",r.next().toString());
+
+            //TODO: Remove virtual prop
+
+            r = graphDb.execute( "CREATE (n:A{bar:\"baz\"})<-[t:TEST{virtual:\"baz\"}]-" +
+                    "(m:B{bar:\"baz\"}) RETURN t.virtual, id(t)" );
+            assertEquals("{id(t)=-3, t.virtual=baz}",r.next().toString());
+            r = graphDb.execute("MATCH (:A)<-[t:TEST]-(:B) RETURN COUNT(t)");
+            assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
+
             tx.success();
         }
 
@@ -200,8 +220,9 @@ public class GraphDatabaseServiceExecuteTest
         {
             assertEquals("There should be no more relationship after the previous Transaction ended",
                     0,Iterables.count( graphDb.getAllRelationships() ));
-            assertEquals("There should be only one node after the previous Transaction ended",
-                    1,Iterables.count( graphDb.getAllNodes() ));
+            assertEquals("There should be only four nodes after the previous Transaction ended",
+                    4,Iterables.count( graphDb.getAllNodes() ));
+            // should check if they are the right ones
 
             tx.success();
         }
