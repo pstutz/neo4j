@@ -49,10 +49,9 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("{id(n)=0, n.bar=baz}",r.next().toString());
 
             r = graphDb.execute("MATCH (n:Foo) RETURN n.bar, COUNT(n)");
-            System.out.println(r.next().toString());
-
+            assertEquals("The created node should return if matched","{n.bar=baz, COUNT(n)=1}",
+                    r.next().toString());
             after = Iterables.count( graphDb.getAllNodes() );
-            System.out.println(after);
             tx.success();
         }
 
@@ -86,7 +85,8 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("{n.virtual=baz}",r.next().toString());
 
             r = graphDb.execute("MATCH (n:Foo) RETURN n.virtual, COUNT(n)");
-            System.out.println(r.next().toString());
+            assertEquals("The created node should return if matched","{n.virtual=baz, COUNT(n)=1}",
+                    r.next().toString());
             tx.success();
         }
 
@@ -122,8 +122,8 @@ public class GraphDatabaseServiceExecuteTest
 
             after = Iterables.count( graphDb.getAllRelationships());
             assertEquals("There should be one Relationship present",before+1,after);
-            r = graphDb.execute("MATCH (:Foo)-[t]->(:Foo) RETURN COUNT(t)");
-            System.out.println(r.next().toString()); // WHAT?!
+            r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
+            assertEquals("The query should return 1 matching relationship","{COUNT(t)=1}",r.next().toString());
             tx.success();
         }
 
@@ -159,10 +159,10 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("{t.virtual=baz}",r.next().toString());
 
             after = Iterables.count( graphDb.getAllRelationships());
-            System.out.println(after);
+
             assertEquals("There should be one (virtual) Relationship present",before+1,after);
-            r = graphDb.execute("MATCH (:Foo)-[t]->(:Foo) RETURN COUNT(t)");
-            System.out.println(r.next().toString()); // TODO: WHAT?
+            r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
+            assertEquals("The query should return 1 matching relationship","{COUNT(t)=1}",r.next().toString());
             tx.success();
         }
 
