@@ -174,4 +174,36 @@ public class GraphDatabaseServiceExecuteTest
         }
         assertEquals( before , after );
     }
+
+    @Test
+    public void shouldExecuteCypherWithMixedRelationship() throws Exception
+    {
+        // given
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        // when
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
+                    "(m:Bar{virtual:\"baz\"}) RETURN t.virtual, id(t)" );
+
+            assertEquals("{id(t)=-1, t.virtual=baz}",r.next().toString());
+
+            r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
+            assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
+            tx.success();
+        }
+
+        // then
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            assertEquals("There should be no more relationship after the previous Transaction ended",
+                    0,Iterables.count( graphDb.getAllRelationships() ));
+            assertEquals("There should be only one node after the previous Transaction ended",
+                    1,Iterables.count( graphDb.getAllNodes() ));
+
+            tx.success();
+        }
+    }
 }

@@ -616,9 +616,9 @@ public class NodeProxy
         //}
         try ( Statement statement = actions.statement() )
         {
-            int relationshipTypeId = statement.tokenWriteOperations().relationshipTypeGetOrCreateForName( type.name() );
-            long relationshipId = statement.dataWriteOperations()
-                    .relationshipCreate( relationshipTypeId, nodeId, otherNode.getId() );
+
+            int relationshipTypeId = statement.readOperations().virtualRelationshipTypeGetOrCreateForName( type.name() );
+            long relationshipId = statement.readOperations().virtualRelationshipCreate(relationshipTypeId, nodeId, otherNode.getId() );
             return actions.newRelationshipProxy( relationshipId, nodeId, relationshipTypeId, otherNode.getId()  );
         }
         catch ( IllegalTokenNameException | RelationshipTypeIdNotFoundKernelException e )
@@ -630,9 +630,8 @@ public class NodeProxy
             throw new NotFoundException( "Node[" + e.entityId() +
                     "] is deleted and cannot be used to create a relationship" );
         }
-        catch ( InvalidTransactionTypeKernelException e )
-        {
-            throw new ConstraintViolationException( e.getMessage(), e );
+        catch ( NoSuchMethodException e){
+            throw new NotFoundException("Something went wrong here that should not.");
         }
     }
 
