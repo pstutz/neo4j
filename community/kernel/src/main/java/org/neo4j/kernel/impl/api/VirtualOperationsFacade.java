@@ -351,6 +351,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // TODO SASCHA
         Set<RelationshipItem> foundItems = new HashSet<>();
 
+        // get the real ones
         if(!isVirtual(nodeId)) {
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
             while (realIt.hasNext()) {
@@ -401,10 +402,11 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws EntityNotFoundException
     {
         //TODO: check if that is right
-        //if(isVirtual(nodeId)) {
-            // build up a collection of rel ids that match
+        // build up a collection of rel ids that match
+
         Set<RelationshipItem> foundItems = new HashSet<>();
 
+        // get the real ones
         if(!isVirtual(nodeId)) {
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
             while (realIt.hasNext()) {
@@ -455,22 +457,42 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public int nodeGetDegree( long nodeId, Direction direction, int relType ) throws EntityNotFoundException
     {
-        // TODO SASCHA
-        return super.nodeGetDegree(nodeId,direction,relType);
+        int degree = 0;
+        /*if(!isVirtual(nodeId)){
+            degree+= super.nodeGetDegree(nodeId,direction,relType);
+        }*/
+        RelationshipIterator it = nodeGetRelationships(nodeId,direction,relType);
+        while(it.hasNext()){
+            it.next();
+            degree++;
+        }
+        return degree;
     }
 
     @Override
     public int nodeGetDegree( long nodeId, Direction direction ) throws EntityNotFoundException
     {
-        // TODO SASCHA
-        return super.nodeGetDegree(nodeId,direction);
+        int degree = 0;
+        /*if(!isVirtual(nodeId)){
+            degree+= super.nodeGetDegree(nodeId,direction,relType);
+        }*/
+        RelationshipIterator it = nodeGetRelationships(nodeId,direction);
+        while(it.hasNext()){
+            it.next();
+            degree++;
+        }
+        return degree;
     }
 
     @Override
     public boolean nodeIsDense( long nodeId ) throws EntityNotFoundException
     {
-        // TODO SASCHA
-        return super.nodeIsDense(nodeId);
+        // naive impl.
+        if(isVirtual(nodeId)){
+            return false;
+        } else {
+            return super.nodeIsDense(nodeId);
+        }
     }
 
     @Override
