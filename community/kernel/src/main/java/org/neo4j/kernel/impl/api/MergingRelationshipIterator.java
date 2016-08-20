@@ -23,6 +23,9 @@ public class MergingRelationshipIterator implements RelationshipIterator {
 
     public MergingRelationshipIterator(RelationshipIterator rIt, MergingPrimitiveLongIterator virtualIterator){
         this.it = virtualIterator;
+        if(rIt==null){
+            rIt = RelationshipIterator.EMPTY;
+        }
         realIterator = rIt;
     }
 

@@ -37,14 +37,12 @@ import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.proc.ProcedureSignature.ProcedureName;
 import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
+import org.neo4j.kernel.impl.api.store.CursorRelationshipIterator;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.storageengine.api.EntityType;
-import org.neo4j.storageengine.api.NodeItem;
-import org.neo4j.storageengine.api.RelationshipItem;
-import org.neo4j.storageengine.api.Token;
+import org.neo4j.storageengine.api.*;
 
 import java.util.*;
 
@@ -348,18 +346,93 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws EntityNotFoundException
     {
         // TODO SASCHA
-        return super.nodeGetRelationships(nodeId,direction,relTypes);
+        if(isVirtual(nodeId)){
+            Set<RelationshipItem> foundItems = new HashSet<>();
+            Set<Long> relIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet();
+
+            for (Long relId : relIds) {
+                for(int type:relTypes){
+                    // check if type matches for this relId
+                    if(type==virtualRelationshipIdToTypeId.get(authenticate()).get(relId)){
+                        Long[] nodeIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId);
+                        switch (direction) {
+                            case INCOMING:
+                                if (nodeIds[1].equals(nodeId)) {
+                                    foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
+                                            virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                                }
+                                break;
+                            case OUTGOING:
+                                if (nodeIds[0].equals(nodeId)) {
+                                    foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
+                                            virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                                }
+                                break;
+                            case BOTH:
+                                if (nodeIds[0].equals(nodeId) || nodeIds[1].equals(nodeId)) {
+                                    foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
+                                            virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                                }
+                                break;
+                            default:
+                                // What?!
+                        }
+                        break;
+                    }
+                }
+            }
+            VirtualCursor<RelationshipItem> cursor = new VirtualCursor<>(foundItems);
+            return new CursorRelationshipIterator(cursor);
+            //return new MergingRelationshipIterator(null, new MergingPrimitiveLongIterator(null, foundIds));
+        } else {
+
+            return super.nodeGetRelationships(nodeId, direction, relTypes);
+        }
     }
 
     @Override
     public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction )
             throws EntityNotFoundException
     {
-        RelationshipIterator real = super.nodeGetRelationships(nodeId,direction);
-        
-        return new MergingRelationshipIterator(real,new MergingPrimitiveLongIterator(null,));
-        // TODO: Sascha, finish this
+        //TODO: check if that is right
+        if(isVirtual(nodeId)) {
+            // build up a collection of rel ids that match
+            Set<RelationshipItem> foundItems = new HashSet<>();
+            Set<Long> relIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet();
 
+            for (Long relId : relIds) {
+                Long[] nodeIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId);
+                switch (direction) {
+                    case INCOMING:
+                        if (nodeIds[1].equals(nodeId)) {
+                            foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
+                                    virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                        }
+                        break;
+                    case OUTGOING:
+                        if (nodeIds[0].equals(nodeId)) {
+                            foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
+                                    virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                        }
+                        break;
+                    case BOTH:
+                        if (nodeIds[0].equals(nodeId) || nodeIds[1].equals(nodeId)) {
+                            foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
+                                    virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                        }
+                        break;
+                    default:
+                        // What?!
+                }
+            }
+
+            VirtualCursor<RelationshipItem> cursor = new VirtualCursor<>(foundItems);
+            return new CursorRelationshipIterator(cursor);
+            //return c;
+            //return new MergingRelationshipIterator(null, new MergingPrimitiveLongIterator(null, foundItems));
+        } else{
+            return super.nodeGetRelationships(nodeId, direction);
+        }
     }
 
     @Override
