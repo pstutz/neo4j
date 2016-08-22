@@ -1239,6 +1239,18 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
+    public long relationshipCreate(int relationshipTypeId, long startNodeId, long endNodeId) throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException {
+        if(isVirtual(startNodeId)){
+            throw new EntityNotFoundException(EntityType.NODE,startNodeId);
+        }
+        if(isVirtual(endNodeId)){
+            throw new EntityNotFoundException(EntityType.NODE,endNodeId);
+        }
+
+        return super.relationshipCreate(relationshipTypeId, startNodeId, endNodeId);
+    }
+
+    @Override
     public long virtualRelationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException
     {

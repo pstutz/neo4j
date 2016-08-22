@@ -27,7 +27,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.planner.logical.plans.IdName
 import org.neo4j.cypher.internal.compiler.v3_0.planner.{SetLabelPattern, SetMutatingPattern, SetNodePropertiesFromMapPattern, SetNodePropertyPattern, SetPropertyPattern, SetRelationshipPropertiesFromMapPattern, SetRelationshipPropertyPattern}
 import org.neo4j.cypher.internal.compiler.v3_0.spi.{Operations, QueryContext}
 import org.neo4j.cypher.internal.frontend.v3_0.{CypherTypeException, InvalidArgumentException, SemanticTable}
-import org.neo4j.graphdb.{Node, PropertyContainer, Relationship}
+import org.neo4j.graphdb._
 
 import scala.collection.Map
 
@@ -87,17 +87,81 @@ object SetOperation {
 abstract class AbstractSetPropertyOperation extends SetOperation {
   protected def setProperty[T <: PropertyContainer](context: ExecutionContext, state: QueryState, ops: Operations[T],
                           itemId: Long, propertyKey: LazyPropertyKey, expression: Expression) = {
+    //TODO: Sascha -> Merge/Set
     val queryContext = state.query
     val maybePropertyKey = propertyKey.id(queryContext).map(_.id) // if the key was already looked up
-    val propertyId = maybePropertyKey
-        .getOrElse(queryContext.getOrCreatePropertyKeyId(propertyKey.name)) // otherwise create it
 
     val value = makeValueNeoSafe(expression(context)(state))
 
-    if (value == null) {
-      if (ops.hasProperty(itemId, propertyId)) ops.removeProperty(itemId, propertyId)
+
+    if((propertyKey.name=="virtual") && (value.equals(false))){  // TODO: Sascha change to actual value
+      //TODO make this entity real
+      // and don't set the property :-)
+      if(this.name.equals("SetNodeProperty")){
+        // getting some info to preserve
+        val propKeyIterator = state.query.getPropertiesForNode(itemId);
+        val labelKeyIterator = state.query.getLabelsForNode(itemId);
+
+        //TODO: this could be done (faster) without Core API
+
+        val virtualNode = state.query.nodeOps.getById(itemId);
+        val relIterator = virtualNode.getRelationships().iterator();
+
+        // create this node
+        val node = state.query.createNode(true)
+
+        // setting the properties
+        while(propKeyIterator.hasNext){
+          val propKeyId = propKeyIterator.next()
+          val propName = state.query.getPropertyKeyName(propKeyId);
+          val propValue = state.query.nodeOps.getProperty(itemId,propKeyId)
+          node.setProperty(propName,propValue) // not optimal but..
+        }
+
+        // setting the labels
+        while(labelKeyIterator.hasNext){
+          val labelKeyId = labelKeyIterator.next()
+          val labelName = state.query.getLabelName(labelKeyId)
+          node.addLabel(Label.label(labelName)); // not optimal but..
+          val i = node.getLabels.iterator
+        }
+
+        // rewiring the virtual relationships
+        // TODO / Improvement: could there be a problem if Rel is set before node?
+        // This is easily possible: EXPLAIN MATCH (n)-[r]->() SET r.hm=true SET n.test=true
+
+        while(relIterator.hasNext){
+          val rel = relIterator.next()
+          node.createVirtualRelationshipTo(rel.getOtherNode(virtualNode),rel.getType)
+        }
+
+        // updating the context!
+        val i = context.iterator
+        while(i.hasNext){
+          val pair =  i.next()
+          if(pair._2.equals(virtualNode)){
+            // replace
+            context.put(pair._1,node)
+          }
+        }
+
+        // removing the virtual node
+        virtualNode.delete()
+
+
+      } else{
+        // SetRelationshipProperty
+
+      }
+    } else {
+      val propertyId = maybePropertyKey
+        .getOrElse(queryContext.getOrCreatePropertyKeyId(propertyKey.name)) // otherwise create it
+
+      if (value == null) {
+        if (ops.hasProperty(itemId, propertyId)) ops.removeProperty(itemId, propertyId)
+      }
+      else ops.setProperty(itemId, propertyId, value)
     }
-    else ops.setProperty(itemId, propertyId, value)
   }
 }
 

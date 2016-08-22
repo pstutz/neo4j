@@ -21,12 +21,14 @@ package org.neo4j.cypher;
 
 import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.QueryExecutionException;
 import org.neo4j.graphdb.Result;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 public class GraphDatabaseServiceExecuteTest
 {
@@ -234,17 +236,68 @@ public class GraphDatabaseServiceExecuteTest
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
         try ( Transaction tx = graphDb.beginTx() )
         {
-
             Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
                     "(m:Bar{virtual:\"baz\"}) RETURN n.virtual, id(n), t.virtual, id(t), m.virtual, id(m)" );
-
-            //System.out.println(r.next().toString());
 
             assertEquals("{id(n)=-1, id(m)=-2, id(t)=-1, t.virtual=null, m.virtual=null, n.virtual=null}",
                     r.next().toString());
 
             tx.success();
         }
+    }
 
+    @Test
+    public void shouldNotBeAbleToCreateRelationshipFromOrToVirtualNode() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            try {
+                // the following execute should produce an error
+                graphDb.execute("CREATE (n:Foo{virtual:\"baz\"})-[t:TEST]->" +
+                        "(m:Bar{virtual:\"baz\"}) RETURN id(n), id(t), id(m)");
+                fail();
+            } catch (QueryExecutionException e){
+                // success!?
+                assertEquals("Unable to load NODE with id -1.",e.getMessage());
+            }
+            try {
+                // the following execute should produce an error
+                graphDb.execute("CREATE (n:Foo{bar:\"baz\"})-[t:TEST]->" +
+                        "(m:Bar{virtual:\"baz\"}) RETURN id(n), id(t), id(m)");
+                fail();
+            } catch (QueryExecutionException e){
+                // success!?
+                assertEquals("Unable to load NODE with id -3.",e.getMessage());
+            }
+            try {
+                // the following execute should produce an error
+                graphDb.execute("CREATE (n:Foo{virtual:\"baz\"})-[t:TEST]->" +
+                        "(m:Bar{bar:\"baz\"}) RETURN id(n), id(t), id(m)");
+                fail();
+            } catch (QueryExecutionException e){
+                // success!?
+                assertEquals("Unable to load NODE with id -4.",e.getMessage());
+            }
+            tx.failure();
+        }
+    }
+
+    @Test
+    public void mergeShouldWorkAsIntended() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            // the following execute should produce an error
+            graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
+
+            Result r = graphDb.execute("MERGE (n:Foo) ON MATCH SET n.virtual=false RETURN labels(n), id(n), n.test");
+            assertEquals("{id(n)=0, labels(n)=[Foo], n.test=true}",r.next().toString());
+
+            //graphDb.execute("MERGE (n:Foo)-[t:TEST]->(n) SET t.test=true RETURN n");
+
+            tx.success();
+        }
     }
 }
