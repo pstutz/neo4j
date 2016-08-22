@@ -81,11 +81,11 @@ public class GraphDatabaseServiceExecuteTest
 
         try ( Transaction tx = graphDb.beginTx() )
         {
-            Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"}) RETURN n.virtual" );
-            assertEquals("{n.virtual=baz}",r.next().toString());
+            Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\", bar:\"baz\"}) RETURN id(n)" );
+            assertEquals("{id(n)=-1}",r.next().toString());
 
-            r = graphDb.execute("MATCH (n:Foo) RETURN n.virtual, COUNT(n)");
-            assertEquals("The created node should return if matched","{n.virtual=baz, COUNT(n)=1}",
+            r = graphDb.execute("MATCH (n:Foo) RETURN n.bar, COUNT(n)");
+            assertEquals("The created node should return if matched","{n.bar=baz, COUNT(n)=1}",
                     r.next().toString());
             tx.success();
         }
@@ -154,9 +154,9 @@ public class GraphDatabaseServiceExecuteTest
         try ( Transaction tx = graphDb.beginTx() )
         {
             Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
-                    "(m:Bar{virtual:\"baz\"}) RETURN t.virtual" );
+                    "(m:Bar{virtual:\"baz\"}) RETURN id(t)" );
 
-            assertEquals("{t.virtual=baz}",r.next().toString());
+            assertEquals("{id(t)=-1}",r.next().toString());
 
             after = Iterables.count( graphDb.getAllRelationships());
 
@@ -187,16 +187,16 @@ public class GraphDatabaseServiceExecuteTest
         {
 
             Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
-                    "(m:Bar{virtual:\"baz\"}) RETURN t.virtual, id(t)" );
+                    "(m:Bar{virtual:\"baz\"}) RETURN id(t)" );
 
-            assertEquals("{id(t)=-1, t.virtual=baz}",r.next().toString());
+            assertEquals("{id(t)=-1}",r.next().toString());
 
             r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
 
             r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})<-[t:TEST{virtual:\"baz\"}]-" +
-                    "(m:Bar{bar:\"baz\"}) RETURN t.virtual, id(t)" );
-            assertEquals("{id(t)=-2, t.virtual=baz}",r.next().toString());
+                    "(m:Bar{bar:\"baz\"}) RETURN id(t)" );
+            assertEquals("{id(t)=-2}",r.next().toString());
 
             r = graphDb.execute("MATCH (:Foo)<-[t:TEST]-(:Bar) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
@@ -207,8 +207,8 @@ public class GraphDatabaseServiceExecuteTest
             //TODO: Remove virtual prop
 
             r = graphDb.execute( "CREATE (n:A{bar:\"baz\"})<-[t:TEST{virtual:\"baz\"}]-" +
-                    "(m:B{bar:\"baz\"}) RETURN t.virtual, id(t)" );
-            assertEquals("{id(t)=-3, t.virtual=baz}",r.next().toString());
+                    "(m:B{bar:\"baz\"}) RETURN id(t)" );
+            assertEquals("{id(t)=-3}",r.next().toString());
             r = graphDb.execute("MATCH (:A)<-[t:TEST]-(:B) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
 
@@ -226,5 +226,25 @@ public class GraphDatabaseServiceExecuteTest
 
             tx.success();
         }
+    }
+
+    @Test
+    public void shouldNotPersistSpecialVirtualProperty() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+
+            Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
+                    "(m:Bar{virtual:\"baz\"}) RETURN n.virtual, id(n), t.virtual, id(t), m.virtual, id(m)" );
+
+            //System.out.println(r.next().toString());
+
+            assertEquals("{id(n)=-1, id(m)=-2, id(t)=-1, t.virtual=null, m.virtual=null, n.virtual=null}",
+                    r.next().toString());
+
+            tx.success();
+        }
+
     }
 }

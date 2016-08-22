@@ -66,29 +66,6 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
 
   }
 
-  private def setVirtualProperties(context: ExecutionContext, state: QueryState, node: Node) = {
-    properties.foreach { expr =>
-      expr(context)(state) match {
-        case _: Node | _: Relationship =>
-          throw new CypherTypeException("Parameter provided for node creation is not a Map")
-        case IsMap(f) =>
-          val propertiesMap: Map[String, Any] = f(state.query)
-          propertiesMap.foreach {
-            case (k, v) => {
-              // set virtual prop
-              if (v == null) {
-                //do not set properties for null values
-                handleNull(key)
-              } else{
-                node.setProperty(k,v)  // slight change
-              }
-            }
-          }
-        case _ =>
-          throw new CypherTypeException("Parameter provided for node creation is not a Map")
-      }
-    }
-  }
 
 
   private def setProperties(context: ExecutionContext, state: QueryState, nodeId: Long) = {
@@ -115,8 +92,12 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     if (value == null) {
       handleNull(key)
     } else {
-      val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
-      qtx.nodeOps.setProperty(nodeId, propertyKeyId, makeValueNeoSafe(value))
+      if (key == "virtual") {  // TODO: Change that
+
+      } else {
+        val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
+        qtx.nodeOps.setProperty(nodeId, propertyKeyId, makeValueNeoSafe(value))
+      }
     }
   }
 
@@ -125,14 +106,6 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
   private def setLabels(context: ExecutionContext, state: QueryState, nodeId: Long) = {
     val labelIds = labels.map(_.getOrCreateId(state.query).id)
     state.query.setLabelsOnNode(nodeId, labelIds.iterator)
-  }
-
-  private def setVirtualLabels(node: Node) = {
-    val labelIterator = labels.iterator
-    while(labelIterator.hasNext){
-       val l = labelIterator.next()
-       node.addLabel(Label.label(l.name))
-    }
   }
 
   def symbols = src.symbols.add(key, CTNode)

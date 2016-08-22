@@ -541,7 +541,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 // assert that this rel has got that prop -> already covered by relationshipHasProperty but are they always chained?
                 Set<Integer> propIds = virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId);
                 if(propIds==null){
-                    return false;
+                    return null;
                 }
                 if(propIds.contains(propertyKeyId)){
                     return getPropertyValueForRels(relationshipId,propertyKeyId);
@@ -871,7 +871,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public InternalIndexState indexGetState( IndexDescriptor descriptor ) throws IndexNotFoundKernelException
+    public InternalIndexState indexGetState(IndexDescriptor descriptor ) throws IndexNotFoundKernelException
     {
         statement.assertOpen();
         return schemaRead().indexGetState( statement, descriptor );

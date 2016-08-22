@@ -83,8 +83,10 @@ abstract class BaseRelationshipPipe(src: Pipe, key: String, startNode: String, t
     if (value == null) {
       handleNull(key: String)
     } else {
-      val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
-      qtx.relationshipOps.setProperty(relId, propertyKeyId, makeValueNeoSafe(value))
+      if(key=="virtual"){} else { // TODO: Change
+        val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
+        qtx.relationshipOps.setProperty(relId, propertyKeyId, makeValueNeoSafe(value))
+      }
     }
   }
 
