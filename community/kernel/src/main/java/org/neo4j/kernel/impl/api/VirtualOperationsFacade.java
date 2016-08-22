@@ -627,6 +627,10 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(isVirtual(relId)){
             // this might do the job -> TODO test that
             if(relationshipExists(relId)){
+                int typeId = virtualRelationshipIdToTypeId.get(authenticate()).get(relId);
+                long startNode = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId)[0];
+                long endNode   = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId)[0];
+                visitor.visit(relId,typeId,startNode,endNode);
                 return;
             } else{
                 throw new EntityNotFoundException(EntityType.RELATIONSHIP,relId);
@@ -1216,22 +1220,9 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws EntityNotFoundException, InvalidTransactionTypeKernelException, AutoIndexingKernelException
     {
         if(isVirtual(nodeId)) {
-            if (virtualNodeIds.get(authenticate()).contains(nodeId)) {
-                //TODO: needs more checks!
-
-                virtualNodeIds.get(authenticate()).remove(nodeId);
-
-                virtualNodeIdToLabelIds.get(authenticate()).remove(nodeId);
-                virtualNodeIdToPropertyKeyIds.get(authenticate()).remove(nodeId);
-
-                // TODO: Remove refs that are returned from those calls
-
-                // AND rel prop
-
-                virtualNodeIdToConnectedRelationshipIds.get(authenticate()).remove(nodeId);
-
-            } else {
-                throw new EntityNotFoundException(EntityType.NODE, nodeId);
+            try {
+                virtualNodeDelete(nodeId);
+            } catch (NoSuchMethodException  e) {
             }
         } else{
             super.nodeDelete(nodeId);
@@ -1276,6 +1267,27 @@ public class VirtualOperationsFacade extends OperationsFacade
         //} else {
         //    return super.relationshipCreate(relationshipTypeId, startNodeId, endNodeId);
         //}
+    }
+
+    @Override
+    public void virtualNodeDelete(long nodeId) throws NoSuchMethodException, EntityNotFoundException {
+        if (virtualNodeIds.get(authenticate()).contains(nodeId)) {
+            //TODO: needs more checks!
+
+            virtualNodeIds.get(authenticate()).remove(nodeId);
+
+            virtualNodeIdToLabelIds.get(authenticate()).remove(nodeId);
+            virtualNodeIdToPropertyKeyIds.get(authenticate()).remove(nodeId);
+
+            // TODO: Remove refs that are returned from those calls
+
+            // AND rel prop
+
+            virtualNodeIdToConnectedRelationshipIds.get(authenticate()).remove(nodeId);
+            // virtualRelationshipIdToVirtualNodeIds SHOULD BE CLEARED BEFORE!
+        } else {
+            throw new EntityNotFoundException(EntityType.NODE, nodeId);
+        }
     }
 
     @Override

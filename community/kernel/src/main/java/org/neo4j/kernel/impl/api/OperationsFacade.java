@@ -526,6 +526,11 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
+    public void virtualNodeDelete(long id) throws NoSuchMethodException, EntityNotFoundException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
     public Set<ProcedureSignature> proceduresGetAll()
     {
         statement.assertOpen();

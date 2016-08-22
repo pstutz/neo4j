@@ -280,7 +280,9 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
             try
             {
                 RelationshipProxy relationship = new RelationshipProxy( relActions, id );
-                statement.readOperations().relationshipVisit( id, relationship );
+                if(id>=0) {
+                    statement.readOperations().relationshipVisit(id, relationship);
+                }
                 return relationship;
             }
             catch ( EntityNotFoundException e )

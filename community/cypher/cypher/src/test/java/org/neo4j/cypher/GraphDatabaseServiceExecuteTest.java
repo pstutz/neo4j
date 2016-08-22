@@ -295,7 +295,14 @@ public class GraphDatabaseServiceExecuteTest
             Result r = graphDb.execute("MERGE (n:Foo) ON MATCH SET n.virtual=false RETURN labels(n), id(n), n.test");
             assertEquals("{id(n)=0, labels(n)=[Foo], n.test=true}",r.next().toString());
 
-            //graphDb.execute("MERGE (n:Foo)-[t:TEST]->(n) SET t.test=true RETURN n");
+            System.out.println(Iterables.count(graphDb.getAllNodes()));
+
+            r= graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n) RETURN id(n), id(t)");
+            assertEquals("{id(n)=0, id(t)=-1}",r.next().toString());
+            r = graphDb.execute("MERGE (n:Foo)-[t:TEST]->(n) ON MATCH SET t.virtual=false RETURN type(t), id(t), t.test");
+            assertEquals("{id(t)=0, type(t)=TEST, t.test=true}",r.next().toString());
+
+            //TODO check SET
 
             tx.success();
         }

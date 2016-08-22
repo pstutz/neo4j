@@ -93,9 +93,14 @@ public class NodeProxy
     {
         try ( Statement statement = actions.statement() )
         {
-            statement.dataWriteOperations().nodeDelete( getId() );
+            // TODO SASCHA!?
+            if(this.getId()<0){
+                statement.readOperations().virtualNodeDelete(getId());
+            } else {
+                statement.dataWriteOperations().nodeDelete( getId() );
+            }
         }
-        catch ( InvalidTransactionTypeKernelException e )
+        catch ( InvalidTransactionTypeKernelException | NoSuchMethodException e )
         {
             throw new ConstraintViolationException( e.getMessage(), e );
         }

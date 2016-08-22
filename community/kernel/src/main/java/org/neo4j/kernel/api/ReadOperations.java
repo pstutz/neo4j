@@ -594,4 +594,6 @@ public interface ReadOperations
 
     long virtualRelationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException, NoSuchMethodException;
+
+    void virtualNodeDelete(long id) throws NoSuchMethodException, EntityNotFoundException;
 }

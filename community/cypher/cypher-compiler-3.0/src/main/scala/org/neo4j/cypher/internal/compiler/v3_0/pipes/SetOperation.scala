@@ -132,7 +132,20 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
 
         while(relIterator.hasNext){
           val rel = relIterator.next()
-          node.createVirtualRelationshipTo(rel.getOtherNode(virtualNode),rel.getType)
+          val startNode = rel.getStartNode
+          val endNode = rel.getEndNode
+          if(startNode.equals(virtualNode) && endNode.equals(virtualNode)){
+            node.createRelationshipTo(node,RelationshipType.withName(rel.getType.name()))
+          } else{
+            if(startNode.equals(virtualNode)){
+              node.createRelationshipTo(endNode,RelationshipType.withName(rel.getType.name()))
+            } else{
+              // endNode.equals(virtualNode)
+              endNode.createRelationshipTo(node,RelationshipType.withName(rel.getType.name()))
+            }
+          }
+
+          rel.delete()
         }
 
         // updating the context!
@@ -151,6 +164,40 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
 
       } else{
         // SetRelationshipProperty
+        val propKeyIterator = state.query.getPropertiesForRelationship(itemId);
+        //TODO: this could be done (faster) without Core API
+        val virtualRelationship = state.query.relationshipOps.getById(itemId);
+        val relType = virtualRelationship.getType
+
+        // create this node
+        val relationship = state.query.createRelationship(
+          virtualRelationship.getStartNode,
+          virtualRelationship.getEndNode,
+          relType.name(),
+          true)
+
+        // setting the properties
+        while(propKeyIterator.hasNext){
+          val propKeyId = propKeyIterator.next()
+          val propName = state.query.getPropertyKeyName(propKeyId);
+          val propValue = state.query.relationshipOps.getProperty(itemId,propKeyId)
+          relationship.setProperty(propName,propValue) // not optimal but..
+        }
+
+
+        // updating the context!
+        val i = context.iterator
+        while(i.hasNext){
+          val pair =  i.next()
+          if(pair._2.equals(virtualRelationship)){
+            // replace
+            context.put(pair._1,relationship)
+          }
+        }
+
+        // removing the virtual node
+        virtualRelationship.delete()
+
 
       }
     } else {
