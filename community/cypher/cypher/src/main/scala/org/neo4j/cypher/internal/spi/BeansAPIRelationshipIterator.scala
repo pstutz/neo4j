@@ -44,6 +44,8 @@ class BeansAPIRelationshipIterator(relationships: RelationshipIterator,
     if (hasNext) {
       val relationshipId = relationships.next()
       relationships.relationshipVisit(relationshipId, visitor)
+      //System.out.println(nextRelationship.getStartNode.getId)
+      //System.out.println(nextRelationship.getEndNode.getId)
       nextRelationship
     } else {
       throw new NoSuchElementException

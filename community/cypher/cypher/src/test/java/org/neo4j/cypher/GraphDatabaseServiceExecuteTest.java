@@ -294,7 +294,9 @@ public class GraphDatabaseServiceExecuteTest
             System.out.println(Iterables.count(graphDb.getAllNodes()));
             Iterator<Node> it =graphDb.getAllNodes().iterator();
             while(it.hasNext()){
-                System.out.println(it.next().getPropertyKeys().iterator().next());
+                Node n = it.next();
+                System.out.println(n.getId());
+                System.out.println(n.getLabels().iterator().next());
             }
 
             Result r = graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET n.virtual = false RETURN id(n), id(t)");
