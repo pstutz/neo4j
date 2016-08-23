@@ -155,14 +155,14 @@ public class GraphDatabaseServiceExecuteTest
         try ( Transaction tx = graphDb.beginTx() )
         {
             Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
-                    "(m:Bar{virtual:\"baz\"}) RETURN id(t)" );
+                    "(m:Bar{virtual:\"baz\"}) RETURN id(t), id(n), id(m)" );
 
-            assertEquals("{id(t)=-1}",r.next().toString());
+            assertEquals("{id(n)=-1, id(m)=-2, id(t)=-1}",r.next().toString());
 
             after = Iterables.count( graphDb.getAllRelationships());
 
             assertEquals("There should be one (virtual) Relationship present",before+1,after);
-            r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
+            r = graphDb.execute("MATCH (:Foo)-[t:TEST]->(:Bar) RETURN COUNT(t)");
             assertEquals("The query should return 1 matching relationship","{COUNT(t)=1}",r.next().toString());
             tx.success();
         }
@@ -282,12 +282,12 @@ public class GraphDatabaseServiceExecuteTest
                 graphDb.execute("MATCH (n) DETACH DELETE n");
             }
 
-            //graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
-            //graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n)");
+            graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
+            graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n)");
 
             try{
-                //graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET t.virtual = false");
-                //fail();
+                graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET t.virtual = false");
+                fail();
             }catch (IllegalStateException e){
                 assertEquals("No entity id specified for this exception",e.getMessage());
             }
