@@ -279,11 +279,6 @@ public interface Node extends PropertyContainer
      */
     Relationship createVirtualRelationshipTo( Node otherNode, RelationshipType type );
 
-    /**
-     * Indicates if this node is virtual
-     * @return true if this node is virtual
-     */
-    public boolean isVirtual();
 
     /**
      * Returns relationship types which this node has one more relationships

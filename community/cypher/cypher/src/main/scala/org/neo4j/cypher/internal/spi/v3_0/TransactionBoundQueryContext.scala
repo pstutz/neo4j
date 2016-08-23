@@ -624,22 +624,28 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
 
   /*override def createVirtualNode(): Node =
     transactionalContext.graph.createVirtualNode()
-
+*/
   override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
     start.createVirtualRelationshipTo(end,withName(relType))
-  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship = ???
-  //TODO Sascha
-  */
+
+  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
+    createRelationship(start, end, relType, false)
+
+
+
   /*
-
-  override def createRelationship(start: Long, end: Long, relType: Int) = {
-    val relId = transactionalContext.statement.dataWriteOperations().relationshipCreate(relType, start, end)
-    relationshipOps.getById(relId)
+  //TODO Sascha
 
 
-  override def getVirtualNodesForLabel(label: String): Iterable[Node] =
-    transactionalContext.graph.getVirtualNodesByLabel(label)
-    */
+
+  //override def createRelationship(start: Long, end: Long, relType: Int) = {
+  //  val relId = transactionalContext.statement.dataWriteOperations().relationshipCreate(relType, start, end)
+  //  relationshipOps.getById(relId)
+  //}
+
+  //override def getVirtualNodesForLabel(label: String): Iterable[Node] =
+  //  transactionalContext.graph.getVirtualNodesByLabel(label)
+   */
 }
 
 object TransactionBoundQueryContext {

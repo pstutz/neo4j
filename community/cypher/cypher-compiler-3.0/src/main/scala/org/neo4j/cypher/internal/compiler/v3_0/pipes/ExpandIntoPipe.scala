@@ -59,8 +59,9 @@ case class ExpandIntoPipe(source: Pipe,
 
             if (toNode == null) Iterator.empty
             else {
+              val types = lazyTypes.types(state.query)
               val relationships = relCache.get(fromNode, toNode, dir)
-                .getOrElse(findRelationships(state.query, fromNode, toNode, relCache, dir, lazyTypes.types(state.query)))
+                .getOrElse(findRelationships(state.query, fromNode, toNode, relCache, dir, types))
 
               if (relationships.isEmpty) Iterator.empty
               else relationships.map(row.newWith1(relName, _))

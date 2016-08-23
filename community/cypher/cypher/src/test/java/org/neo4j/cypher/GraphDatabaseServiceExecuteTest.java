@@ -20,12 +20,11 @@
 package org.neo4j.cypher;
 
 import org.junit.Test;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.QueryExecutionException;
-import org.neo4j.graphdb.Result;
-import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.*;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.test.TestGraphDatabaseFactory;
+
+import java.util.Iterator;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -260,6 +259,7 @@ public class GraphDatabaseServiceExecuteTest
             } catch (QueryExecutionException e){
                 // success!?
                 assertEquals("Unable to load NODE with id -1.",e.getMessage());
+                graphDb.execute("MATCH (n) DETACH DELETE n");
             }
             try {
                 // the following execute should produce an error
@@ -268,7 +268,8 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -3.",e.getMessage());
+                assertEquals("Unable to load NODE with id -1.",e.getMessage());
+                graphDb.execute("MATCH (n) DETACH DELETE n");
             }
             try {
                 // the following execute should produce an error
@@ -277,8 +278,31 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -4.",e.getMessage());
+                assertEquals("Unable to load NODE with id -1.",e.getMessage());
+                graphDb.execute("MATCH (n) DETACH DELETE n");
             }
+
+            //graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
+            //graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n)");
+
+            try{
+                //graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET t.virtual = false");
+                //fail();
+            }catch (IllegalStateException e){
+                assertEquals("No entity id specified for this exception",e.getMessage());
+            }
+            System.out.println(Iterables.count(graphDb.getAllNodes()));
+            Iterator<Node> it =graphDb.getAllNodes().iterator();
+            while(it.hasNext()){
+                System.out.println(it.next().getPropertyKeys().iterator().next());
+            }
+
+            Result r = graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET n.virtual = false RETURN id(n), id(t)");
+            assertEquals("{id(n)=0, id(t)=-1}",r.next().toString());
+
+            r = graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET t.virtual = false RETURN id(n), id(t)");
+            assertEquals("{id(n)=0, id(t)=0}",r.next().toString());
+
             tx.failure();
         }
     }

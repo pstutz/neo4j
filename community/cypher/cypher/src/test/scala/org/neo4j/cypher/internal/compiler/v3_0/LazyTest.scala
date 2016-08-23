@@ -375,7 +375,6 @@ class MonitoredNode(inner: Node, monitor: () => Unit) extends Node {
 
   override def createVirtualRelationshipTo(otherNode: Node, `type`: RelationshipType): Relationship = ???
 
-  override def isVirtual: Boolean = ???
 }
 
 

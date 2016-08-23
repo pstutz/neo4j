@@ -195,11 +195,11 @@ class DelegatingQueryContext(val inner: QueryContext) extends QueryContext {
 
   //override def createVirtualNode(): Node = inner.createVirtualNode()
 
-  //override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
-  //  inner.createVirtualRelationship(start,end,relType)
+  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
+    inner.createVirtualRelationship(start,end,relType)
 
-  //override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
-  //  inner.createVirtualRelationship(start,end,relType)
+  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
+    inner.createVirtualRelationship(start,end,relType)
 
   //override def getVirtualNodesForLabel(label: String): Iterable[Node] = inner.getVirtualNodesForLabel(label)
 }

@@ -353,13 +353,14 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         // get the real ones
         if(!isVirtual(nodeId)) {
-            RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
+            RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
                 foundItems.add(super.relationshipCursor(rId).get());
             }
         }
 
+        // no actual rel there, thats okay!
         Set<Long> relIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet();
         for (Long relId : relIds) {
             for(int type:relTypes){
@@ -1231,6 +1232,10 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     @Override
     public long relationshipCreate(int relationshipTypeId, long startNodeId, long endNodeId) throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException {
+        if(isVirtual(startNodeId)||isVirtual(endNodeId)){
+            // real rel between vNode and ?
+        }
+
         if(isVirtual(startNodeId)){
             throw new EntityNotFoundException(EntityType.NODE,startNodeId);
         }

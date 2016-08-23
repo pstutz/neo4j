@@ -65,15 +65,10 @@ public class NodeProxy
     private final NodeActions actions;
     private final long nodeId;
 
-    private final Map<String,Object> virtualProperties;
-    private final List<Label> virtualLabels;
-
     public NodeProxy( NodeActions actions, long nodeId )
     {
         this.nodeId = nodeId;
         this.actions = actions;
-        virtualProperties = new HashMap<>();
-        virtualLabels = new ArrayList<>();
     }
 
     @Override
@@ -264,12 +259,6 @@ public class NodeProxy
     @Override
     public void setProperty( String key, Object value )
     {
-        // TODO: Work if virtual!
-        //if(isVirtual()){
-            // this needs much more (constraint) checking ...
-            //virtualProperties.put(key,value);
-
-        //} else {
             try (Statement statement = actions.statement()) {
                 int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName(key);
                 try {
@@ -298,15 +287,6 @@ public class NodeProxy
     @Override
     public Object removeProperty( String key ) throws NotFoundException
     {
-        if(isVirtual()) {
-            if(virtualProperties.containsKey(key)){
-                Object o = virtualProperties.get(key);
-                virtualProperties.remove(key);
-                return o;
-            } else{
-                throw new NotFoundException();
-            }
-        }
         try ( Statement statement = actions.statement() )
         {
             int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName( key );
@@ -339,15 +319,6 @@ public class NodeProxy
             throw new IllegalArgumentException( "(null) property key is not allowed" );
         }
 
-        if(isVirtual()) {
-            if(virtualProperties.containsKey(key)) {
-                Object o = virtualProperties.get(key);
-                return o;
-            }
-            else
-                return defaultValue;
-        }
-
         try ( Statement statement = actions.statement() )
         {
             int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
@@ -363,9 +334,6 @@ public class NodeProxy
     @Override
     public Iterable<String> getPropertyKeys()
     {
-        if(isVirtual())
-            return virtualProperties.keySet();
-
         try ( Statement statement = actions.statement() )
         {
             List<String> keys = new ArrayList<>();
@@ -399,17 +367,6 @@ public class NodeProxy
             return Collections.emptyMap();
         }
 
-        if(isVirtual()){
-            Map<String, Object> returnMap = new HashMap<>();
-            for(String k:keys){
-                if(virtualProperties.containsKey(k)){
-                    Object o = virtualProperties.get(k);
-                    returnMap.put(k,o);
-                }
-            }
-            return returnMap;
-        }
-
         try ( Statement statement = actions.statement() )
         {
             try ( Cursor<NodeItem> node = statement.readOperations().nodeCursor( nodeId ) )
@@ -431,9 +388,6 @@ public class NodeProxy
     @Override
     public Map<String, Object> getAllProperties()
     {
-        if(isVirtual())
-            return virtualProperties;
-
         try ( Statement statement = actions.statement() )
         {
             try ( Cursor<NodeItem> node = statement.readOperations().nodeCursor( nodeId ) )
@@ -474,17 +428,6 @@ public class NodeProxy
             throw new IllegalArgumentException( "(null) property key is not allowed" );
         }
 
-        // TODO: Sascha ?
-        /*
-        if(isVirtual()){
-            if(virtualProperties.containsKey(key)){
-                Object o = virtualProperties.get(key);
-                return o;
-            } else{
-                throw new NotFoundException( format( "No such property, '%s'.", key ) );
-            }
-        }*/
-
         try ( Statement statement = actions.statement() )
         {
             try
@@ -517,10 +460,6 @@ public class NodeProxy
         if ( null == key )
         {
             return false;
-        }
-
-        if(isVirtual()){
-            return virtualProperties.containsKey(key);
         }
 
         try ( Statement statement = actions.statement() )
@@ -641,18 +580,8 @@ public class NodeProxy
     }
 
     @Override
-    public boolean isVirtual() {
-        return getId()<0;
-    }
-
-    @Override
     public void addLabel( Label label )
     {
-        if(isVirtual()) {
-            // TODO: Check stuff!!!
-            virtualLabels.add(label);
-
-        } else {
             try (Statement statement = actions.statement()) {
                 try {
                     statement.dataWriteOperations().nodeAddLabel(getId(),
@@ -670,17 +599,12 @@ public class NodeProxy
             } catch (InvalidTransactionTypeKernelException e) {
                 throw new ConstraintViolationException(e.getMessage(), e);
             }
-        }
+
     }
 
     @Override
     public void removeLabel( Label label )
     {
-        if(isVirtual()){
-            if (this.hasLabel(label)){
-                virtualLabels.remove(label);
-            } // else: do nothing, everything is fine (apparently)
-        } else {
             try (Statement statement = actions.statement()) {
                 int labelId = statement.readOperations().labelGetForName(label.name());
                 if (labelId != KeyReadOperations.NO_SUCH_LABEL) {
@@ -691,30 +615,24 @@ public class NodeProxy
             } catch (InvalidTransactionTypeKernelException e) {
                 throw new ConstraintViolationException(e.getMessage(), e);
             }
-        }
+
     }
 
     @Override
     public boolean hasLabel( Label label )
     {
-        if(isVirtual()){
-            return virtualLabels.contains(label);
-        } else {
             try (Statement statement = actions.statement()) {
                 int labelId = statement.readOperations().labelGetForName(label.name());
                 return statement.readOperations().nodeHasLabel(getId(), labelId);
             } catch (EntityNotFoundException e) {
                 return false;
             }
-        }
+
     }
 
     @Override
     public Iterable<Label> getLabels()
     {
-        if(isVirtual()) {
-            return virtualLabels;
-        } else {
             try (Statement statement = actions.statement()) {
                 PrimitiveIntIterator labels = statement.readOperations().nodeGetLabels(getId());
                 List<Label> keys = new ArrayList<>();
@@ -728,7 +646,7 @@ public class NodeProxy
             } catch (LabelNotFoundKernelException e) {
                 throw new IllegalStateException("Label retrieved through kernel API should exist.", e);
             }
-        }
+
     }
 
     @Override

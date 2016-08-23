@@ -139,7 +139,6 @@ trait FakeEntityTestSupport {
 
     override def createVirtualRelationshipTo(otherNode: Node, `type`: RelationshipType): Relationship = ???
 
-    override def isVirtual: Boolean = ???
   }
 
 }

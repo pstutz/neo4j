@@ -93,7 +93,6 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
 
     val value = makeValueNeoSafe(expression(context)(state))
 
-
     if((propertyKey.name=="virtual") && (value.equals(false))){  // TODO: Sascha change to actual value
       //TODO make this entity real
       // and don't set the property :-)
@@ -123,8 +122,8 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
           val labelKeyId = labelKeyIterator.next()
           val labelName = state.query.getLabelName(labelKeyId)
           node.addLabel(Label.label(labelName)); // not optimal but..
-          val i = node.getLabels.iterator
         }
+
 
         // rewiring the virtual relationships
         // TODO / Improvement: could there be a problem if Rel is set before node?
@@ -134,14 +133,19 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
           val rel = relIterator.next()
           val startNode = rel.getStartNode
           val endNode = rel.getEndNode
+          val relType = state.query.getOrCreateRelTypeId(rel.getType.name())
+
           if(startNode.equals(virtualNode) && endNode.equals(virtualNode)){
-            node.createRelationshipTo(node,RelationshipType.withName(rel.getType.name()))
+            state.query.createVirtualRelationship(node.getId,node.getId,relType)
+            //node.createVirtualRelationshipTo(node,relType)
           } else{
             if(startNode.equals(virtualNode)){
-              node.createRelationshipTo(endNode,RelationshipType.withName(rel.getType.name()))
+              state.query.createVirtualRelationship(node.getId,endNode.getId,relType)
+              //node.createVirtualRelationshipTo(endNode,relType)
             } else{
               // endNode.equals(virtualNode)
-              endNode.createRelationshipTo(node,RelationshipType.withName(rel.getType.name()))
+              state.query.createVirtualRelationship(endNode.getId, node.getId,relType)
+              //endNode.createVirtualRelationshipTo(node,relType)
             }
           }
 
@@ -152,15 +156,14 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
         val i = context.iterator
         while(i.hasNext){
           val pair =  i.next()
+          //System.out.println(pair)
           if(pair._2.equals(virtualNode)){
             // replace
             context.put(pair._1,node)
           }
         }
-
         // removing the virtual node
         virtualNode.delete()
-
 
       } else{
         // SetRelationshipProperty

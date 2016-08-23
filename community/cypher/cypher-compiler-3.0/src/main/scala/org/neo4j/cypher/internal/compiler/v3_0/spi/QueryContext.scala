@@ -62,11 +62,11 @@ trait QueryContext extends TokenContext {
 
   def createRelationship(start: Node, end: Node, relType: String,real: java.lang.Boolean): Relationship
 
-  //def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship
+  def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship
 
   def createRelationship(start: Long, end: Long, relType: Int, real: java.lang.Boolean): Relationship
 
-  //def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship
+  def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship
 
   def getOrCreateRelTypeId(relTypeName: String): Int
 

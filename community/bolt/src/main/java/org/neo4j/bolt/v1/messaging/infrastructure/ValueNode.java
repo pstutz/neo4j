@@ -209,11 +209,6 @@ public class ValueNode
     }
 
     @Override
-    public boolean isVirtual() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
     public Iterable<RelationshipType> getRelationshipTypes()
     {
         throw new UnsupportedOperationException();

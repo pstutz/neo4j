@@ -258,11 +258,11 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
 
   //override def createVirtualNode(): Node = translateException(inner.createVirtualNode())
 
-  //override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
-  //  translateException(inner.createVirtualRelationship(start,end,relType))
+  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
+    translateException(inner.createVirtualRelationship(start,end,relType))
 
-  //override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
-  //  translateException(inner.createVirtualRelationship(start,end,relType))
+  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
+    translateException(inner.createVirtualRelationship(start,end,relType))
 
   //override def getVirtualNodesForLabel(label: String): Iterable[Node] = translateException(inner.getVirtualNodesForLabel(label))
 }

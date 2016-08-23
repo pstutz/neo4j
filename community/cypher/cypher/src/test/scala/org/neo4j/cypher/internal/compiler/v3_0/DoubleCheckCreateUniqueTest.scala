@@ -190,5 +190,4 @@ class PausingNode(n: Node, afterGetRelationship: Node => Unit) extends Node {
     n.createVirtualRelationshipTo(otherNode, `type`)
   }
 
-  override def isVirtual: Boolean = ???
 }
