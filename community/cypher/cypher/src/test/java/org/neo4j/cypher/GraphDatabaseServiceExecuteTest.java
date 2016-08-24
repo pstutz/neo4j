@@ -317,6 +317,22 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
+    public void allNodesScanShouldWorkAsIntended(){
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
+            graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n)");
+
+            Result r = graphDb.execute("MATCH (n)-[t]-(m) RETURN t.test, id(t), id(n), id(m)");
+            assertEquals("{id(n)=-2, id(m)=-2, id(t)=-2, t.test=true}",r.next().toString());
+
+            r = graphDb.execute("MATCH (n)-[t]-(m) WHERE exists(t.test) RETURN t.test, id(t), id(n), id(m)");
+            assertEquals("{id(n)=-2, id(m)=-2, id(t)=-2, t.test=true}",r.next().toString());
+        }
+    }
+
+    @Test
     public void mergeShouldWorkAsIntended() throws Exception
     {
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();

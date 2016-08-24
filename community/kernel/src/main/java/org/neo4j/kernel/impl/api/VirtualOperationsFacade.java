@@ -1839,7 +1839,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     // HELPER FUNCTIONS
 
     private boolean isVirtual(long entityId){
-        return entityId<0;
+        return entityId<-1;
     }
 
     private Set<Long> virtualRelationshipIds(){
