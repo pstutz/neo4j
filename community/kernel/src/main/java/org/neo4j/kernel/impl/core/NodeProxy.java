@@ -536,7 +536,7 @@ public class NodeProxy
         catch ( EntityNotFoundException e )
         {
             throw new NotFoundException( "Node[" + e.entityId() +
-                                             "] is deleted and cannot be used to create a relationship" );
+                                             "] is deleted or virtual and cannot be used to create a relationship" );
         }
         catch ( InvalidTransactionTypeKernelException e )
         {

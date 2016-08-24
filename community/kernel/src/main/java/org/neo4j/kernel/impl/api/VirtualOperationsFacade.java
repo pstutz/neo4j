@@ -1112,7 +1112,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // not found, need to create
         int newId;
         if(virtualLabels().size()==0){
-            newId = -1;
+            newId = -2;
         } else{
             newId = virtualLabels.get(authenticate()).firstKey()-1;
         }
@@ -1136,7 +1136,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // not found, need to create
         int newId;
         if(virtualPropertyKeyIds().size()==0){
-            newId = -1;
+            newId = -2;
         } else{
             newId = virtualPropertyKeyIdsToName.get(authenticate()).firstKey()-1;
         }
@@ -1160,7 +1160,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // not found, need to create
         int newId;
         if(virtualRelationshipTypeIdToName.get(authenticate()).size()==0){
-            newId = -1;
+            newId = -2;
         } else{
             newId = virtualRelationshipTypeIdToName.get(authenticate()).firstKey()-1;
         }
@@ -1203,7 +1203,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         statement.assertOpen();
         long new_id;
         if(virtualNodeIds.get(authenticate()).size()==0){
-            new_id = -1;
+            new_id = -2;
         } else {
             long smallest = virtualNodeIds.get(authenticate()).first();
             new_id = smallest - 1;
@@ -1232,9 +1232,9 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     @Override
     public long relationshipCreate(int relationshipTypeId, long startNodeId, long endNodeId) throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException {
-        if(isVirtual(startNodeId)||isVirtual(endNodeId)){
-            // real rel between vNode and ?
-        }
+        //if(isVirtual(startNodeId)||isVirtual(endNodeId)){
+        //    // real rel between vNode and ?
+        //}
 
         if(isVirtual(startNodeId)){
             throw new EntityNotFoundException(EntityType.NODE,startNodeId);
@@ -1256,7 +1256,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             // create a new relId
             long newId;
             if(virtualRelationshipIdToTypeId.get(authenticate()).size()==0) {
-                newId =-1;
+                newId =-2;
             } else {
                 newId = virtualRelationshipIdToTypeId.get(authenticate()).firstKey() - 1;
             }

@@ -24,8 +24,6 @@ import org.neo4j.graphdb.*;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
-import java.util.Iterator;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -83,7 +81,7 @@ public class GraphDatabaseServiceExecuteTest
         try ( Transaction tx = graphDb.beginTx() )
         {
             Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\", bar:\"baz\"}) RETURN id(n)" );
-            assertEquals("{id(n)=-1}",r.next().toString());
+            assertEquals("{id(n)=-2}",r.next().toString());
 
             r = graphDb.execute("MATCH (n:Foo) RETURN n.bar, COUNT(n)");
             assertEquals("The created node should return if matched","{n.bar=baz, COUNT(n)=1}",
@@ -157,7 +155,7 @@ public class GraphDatabaseServiceExecuteTest
             Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
                     "(m:Bar{virtual:\"baz\"}) RETURN id(t), id(n), id(m)" );
 
-            assertEquals("{id(n)=-1, id(m)=-2, id(t)=-1}",r.next().toString());
+            assertEquals("{id(n)=-2, id(m)=-3, id(t)=-2}",r.next().toString());
 
             after = Iterables.count( graphDb.getAllRelationships());
 
@@ -190,14 +188,14 @@ public class GraphDatabaseServiceExecuteTest
             Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
                     "(m:Bar{virtual:\"baz\"}) RETURN id(t)" );
 
-            assertEquals("{id(t)=-1}",r.next().toString());
+            assertEquals("{id(t)=-2}",r.next().toString());
 
             r = graphDb.execute("MATCH (:Foo)-[t]->(:Bar) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
 
             r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})<-[t:TEST{virtual:\"baz\"}]-" +
                     "(m:Bar{bar:\"baz\"}) RETURN id(t)" );
-            assertEquals("{id(t)=-2}",r.next().toString());
+            assertEquals("{id(t)=-3}",r.next().toString());
 
             r = graphDb.execute("MATCH (:Foo)<-[t:TEST]-(:Bar) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
@@ -209,7 +207,7 @@ public class GraphDatabaseServiceExecuteTest
 
             r = graphDb.execute( "CREATE (n:A{bar:\"baz\"})<-[t:TEST{virtual:\"baz\"}]-" +
                     "(m:B{bar:\"baz\"}) RETURN id(t)" );
-            assertEquals("{id(t)=-3}",r.next().toString());
+            assertEquals("{id(t)=-4}",r.next().toString());
             r = graphDb.execute("MATCH (:A)<-[t:TEST]-(:B) RETURN COUNT(t)");
             assertEquals("The query should return one matching (virtual) relationship","{COUNT(t)=1}",r.next().toString());
 
@@ -238,7 +236,7 @@ public class GraphDatabaseServiceExecuteTest
             Result r = graphDb.execute( "CREATE (n:Foo{virtual:\"baz\"})-[t:TEST{virtual:\"baz\"}]->" +
                     "(m:Bar{virtual:\"baz\"}) RETURN n.virtual, id(n), t.virtual, id(t), m.virtual, id(m)" );
 
-            assertEquals("{id(n)=-1, id(m)=-2, id(t)=-1, t.virtual=null, m.virtual=null, n.virtual=null}",
+            assertEquals("{id(n)=-2, id(m)=-3, id(t)=-2, t.virtual=null, m.virtual=null, n.virtual=null}",
                     r.next().toString());
 
             tx.success();
@@ -258,7 +256,7 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -1.",e.getMessage());
+                assertEquals("Unable to load NODE with id -2.",e.getMessage());
                 graphDb.execute("MATCH (n) DETACH DELETE n");
             }
             try {
@@ -268,7 +266,7 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -1.",e.getMessage());
+                assertEquals("Unable to load NODE with id -2.",e.getMessage());
                 graphDb.execute("MATCH (n) DETACH DELETE n");
             }
             try {
@@ -278,30 +276,39 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -1.",e.getMessage());
+                assertEquals("Unable to load NODE with id -2.",e.getMessage());
                 graphDb.execute("MATCH (n) DETACH DELETE n");
             }
 
+            tx.failure();
+        }
+    }
+
+
+    @Test
+    public void realisingVirtualRelShouldOnlyWorkIfItIsOnlyConnectedToRealNodes(){
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() )
+        {
             graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
             graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n)");
 
+            // trying to realise a virtual relationship connected to any virtual node should fail
             try{
                 graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET t.virtual = false");
                 fail();
-            }catch (IllegalStateException e){
-                assertEquals("No entity id specified for this exception",e.getMessage());
+            }catch (NotFoundException e){
+                // it did fail! Good :-)
+                assertEquals("Node[-2] is deleted or virtual and cannot be used to create a relationship",e.getMessage());
             }
-            System.out.println(Iterables.count(graphDb.getAllNodes()));
-            Iterator<Node> it =graphDb.getAllNodes().iterator();
-            while(it.hasNext()){
-                Node n = it.next();
-                System.out.println(n.getId());
-                System.out.println(n.getLabels().iterator().next());
-            }
+            assertEquals(1,Iterables.count(graphDb.getAllNodes()));
 
+            // change the virtual node to a real one
             Result r = graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET n.virtual = false RETURN id(n), id(t)");
-            assertEquals("{id(n)=0, id(t)=-1}",r.next().toString());
+            assertEquals(1,Iterables.count(graphDb.getAllNodes()));
+            assertEquals("{id(n)=0, id(t)=-2}",r.next().toString());
 
+            // trying to realise a virtual relationship connected to only real nodes should  work
             r = graphDb.execute("MATCH (n:Foo)-[t:TEST]->(n) SET t.virtual = false RETURN id(n), id(t)");
             assertEquals("{id(n)=0, id(t)=0}",r.next().toString());
 
@@ -321,10 +328,10 @@ public class GraphDatabaseServiceExecuteTest
             Result r = graphDb.execute("MERGE (n:Foo) ON MATCH SET n.virtual=false RETURN labels(n), id(n), n.test");
             assertEquals("{id(n)=0, labels(n)=[Foo], n.test=true}",r.next().toString());
 
-            System.out.println(Iterables.count(graphDb.getAllNodes()));
+            assertEquals(1,Iterables.count(graphDb.getAllNodes()));
 
             r= graphDb.execute("MATCH (n:Foo) CREATE (n)-[t:TEST{virtual:\"baz\", test:true}]->(n) RETURN id(n), id(t)");
-            assertEquals("{id(n)=0, id(t)=-1}",r.next().toString());
+            assertEquals("{id(n)=0, id(t)=-2}",r.next().toString());
             r = graphDb.execute("MERGE (n:Foo)-[t:TEST]->(n) ON MATCH SET t.virtual=false RETURN type(t), id(t), t.test");
             assertEquals("{id(t)=0, type(t)=TEST, t.test=true}",r.next().toString());
 

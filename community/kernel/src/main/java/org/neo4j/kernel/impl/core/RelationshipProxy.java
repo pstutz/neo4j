@@ -65,7 +65,7 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
     private long startNode = AbstractBaseRecord.NO_ID;
     private long endNode = AbstractBaseRecord.NO_ID;
     private int type;
-    private boolean isSet=false; // this looks stupid but does not work without. Would like to know why ...
+    //private boolean isSet=false; // this looks stupid but does not work without. Would like to know why ...
 
     public RelationshipProxy( RelationshipActions actions, long id, long startNode, int type, long endNode )
     {
@@ -83,14 +83,14 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
     @Override
     public void visit( long id, int type, long startNode, long endNode ) throws RuntimeException
     {
-        if(isSet){}
-        else {
+        //if(isSet){}
+        //else {
             this.id = id;
             this.type = type;
             this.startNode = startNode;
             this.endNode = endNode;
-            isSet = true;
-        }
+          //  isSet = true;
+        //}
     }
 
     private void initializeData()
