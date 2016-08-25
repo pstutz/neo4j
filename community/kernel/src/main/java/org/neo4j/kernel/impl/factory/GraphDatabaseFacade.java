@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.factory;
 
 import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
+import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.event.KernelEventHandler;
 import org.neo4j.graphdb.event.TransactionEventHandler;
@@ -62,6 +63,7 @@ import org.neo4j.kernel.impl.traversal.BidirectionalTraversalDescriptionImpl;
 import org.neo4j.kernel.impl.traversal.MonoDirectionalTraversalDescription;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.EntityType;
+import org.neo4j.storageengine.api.RelationshipItem;
 
 import java.io.File;
 import java.net.URL;
@@ -279,11 +281,21 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         {
             try
             {
-                RelationshipProxy relationship = new RelationshipProxy( relActions, id );
                 if(id>=0) {
+                    RelationshipProxy relationship = new RelationshipProxy( relActions, id );
                     statement.readOperations().relationshipVisit(id, relationship);
+                    return relationship;
+                } else{
+                    Cursor<RelationshipItem> cursor = statement.readOperations().relationshipCursor(id);
+                    cursor.next();
+                    RelationshipItem item = cursor.get();
+                    long startNode = item.startNode();
+                    long endNode = item.endNode();
+                    int type = item.type();
+                    RelationshipProxy relationship = new RelationshipProxy( relActions, id,startNode,type,endNode );
+                    return relationship;
                 }
-                return relationship;
+
             }
             catch ( EntityNotFoundException e )
             {

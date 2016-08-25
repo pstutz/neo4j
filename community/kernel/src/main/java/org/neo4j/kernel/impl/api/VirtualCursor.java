@@ -11,11 +11,15 @@ import java.util.Iterator;
 public class VirtualCursor<RelationshipItem> implements Cursor<RelationshipItem> {
     // TODO: Tests
     private Iterator<RelationshipItem> iterator;
+    //private RelationshipIterator relationshipIterator;
     private RelationshipItem current;
+    //private OperationsFacade facade;
 
-    public VirtualCursor(Collection<RelationshipItem> collection){
+    public VirtualCursor(Collection<RelationshipItem> collection){//, RelationshipIterator realIt, OperationsFacade facade){
         iterator = collection.iterator();
         current = null;
+        //this.relationshipIterator = realIt;
+        //this.facade = facade;
     }
 
     @Override
@@ -24,6 +28,9 @@ public class VirtualCursor<RelationshipItem> implements Cursor<RelationshipItem>
             current = iterator.next();
             return true;
         }
+        //if(relationshipIterator.hasNext()){
+        //    current = new VirtualRelationshipItem(relationshipIterator.next();
+        //}
         current = null;
         return false;
     }

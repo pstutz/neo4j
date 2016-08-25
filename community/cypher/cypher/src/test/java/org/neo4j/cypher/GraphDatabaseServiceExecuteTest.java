@@ -356,4 +356,33 @@ public class GraphDatabaseServiceExecuteTest
             tx.success();
         }
     }
+
+    @Test
+    public void complexExample(){
+
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() ) {
+            // setup
+            Result r = graphDb.execute("CREATE ( : Person {name:'Tim', sex : 'm' }) –[a:married{since:'01.01.1970'}]–> " +
+                    "( : Person {name:'Tina', sex : 'f' })" +
+                    " CREATE ( : Person {name:'Bob', sex : 'm' }) –[b:married{since:'01.02.2016'}]–> " +
+                    "( : Person {name:'Heidi', sex : 'f' })" +
+                    " CREATE ( : Person {name:'Peter', sex : 'm' }) –[c:married{since:'10.10.2011'}]–> " +
+                    "( : Person {name:'Franzi', sex : 'f' }) RETURN id(a), id(b), id(c)");
+
+            assertEquals("{id(a)=0, id(c)=2, id(b)=1}",r.next().toString());
+
+            assertEquals(6,Iterables.count(graphDb.getAllNodes()));
+
+            r = graphDb.execute("MATCH (h : Person { sex : 'm' }) –[ma : married]– (w : Person { sex : 'f' }) " +
+                    "WITH h, w, ma.since AS d " +
+                    "CREATE (h) –[hu : husband{virtual:\"baz\"}]-> (m : Marriage {virtual:\"baz\", since : d } ) " +
+                    "<-[wi : wife{virtual:\"baz\"}]- (w) " +
+                    "RETURN h, hu, m, wi, w");
+            System.out.println(r.next().toString());
+            System.out.println(r.next().toString());
+            System.out.println(r.next().toString());
+            tx.success();
+        }
+    }
 }

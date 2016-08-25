@@ -350,13 +350,30 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO SASCHA
         Set<RelationshipItem> foundItems = new HashSet<>();
-
+        RelationshipIterator realIt = null;
         // get the real ones
         if(!isVirtual(nodeId)) {
-            RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
+            realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
+
+
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
-                foundItems.add(super.relationshipCursor(rId).get());
+                //if(nodeId==1) {
+                //    //System.out.println(relationshipCursor(rId).get().id());
+                //    System.out.println(super.relationshipCursor(rId).get().id());
+                //    System.out.println(super.relationshipCursor(rId).get().id());
+                //}
+                //super.relationshipCursor(rId).get().id(); // because...
+                Cursor<RelationshipItem> cursor = super.relationshipCursorGetAll();
+                while(cursor.next()){
+                    RelationshipItem i = cursor.get();
+                    if(i.id()==rId){
+                        foundItems.add(i);
+                        break;
+                    }
+                }
+
+                //foundItems.add(super.relationshipCursor(rId).get());
             }
         }
 
@@ -393,7 +410,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 }
             }
         }
-        VirtualCursor<RelationshipItem> cursor = new VirtualCursor<>(foundItems);
+        VirtualCursor<RelationshipItem> cursor = new VirtualCursor<>(foundItems);//, realIt, this);
         return new CursorRelationshipIterator(cursor);
         //return new MergingRelationshipIterator(null, new MergingPrimitiveLongIterator(null, foundIds));
     }
@@ -680,9 +697,18 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public Cursor<RelationshipItem> relationshipCursor( long relId )
     {
-        //TODO: Finish this
+        //TODO: Test this more
+        VirtualRelationshipItem[] array = new VirtualRelationshipItem[1];
+
         if(isVirtual(relId)){
-            return null; //MyStubCursors.asRelationship() ...
+
+            long startNode = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId)[0];
+            long endNode = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId)[1];
+            int type = virtualRelationshipIdToTypeId.get(authenticate()).get(relId);
+            VirtualRelationshipItem v = new VirtualRelationshipItem(startNode,endNode,type,relId);
+            array[0] = v;
+
+            return Cursors.cursor(array); 
         }
         return super.relationshipCursor(relId);
     }
@@ -717,9 +743,9 @@ public class VirtualOperationsFacade extends OperationsFacade
         long[] array = ArrayUtils.toPrimitive((Long[])list.toArray()); // TODO: Test this !!!
         //return MyStubCursors.asRelationshipCursor(array); // won't work
 
-        // TODO: finish this
+        // TODO: SASCHA, finish this
         // Need an array of RelationshipItems
-        Cursors.cursor();
+        //return Cursors.cursor(array);
 
         // TODO !
         return super.relationshipCursorGetAll();

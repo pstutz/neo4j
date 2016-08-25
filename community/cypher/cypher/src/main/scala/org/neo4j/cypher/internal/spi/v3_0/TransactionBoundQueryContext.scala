@@ -52,7 +52,7 @@ import org.neo4j.kernel.api.constraints.{NodePropertyExistenceConstraint, Relati
 import org.neo4j.kernel.api.exceptions.ProcedureException
 import org.neo4j.kernel.api.exceptions.schema.{AlreadyConstrainedException, AlreadyIndexedException}
 import org.neo4j.kernel.api.index.{IndexDescriptor, InternalIndexState}
-import org.neo4j.kernel.impl.core.NodeManager
+import org.neo4j.kernel.impl.core.{NodeManager, RelationshipProxy}
 import org.neo4j.kernel.impl.locking.ResourceTypes
 
 import scala.collection.Iterator
@@ -115,7 +115,12 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
       //TODO SASCHA
       transactionalContext.statement.readOperations().virtualRelationshipCreate(relType, start, end)
     }
-    relationshipOps.getById(relId)
+
+    //if(real) {
+      relationshipOps.getById(relId)
+    //} else{
+    //  new RelationshipProxy(relId)
+    //}
   }
 
   override def getOrCreateRelTypeId(relTypeName: String): Int =
