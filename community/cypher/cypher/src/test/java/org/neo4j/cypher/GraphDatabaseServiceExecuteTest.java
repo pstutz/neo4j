@@ -25,6 +25,7 @@ import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.fail;
 
 public class GraphDatabaseServiceExecuteTest
@@ -379,9 +380,13 @@ public class GraphDatabaseServiceExecuteTest
                     "CREATE (h) –[hu : husband{virtual:\"baz\"}]-> (m : Marriage {virtual:\"baz\", since : d } ) " +
                     "<-[wi : wife{virtual:\"baz\"}]- (w) " +
                     "RETURN h, hu, m, wi, w");
-            System.out.println(r.next().toString());
-            System.out.println(r.next().toString());
-            System.out.println(r.next().toString());
+            assertEquals("{wi=(1)-[wife,-3]->(-2), m=Node[-2], h=Node[0], w=Node[1], hu=(0)-[husband,-2]->(-2)}",
+                    r.next().toString());
+            assertEquals("{wi=(3)-[wife,-5]->(-3), m=Node[-3], h=Node[2], w=Node[3], hu=(2)-[husband,-4]->(-3)}",
+                    r.next().toString());
+            assertEquals("{wi=(5)-[wife,-7]->(-4), m=Node[-4], h=Node[4], w=Node[5], hu=(4)-[husband,-6]->(-4)}",
+                    r.next().toString());
+            assertFalse(r.hasNext());
             tx.success();
         }
     }

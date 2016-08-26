@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.neo4j.collection.RawIterator;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
@@ -388,19 +387,19 @@ public class VirtualOperationsFacade extends OperationsFacade
                         case INCOMING:
                             if (nodeIds[1].equals(nodeId)) {
                                 foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
-                                        virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                                        virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId, this));
                             }
                             break;
                         case OUTGOING:
                             if (nodeIds[0].equals(nodeId)) {
                                 foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
-                                        virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                                        virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId, this));
                             }
                             break;
                         case BOTH:
                             if (nodeIds[0].equals(nodeId) || nodeIds[1].equals(nodeId)) {
                                 foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
-                                        virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId));
+                                        virtualRelationshipIdToTypeId.get(authenticate()).get(relId),relId, this));
                             }
                             break;
                         default:
@@ -441,21 +440,21 @@ public class VirtualOperationsFacade extends OperationsFacade
                     if (nodeIds[1].equals(nodeId)) {
                         int type = virtualRelationshipIdToTypeId.get(authenticate()).get(relId);
                         foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
-                                type,relId));
+                                type,relId, this));
                     }
                     break;
                 case OUTGOING:
                     if (nodeIds[0].equals(nodeId)) {
                         int type = virtualRelationshipIdToTypeId.get(authenticate()).get(relId);
                         foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
-                                type,relId));
+                                type,relId, this));
                     }
                     break;
                 case BOTH:
                     if (nodeIds[0].equals(nodeId) || nodeIds[1].equals(nodeId)) {
                         int type = virtualRelationshipIdToTypeId.get(authenticate()).get(relId);
                         foundItems.add(new VirtualRelationshipItem(nodeIds[0],nodeIds[1],
-                                type,relId));
+                                type,relId, this));
                     }
                     break;
                 default:
@@ -656,16 +655,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         } else{
             super.relationshipVisit(relId,visitor);
         }
-
-        /*
-        // TODO Please don't create a record for this, it's ridiculous
-        RelationshipRecord record = relationshipStore.newRecord();
-        if ( !relationshipStore.getRecord( relationshipId, record, FORCE ).inUse() )
-        {
-            throw new EntityNotFoundException( EntityType.RELATIONSHIP, relationshipId );
-        }
-        relationshipVisitor.visit( relationshipId, record.getType(), record.getFirstNode(), record.getSecondNode() );
-         */
+        
     }
 
     @Override
@@ -687,9 +677,9 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Cursor<NodeItem> nodeCursor( long nodeId )
     {
         // TODO: Test this
-        if(isVirtual(nodeId)) {
-            statement.assertOpen(); // from super
-            return MyStubCursors.asNodeCursor(nodeId); // this might not be a good solution?
+        if(isVirtual(nodeId)){
+            VirtualNodeItem v = new VirtualNodeItem(nodeId, this);
+            return Cursors.cursor(v);
         }
         return super.nodeCursor(nodeId);
     }
@@ -698,17 +688,13 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Cursor<RelationshipItem> relationshipCursor( long relId )
     {
         //TODO: Test this more
-        VirtualRelationshipItem[] array = new VirtualRelationshipItem[1];
-
         if(isVirtual(relId)){
-
             long startNode = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId)[0];
             long endNode = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId)[1];
             int type = virtualRelationshipIdToTypeId.get(authenticate()).get(relId);
-            VirtualRelationshipItem v = new VirtualRelationshipItem(startNode,endNode,type,relId);
-            array[0] = v;
+            VirtualRelationshipItem v = new VirtualRelationshipItem(startNode,endNode,type,relId, this);
 
-            return Cursors.cursor(array); 
+            return Cursors.cursor(v);
         }
         return super.relationshipCursor(relId);
     }
@@ -716,46 +702,68 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public Cursor<NodeItem> nodeCursorGetAll()
     {
-        // take the normal cursor and add to it the virtual nodes
+        // TODO: Test this
         statement.assertOpen(); // from super
-        ArrayList<Long> list = new ArrayList<>();
-        PrimitiveLongIterator it = nodesGetAll();
-        while(it.hasNext()){
-            long l = it.next();
-            list.add(l);
+        Cursor<NodeItem> realCursor = super.nodeCursorGetAll();
+        ArrayList<NodeItem> itemList = new ArrayList<>();
+        while(realCursor.next()){
+            NodeItem item = realCursor.get();
+            itemList.add(item);
         }
-        long[] array = ArrayUtils.toPrimitive((Long[])list.toArray()); // TODO: Test this !!!
-        return MyStubCursors.asNodeCursor(array);
 
-        // this might not be a good solution
+        // getting virtual ids and making them to VirtualNodeItems
+        Set<Long> virtualNodes = virtualNodeIds.get(authenticate());
+        for(Long l:virtualNodes){
+            itemList.add(nodeCursor(l).get());
+        }
+
+        //NodeItem[] array = itemList.toArray(new NodeItem[itemList.size()]);
+        return Cursors.cursor(itemList);
     }
 
     @Override
     public Cursor<RelationshipItem> relationshipCursorGetAll()
     {
+        // TODO: Test this
         statement.assertOpen(); // from super
-        ArrayList<Long> list = new ArrayList<>();
-        PrimitiveLongIterator it = relationshipsGetAll();
-        while(it.hasNext()){
-            long l = it.next();
-            list.add(l);
+        Cursor<RelationshipItem> realCursor = super.relationshipCursorGetAll();
+        ArrayList<RelationshipItem> itemList = new ArrayList<>();
+        while(realCursor.next()){
+            RelationshipItem item = realCursor.get();
+            itemList.add(item);
         }
-        long[] array = ArrayUtils.toPrimitive((Long[])list.toArray()); // TODO: Test this !!!
-        //return MyStubCursors.asRelationshipCursor(array); // won't work
 
-        // TODO: SASCHA, finish this
-        // Need an array of RelationshipItems
-        //return Cursors.cursor(array);
+        // getting virtual ids and making them to VirtualNodeItems
+        Set<Long> virtualRels = virtualRelationshipIds();
+        for(Long l:virtualRels){
+            RelationshipItem item = relationshipCursor(l).get();
+            itemList.add(item);
+        }
 
-        // TODO !
-        return super.relationshipCursorGetAll();
+        return Cursors.cursor(itemList);
     }
 
     @Override
     public Cursor<NodeItem> nodeCursorGetForLabel( int labelId )
     {
-        // TODO !
-        return super.nodeCursorGetForLabel(labelId);
+        // getting the real ones
+        Cursor<NodeItem> realCursor = super.nodeCursorGetForLabel(labelId);
+        ArrayList<NodeItem> itemList = new ArrayList<>();
+        while(realCursor.next()){
+            NodeItem item = realCursor.get();
+            itemList.add(item);
+        }
+
+        // adding the virtual ones to the mix
+        Set<Long> virtualNodes = virtualNodeIds.get(authenticate());
+        Map<Long,Set<Integer>> idToLabel = virtualNodeIdToLabelIds.get(authenticate());
+        for(Long l:virtualNodes){
+            if(idToLabel.get(l).contains(labelId)) {
+                itemList.add(nodeCursor(l).get());
+            }
+        }
+
+        return Cursors.cursor(itemList);
     }
 
     @Override
