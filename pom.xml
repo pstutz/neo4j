@@ -302,9 +302,9 @@
         </property>
       </activation>
       <modules>
-        <module>manual</module> <!--TODO: Sascha   -->
+        <!-- <module>manual</module> --> <!--TODO: Sascha   -->
         <module>packaging</module>
-        <module>packaging/installer-linux</module>
+       <!-- <module>packaging/installer-linux</module> -->
       </modules>
       <build>
         <plugins>

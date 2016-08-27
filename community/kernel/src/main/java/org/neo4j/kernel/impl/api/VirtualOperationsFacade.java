@@ -655,7 +655,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         } else{
             super.relationshipVisit(relId,visitor);
         }
-        
+
     }
 
     @Override

@@ -40,13 +40,13 @@
     <dependency>
       <groupId>org.neo4j.doc</groupId>
       <artifactId>neo4j-manual</artifactId>
-      <version>${neo4j.version}</version>
+      <version>3.0-SNAPSHOT</version> <!-- ! -->
       <classifier>manpages</classifier>
     </dependency>
     <dependency>
       <groupId>org.neo4j.doc</groupId>
       <artifactId>neo4j-manual</artifactId>
-      <version>${neo4j.version}</version>
+      <version>3.0-SNAPSHOT</version>
       <classifier>manpagesenterprise</classifier>
     </dependency>
   </dependencies>
@@ -89,7 +89,7 @@
                 <artifactItem>
                  <groupId>org.neo4j.doc</groupId>
                  <artifactId>neo4j-manual</artifactId>
-                 <version>${neo4j.version}</version>
+                 <version>3.0-SNAPSHOT</version>
                  <classifier>manpagesenterprise</classifier>
                  <type>jar</type>
                  <outputDirectory>${project.build.directory}/manpages</outputDirectory>
