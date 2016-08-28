@@ -4,8 +4,10 @@ import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
+import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.storageengine.api.*;
 
+import java.util.ArrayList;
 import java.util.function.IntSupplier;
 
 /**
@@ -34,17 +36,77 @@ public class VirtualNodeItem implements NodeItem{
 
     @Override
     public Cursor<LabelItem> label(int labelId) {
+        // seems wrong, but...
+        try {
+            if(ops.nodeHasLabel(id,labelId)){
+                return Cursors.cursor(new VirtualLabelItem(labelId));
+            }
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
     @Override
     public Cursor<RelationshipItem> relationships(Direction direction, int... typeIds) {
-        return null;
+        ArrayList<RelationshipItem> array = new ArrayList<>();
+        try {
+            RelationshipIterator it;
+            switch (direction) {
+                case OUTGOING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.OUTGOING, typeIds);
+                    break;
+                case INCOMING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.INCOMING, typeIds);
+                    break;
+                case BOTH:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.BOTH, typeIds);
+                    break;
+                default:
+                    throw new IllegalStateException("An unknown relationship direction is provided. How?!");
+            }
+
+            while(it.hasNext()){
+                long key = it.next();
+                Cursor<RelationshipItem> oneCursor = ops.relationshipCursor(key);
+                array.add(oneCursor.get());
+            }
+
+        } catch (EntityNotFoundException e) {
+                e.printStackTrace();
+        }
+        return Cursors.cursor(array);
     }
 
     @Override
     public Cursor<RelationshipItem> relationships(Direction direction) {
-        return null;
+        ArrayList<RelationshipItem> array = new ArrayList<>();
+        try {
+            RelationshipIterator it;
+            switch (direction) {
+                case OUTGOING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.OUTGOING);
+                    break;
+                case INCOMING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.INCOMING);
+                    break;
+                case BOTH:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.BOTH);
+                    break;
+                default:
+                    throw new IllegalStateException("An unknown relationship direction is provided. How?!");
+            }
+
+            while(it.hasNext()){
+                long key = it.next();
+                Cursor<RelationshipItem> oneCursor = ops.relationshipCursor(key);
+                array.add(oneCursor.get());
+            }
+
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
+        return Cursors.cursor(array);
     }
 
     @Override
@@ -104,26 +166,63 @@ public class VirtualNodeItem implements NodeItem{
 
     @Override
     public Cursor<PropertyItem> properties() {
-        return null;
+        //TODO: Needs testing
+        ArrayList<PropertyItem> array = new ArrayList<PropertyItem>();
+
+        try {
+            PrimitiveIntIterator it = ops.nodeGetPropertyKeys(id);
+            while(it.hasNext()){
+                int key = it.next();
+                Object value = ops.nodeGetProperty(id,key);
+                array.add(new VirtualPropertyItem(key,value));
+            }
+
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        return Cursors.cursor(array);
     }
 
     @Override
     public Cursor<PropertyItem> property(int propertyKeyId) {
-        return null;
+        Object value = null;
+        try {
+            value = ops.nodeGetProperty(id,propertyKeyId);
+            return Cursors.cursor(new VirtualPropertyItem(propertyKeyId,value));
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     @Override
     public boolean hasProperty(int propertyKeyId) {
-        return false;
+        try {
+            return ops.nodeHasProperty(id,propertyKeyId);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     @Override
     public Object getProperty(int propertyKeyId) {
-        return null;
+        try {
+            return ops.nodeGetProperty(id,propertyKeyId);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     @Override
     public PrimitiveIntIterator getPropertyKeys() {
-        return null;
+        try {
+            return ops.nodeGetPropertyKeys(id);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 }

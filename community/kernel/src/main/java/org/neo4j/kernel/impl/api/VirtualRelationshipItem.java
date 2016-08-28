@@ -1,10 +1,13 @@
 package org.neo4j.kernel.impl.api;
 
-import org.apache.commons.lang3.NotImplementedException;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.cursor.Cursor;
+import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
+import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.storageengine.api.PropertyItem;
 import org.neo4j.storageengine.api.RelationshipItem;
+
+import java.util.ArrayList;
 
 /**
  * Created by Sascha Peukert on 20.08.2016.
@@ -56,31 +59,64 @@ public class VirtualRelationshipItem implements RelationshipItem {
 
     @Override
     public Cursor<PropertyItem> properties() {
-        throw new NotImplementedException("This should not be called");
-        //return null;
+        //TODO: Needs testing
+        ArrayList<PropertyItem> array = new ArrayList<PropertyItem>();
+
+        try {
+            PrimitiveIntIterator it = ops.relationshipGetPropertyKeys(id);
+            while(it.hasNext()){
+                int key = it.next();
+                Object value = ops.relationshipGetProperty(id,key);
+                array.add(new VirtualPropertyItem(key,value));
+            }
+
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        return Cursors.cursor(array);
+
     }
 
     @Override
     public Cursor<PropertyItem> property(int propertyKeyId) {
-        throw new NotImplementedException("This should not be called");
-        //return null;
+        Object value = null;
+        try {
+            value = ops.relationshipGetProperty(id,propertyKeyId);
+            return Cursors.cursor(new VirtualPropertyItem(propertyKeyId,value));
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     @Override
     public boolean hasProperty(int propertyKeyId) {
-        throw new NotImplementedException("This should not be called");
-        //return false;
+        try {
+            return ops.relationshipHasProperty(id,propertyKeyId);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     @Override
     public Object getProperty(int propertyKeyId) {
-        throw new NotImplementedException("This should not be called");
-        //return null;
+        try {
+            return ops.relationshipGetProperty(id,propertyKeyId);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     @Override
     public PrimitiveIntIterator getPropertyKeys() {
-        throw new NotImplementedException("This should not be called");
-        //return null;
+        try {
+            return ops.relationshipGetPropertyKeys(id);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 }
