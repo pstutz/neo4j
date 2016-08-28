@@ -116,7 +116,7 @@ public class VirtualRelationshipItem implements RelationshipItem {
             return ops.relationshipGetPropertyKeys(id);
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
-            return null;
+            return new MergingPrimitiveIntIterator(null,null);
         }
     }
 }

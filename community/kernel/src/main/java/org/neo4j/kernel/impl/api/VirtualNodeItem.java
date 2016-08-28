@@ -217,27 +217,76 @@ public class VirtualNodeItem implements NodeItem{
 
     @Override
     public boolean hasLabel(int labelId) {
+        try {
+            return ops.nodeHasLabel(id,labelId);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
         return false;
     }
 
     @Override
     public PrimitiveIntIterator getLabels() {
-        return null;
+        try {
+            return ops.nodeGetLabels(id);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
+        return new MergingPrimitiveIntIterator(null,null);
     }
 
     @Override
     public RelationshipIterator getRelationships(Direction direction, int[] typeIds) {
-        return null;
+        RelationshipIterator it = null;
+        try {
+            switch (direction){
+                case OUTGOING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.OUTGOING,typeIds);
+                    break;
+                case INCOMING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.INCOMING,typeIds);
+                    break;
+                case BOTH:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.BOTH,typeIds);
+                    break;
+                default:
+                    throw new IllegalStateException("An unknown relationship direction is provided. How?!");
+            }
+        } catch (EntityNotFoundException e) {}
+
+        return it;
     }
 
     @Override
     public RelationshipIterator getRelationships(Direction direction) {
-        return null;
+        RelationshipIterator it = null;
+        try {
+            switch (direction){
+                case OUTGOING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.OUTGOING);
+                    break;
+                case INCOMING:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.INCOMING);
+                    break;
+                case BOTH:
+                    it = ops.nodeGetRelationships(id, org.neo4j.graphdb.Direction.BOTH);
+                    break;
+                default:
+                    throw new IllegalStateException("An unknown relationship direction is provided. How?!");
+            }
+        } catch (EntityNotFoundException e) {}
+
+        return it;
     }
 
     @Override
     public PrimitiveIntIterator getRelationshipTypes() {
-        return null;
+        try {
+            return ops.nodeGetRelationshipTypes(id);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
+        return new MergingPrimitiveIntIterator(null,null);
     }
 
     @Override
@@ -303,7 +352,7 @@ public class VirtualNodeItem implements NodeItem{
             return ops.nodeGetPropertyKeys(id);
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
-            return null;
+            return new MergingPrimitiveIntIterator(null,null);
         }
     }
 }
