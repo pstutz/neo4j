@@ -25,26 +25,31 @@ public class VirtualNodeItem implements NodeItem{
 
     @Override
     public Cursor<LabelItem> labels() {
+        ArrayList<LabelItem> array = new ArrayList<>();
         try {
-            ops.nodeGetLabels(id);
-            //TODO Sascha finish this
+            PrimitiveIntIterator it = ops.nodeGetLabels(id);
+            while(it.hasNext()){
+                int id =it.next();
+                array.add(new VirtualLabelItem(id));
+            }
         } catch (EntityNotFoundException e) {
-            return null;
+            e.printStackTrace();
         }
-        return null;
+        return Cursors.cursor(array);
     }
 
     @Override
     public Cursor<LabelItem> label(int labelId) {
         // seems wrong, but...
+        ArrayList<LabelItem> array = new ArrayList<>();
         try {
             if(ops.nodeHasLabel(id,labelId)){
-                return Cursors.cursor(new VirtualLabelItem(labelId));
+                array.add(new VirtualLabelItem(labelId));
             }
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
         }
-        return null;
+        return Cursors.cursor(array);
     }
 
     @Override
@@ -111,27 +116,103 @@ public class VirtualNodeItem implements NodeItem{
 
     @Override
     public Cursor<IntSupplier> relationshipTypes() {
-        return null;
+        ArrayList<IntSupplier> array = new ArrayList<>();
+        try {
+            PrimitiveIntIterator it = ops.nodeGetRelationshipTypes(id);
+            while(it.hasNext()){
+                int id = it.next();
+                array.add(new IntSupplier() {
+                    @Override
+                    public int getAsInt() {
+                        return id;
+                    }
+                });
+                //TODO: Test this!
+            }
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+        }
+
+        return Cursors.cursor(array);
     }
 
     @Override
     public int degree(Direction direction) {
-        return 0;
+        int degree = 0;
+        try {
+            switch (direction){
+                case OUTGOING:
+                        degree = ops.nodeGetDegree(id, org.neo4j.graphdb.Direction.OUTGOING);
+                    break;
+                case INCOMING:
+                    degree = ops.nodeGetDegree(id, org.neo4j.graphdb.Direction.INCOMING);
+                    break;
+                case BOTH:
+                    degree = ops.nodeGetDegree(id, org.neo4j.graphdb.Direction.BOTH);
+                    break;
+                default:
+                    throw new IllegalStateException("An unknown relationship direction is provided. How?!");
+            }
+        } catch (EntityNotFoundException e) {}
+
+        return degree;
     }
 
     @Override
     public int degree(Direction direction, int typeId) {
-        return 0;
+        int degree = 0;
+        try {
+            switch (direction){
+                case OUTGOING:
+                    degree = ops.nodeGetDegree(id, org.neo4j.graphdb.Direction.OUTGOING,typeId);
+                    break;
+                case INCOMING:
+                    degree = ops.nodeGetDegree(id, org.neo4j.graphdb.Direction.INCOMING,typeId);
+                    break;
+                case BOTH:
+                    degree = ops.nodeGetDegree(id, org.neo4j.graphdb.Direction.BOTH,typeId);
+                    break;
+                default:
+                    throw new IllegalStateException("An unknown relationship direction is provided. How?!");
+            }
+        } catch (EntityNotFoundException e) {}
+
+        return degree;
     }
 
     @Override
     public boolean isDense() {
-        return false;
+        try {
+            return ops.nodeIsDense(id);
+        } catch (EntityNotFoundException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     @Override
     public Cursor<DegreeItem> degrees() {
-        return null;
+        ArrayList<DegreeItem> array = new ArrayList<>();
+
+        array.add(new DegreeItem() {
+            @Override
+            public int type() {
+                return 0;
+            }
+
+            @Override
+            public long outgoing() {
+                return 0;
+            }
+
+            @Override
+            public long incoming() {
+                return 0;
+            }
+        });
+
+        return Cursors.cursor(array);
+
     }
 
     @Override
@@ -186,14 +267,14 @@ public class VirtualNodeItem implements NodeItem{
 
     @Override
     public Cursor<PropertyItem> property(int propertyKeyId) {
-        Object value = null;
+        ArrayList<PropertyItem> array = new ArrayList<>();
         try {
-            value = ops.nodeGetProperty(id,propertyKeyId);
-            return Cursors.cursor(new VirtualPropertyItem(propertyKeyId,value));
+            Object value = ops.nodeGetProperty(id,propertyKeyId);
+            array.add(new VirtualPropertyItem(propertyKeyId,value));
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
-            return null;
         }
+        return Cursors.cursor(array);
     }
 
     @Override

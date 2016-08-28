@@ -80,14 +80,14 @@ public class VirtualRelationshipItem implements RelationshipItem {
 
     @Override
     public Cursor<PropertyItem> property(int propertyKeyId) {
-        Object value = null;
+        ArrayList<PropertyItem> array = new ArrayList<>();
         try {
-            value = ops.relationshipGetProperty(id,propertyKeyId);
-            return Cursors.cursor(new VirtualPropertyItem(propertyKeyId,value));
+            Object value = ops.relationshipGetProperty(id,propertyKeyId);
+            array.add(new VirtualPropertyItem(propertyKeyId,value));
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
-            return null;
         }
+        return Cursors.cursor(array);
     }
 
     @Override
