@@ -388,4 +388,31 @@ public class GraphDatabaseServiceExecuteTest
             tx.success();
         }
     }
+
+    @Test
+    public void matchEveryConnectedNodeShouldWork(){
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+        try ( Transaction tx = graphDb.beginTx() ) {
+            // setup
+            Result r = graphDb.execute("CREATE ( : Person {name:'Tim', sex : 'm' }) –[a:married{since:'01.01.1970'}]–> " +
+                    "( : Person {name:'Tina', sex : 'f' })" +
+                    " CREATE ( : Person {name:'Bob', sex : 'm' }) –[b:married{since:'01.02.2016'}]–> " +
+                    "( : Person {name:'Heidi', sex : 'f' })" +
+                    " CREATE ( : Person {name:'Peter', sex : 'm' }) –[c:married{since:'10.10.2011'}]–> " +
+                    "( : Person {name:'Franzi', sex : 'f' }) RETURN id(a), id(b), id(c)");
+
+            assertEquals("{id(a)=0, id(c)=2, id(b)=1}", r.next().toString());
+
+            r = graphDb.execute("MATCH (n)-[]-() RETURN n");
+            assertEquals("{n=Node[0]}",r.next().toString());
+            assertEquals("{n=Node[1]}",r.next().toString());
+            assertEquals("{n=Node[2]}",r.next().toString());
+            assertEquals("{n=Node[3]}",r.next().toString());
+            assertEquals("{n=Node[4]}",r.next().toString());
+            assertEquals("{n=Node[5]}",r.next().toString());
+            assertFalse(r.hasNext());
+            tx.success();
+        }
+
+        }
 }

@@ -428,7 +428,31 @@ public class VirtualOperationsFacade extends OperationsFacade
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
-                foundItems.add(super.relationshipCursor(rId).get());
+                Cursor<RelationshipItem> c = super.relationshipCursor(rId);
+                RelationshipItem item;
+                while(c.next()){
+                    item = c.get();
+                    // ensure that this is the right one
+                    switch (direction){
+                        case OUTGOING:
+                            if(item.startNode()!=nodeId) {
+                                continue;
+                            }
+                            break;
+                        case INCOMING:
+                            if(item.endNode()!=nodeId) {
+                                continue;
+                            }
+                            break;
+                        case BOTH:
+                            if(item.startNode()!=nodeId&&item.endNode()!=nodeId){
+                                continue;
+                            }
+                            break;
+                    }
+                    foundItems.add(item);
+                    break;
+                }
             }
         }
         Set<Long> relIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet();
