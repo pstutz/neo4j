@@ -432,6 +432,11 @@ public class NodeProxy
         {
             try
             {
+                if(key.equals("virtual")) // TODO: Change to actual key!
+                {
+                    return null;
+                }
+
                 int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
                 if ( propertyKeyId == KeyReadOperations.NO_SUCH_PROPERTY_KEY )
                 {

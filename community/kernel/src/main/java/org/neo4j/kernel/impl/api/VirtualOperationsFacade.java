@@ -1325,6 +1325,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             nodes[1] = endNodeId;
 
             virtualRelationshipIdToVirtualNodeIds.get(authenticate()).put(newId,nodes);
+            virtualRelationshipIdToPropertyKeyIds.get(authenticate()).put(newId,new LinkedHashSet<Integer>());
 
             return newId;
         //} else {
@@ -2052,4 +2053,52 @@ public class VirtualOperationsFacade extends OperationsFacade
         return taId;
     }
 
+    @Override
+    public Property nodeSetVirtualProperty( long nodeId, DefinedProperty property )
+            throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
+    {
+        statement.assertOpen();
+
+        if(isVirtual(nodeId)&& nodeExists(nodeId)){
+            if(isVirtual(property.propertyKeyId())){
+                virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId).add(property.propertyKeyId());
+
+                PropertyValueId key = new PropertyValueId(nodeId,property.propertyKeyId(),getTransactionId());
+                virtualPropertyIdToValueForNodes.put(key,property.value());
+
+                return property;
+
+            } else{
+                throw new InvalidTransactionTypeKernelException("the property on a virtual node should be virtual too");
+            }
+
+        } else{
+            throw new EntityNotFoundException(EntityType.NODE,nodeId);
+        }
+    }
+
+
+    @Override
+    public Property relationshipSetVirtualProperty( long relId, DefinedProperty property )
+            throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
+    {
+        statement.assertOpen();
+
+        if(isVirtual(relId) && relationshipExists(relId)){
+            if(isVirtual(property.propertyKeyId())){
+                virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relId).add(property.propertyKeyId());
+
+                PropertyValueId key = new PropertyValueId(relId,property.propertyKeyId(),getTransactionId());
+                virtualPropertyIdToValueForRels.put(key,property.value());
+
+                return property;
+
+            } else{
+                throw new InvalidTransactionTypeKernelException("the property on a virtual relationship should be virtual too");
+            }
+
+        } else{
+            throw new EntityNotFoundException(EntityType.RELATIONSHIP,relId);
+        }
+    }
 }

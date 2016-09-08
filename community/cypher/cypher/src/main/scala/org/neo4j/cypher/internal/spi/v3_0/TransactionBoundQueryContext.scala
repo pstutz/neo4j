@@ -340,8 +340,12 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
     }
 
     override def setProperty(id: Long, propertyKeyId: Int, value: Any) {
-      transactionalContext.statement.dataWriteOperations().nodeSetProperty(id, properties.Property.property(propertyKeyId, value) )
-    }
+      if(id<0){
+        transactionalContext.statement.readOperations().nodeSetVirtualProperty(id, properties.Property.property(propertyKeyId, value))
+      } else{
+        transactionalContext.statement.dataWriteOperations().nodeSetProperty(id, properties.Property.property(propertyKeyId, value) )
+      }
+  }
 
     override def getById(id: Long) = try {
       transactionalContext.graph.getNodeById(id)
@@ -397,7 +401,11 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
     }
 
     override def setProperty(id: Long, propertyKeyId: Int, value: Any) {
-      transactionalContext.statement.dataWriteOperations().relationshipSetProperty(id, properties.Property.property(propertyKeyId, value) )
+      if(id<0){
+        transactionalContext.statement.readOperations().relationshipSetVirtualProperty(id, properties.Property.property(propertyKeyId, value))
+      } else {
+        transactionalContext.statement.dataWriteOperations().relationshipSetProperty(id, properties.Property.property(propertyKeyId, value))
+      }
     }
 
     override def getById(id: Long) = try {
@@ -431,6 +439,9 @@ final class TransactionBoundQueryContext(val transactionalContext: Transactional
 
   override def getOrCreatePropertyKeyId(propertyKey: String) =
     transactionalContext.statement.tokenWriteOperations().propertyKeyGetOrCreateForName(propertyKey)
+
+  override def getOrCreateVirtualPropertyKeyId(propertyKey: String) =
+    transactionalContext.statement.tokenWriteOperations().virtualPropertyKeyGetOrCreateForName(propertyKey)
 
   abstract class BaseOperations[T <: PropertyContainer] extends Operations[T] {
     def primitiveLongIteratorToScalaIterator(primitiveIterator: PrimitiveLongIterator): Iterator[Long] =

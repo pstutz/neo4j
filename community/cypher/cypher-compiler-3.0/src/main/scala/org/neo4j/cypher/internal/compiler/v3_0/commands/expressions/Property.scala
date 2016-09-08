@@ -35,16 +35,38 @@ case class Property(mapExpr: Expression, propertyKey: KeyToken)
   def apply(ctx: ExecutionContext)(implicit state: QueryState): Any = mapExpr(ctx) match {
     case null => null
     case n: Node =>
-      /*if(n.isVirtual) {
-        n.getProperty(propertyKey.toString)
-      } else {*/
-        val propId = propertyKey.getOrCreateId(state.query)
-        state.query.nodeOps.getProperty(n.getId, propId)
-      //}
+      if(n.getId<0) {
+        n.getProperty(propertyKey.name)  // TODO (Sascha): seperate that, sometimes
+      } else {
+        val test = ctx.get(propertyKey.name)
+        if(test==None) {
+          val propId = propertyKey.getOrCreateId(state.query)
+          state.query.nodeOps.getProperty(n.getId, propId)
+        } else{
+          ctx.remove(propertyKey.name)
+          val propId = test.get.asInstanceOf[Int]
+          state.query.nodeOps.getProperty(n.getId, propId)
+        }
+      }
     case r: Relationship =>
       // TODO: Sascha
-      val propId = propertyKey.getOrCreateId(state.query)
-      state.query.relationshipOps.getProperty(r.getId, propId)
+      //val propId = propertyKey.getOrCreateId(state.query)
+      //state.query.relationshipOps.getProperty(r.getId, propId)
+
+      if(r.getId<0) {
+        r.getProperty(propertyKey.name)  // TODO (Sascha): seperate that, sometimes
+      } else {
+        val test = ctx.get(propertyKey.name)
+        if(test==None) {
+          val propId = propertyKey.getOrCreateId(state.query)
+          state.query.relationshipOps.getProperty(r.getId, propId)
+        } else{
+          ctx.remove(propertyKey.name)
+          val propId = test.get.asInstanceOf[Int]
+          state.query.relationshipOps.getProperty(r.getId, propId)
+        }
+      }
+
     case IsMap(mapFunc) => try {
       mapFunc(state.query).getOrElse(propertyKey.name, null)
     } catch {

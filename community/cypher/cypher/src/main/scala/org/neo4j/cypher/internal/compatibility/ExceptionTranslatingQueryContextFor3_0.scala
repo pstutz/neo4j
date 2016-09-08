@@ -90,6 +90,9 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def getOrCreatePropertyKeyId(propertyKey: String): Int =
     translateException(inner.getOrCreatePropertyKeyId(propertyKey))
 
+  override def getOrCreateVirtualPropertyKeyId(propertyKey: String): Int =
+    translateException(inner.getOrCreateVirtualPropertyKeyId(propertyKey))
+
   override def addIndexRule(labelId: Int, propertyKeyId: Int) =
     translateException(inner.addIndexRule(labelId, propertyKeyId))
 

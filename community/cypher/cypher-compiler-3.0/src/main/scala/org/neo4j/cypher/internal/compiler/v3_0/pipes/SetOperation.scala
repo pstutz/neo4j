@@ -77,6 +77,7 @@ object SetOperation {
       }
       else {
         builder += qtx.getOrCreatePropertyKeyId(k) -> v
+        //TODO: This needs to be changed later, Sascha
       }
     }
 
@@ -116,6 +117,14 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
           val propValue = state.query.nodeOps.getProperty(itemId,propKeyId)
           node.setProperty(propName,propValue) // not optimal but..
         }
+        // the following is meh.
+        val it = state.query.getPropertiesForNode(node.getId)
+        while(it.hasNext){
+          val i = it.next()
+          val name = state.query.getPropertyKeyName(i)
+          context.put(name,i) // this is probably not the best solution for Property.scala
+        }
+
 
         // setting the labels
         while(labelKeyIterator.hasNext){
@@ -186,7 +195,12 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
           val propValue = state.query.relationshipOps.getProperty(itemId,propKeyId)
           relationship.setProperty(propName,propValue) // not optimal but..
         }
-
+        val it = state.query.getPropertiesForNode(relationship.getId)
+        while(it.hasNext){
+          val i = it.next()
+          val name = state.query.getPropertyKeyName(i)
+          context.put(name,i) // this is probably not the best solution for Property.scala
+        }
 
         // updating the context!
         val i = context.iterator
@@ -205,7 +219,11 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
       }
     } else {
       val propertyId = maybePropertyKey
-        .getOrElse(queryContext.getOrCreatePropertyKeyId(propertyKey.name)) // otherwise create it
+        .getOrElse(
+          if(itemId<0){
+            queryContext.getOrCreateVirtualPropertyKeyId(propertyKey.name)
+          } else{
+            queryContext.getOrCreatePropertyKeyId(propertyKey.name)}) // otherwise create it
 
       if (value == null) {
         if (ops.hasProperty(itemId, propertyId)) ops.removeProperty(itemId, propertyId)
@@ -229,7 +247,10 @@ abstract class SetEntityPropertyOperation[T <: PropertyContainer](itemName: Stri
 
       try {
         setProperty[T](executionContext, state, ops, itemId, propertyKey, expression)
-      } finally if (needsExclusiveLock) ops.releaseExclusiveLock(itemId)
+      } finally
+        if (itemId < 0) {} else {
+          if (needsExclusiveLock) ops.releaseExclusiveLock(itemId)
+        }
     }
   }
 

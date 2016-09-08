@@ -88,6 +88,9 @@ class DelegatingQueryContext(val inner: QueryContext) extends QueryContext {
 
   override def getOrCreatePropertyKeyId(propertyKey: String) = singleDbHit(inner.getOrCreatePropertyKeyId(propertyKey))
 
+  override def getOrCreateVirtualPropertyKeyId(propertyKey: String) =
+    singleDbHit(inner.getOrCreateVirtualPropertyKeyId(propertyKey))
+
   override def addIndexRule(labelId: Int, propertyKeyId: Int) = singleDbHit(inner.addIndexRule(labelId, propertyKeyId))
 
   override def dropIndexRule(labelId: Int, propertyKeyId: Int) = singleDbHit(inner.dropIndexRule(labelId, propertyKeyId))

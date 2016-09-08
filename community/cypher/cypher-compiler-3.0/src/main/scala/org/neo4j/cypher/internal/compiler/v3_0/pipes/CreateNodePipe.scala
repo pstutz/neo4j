@@ -95,7 +95,13 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
       if (key == "virtual") {  // TODO: Change that
 
       } else {
-        val propertyKeyId = qtx.getOrCreatePropertyKeyId(key)
+        val propertyKeyId =
+        if(nodeId<0){
+          qtx.getOrCreateVirtualPropertyKeyId(key)
+        } else {
+          qtx.getOrCreatePropertyKeyId(key)
+        }
+
         qtx.nodeOps.setProperty(nodeId, propertyKeyId, makeValueNeoSafe(value))
       }
     }

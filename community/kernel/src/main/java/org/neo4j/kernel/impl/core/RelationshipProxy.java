@@ -310,6 +310,11 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
         {
             try
             {
+                if(key.equals("virtual")) // TODO: Change to actual key!
+                {
+                    return null;
+                }
+
                 int propertyId = statement.readOperations().propertyKeyGetForName( key );
                 if ( propertyId == KeyReadOperations.NO_SUCH_PROPERTY_KEY )
                 {

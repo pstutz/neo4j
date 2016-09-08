@@ -338,9 +338,10 @@ public class GraphDatabaseServiceExecuteTest
         try ( Transaction tx = graphDb.beginTx() )
         {
             // the following execute should produce an error
-            graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true})");
+            Result r =graphDb.execute("CREATE (n:Foo{virtual:\"baz\", test:true}) RETURN labels(n), id(n), n.test");
+            assertEquals("{id(n)=-2, labels(n)=[Foo], n.test=true}",r.next().toString());
 
-            Result r = graphDb.execute("MERGE (n:Foo) ON MATCH SET n.virtual=false RETURN labels(n), id(n), n.test");
+            r = graphDb.execute("MERGE (n:Foo) ON MATCH SET n.virtual=false RETURN labels(n), id(n), n.test");
             assertEquals("{id(n)=0, labels(n)=[Foo], n.test=true}",r.next().toString());
 
             assertEquals(1,Iterables.count(graphDb.getAllNodes()));

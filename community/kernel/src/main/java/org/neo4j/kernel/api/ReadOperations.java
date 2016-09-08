@@ -29,11 +29,14 @@ import org.neo4j.kernel.api.constraints.PropertyConstraint;
 import org.neo4j.kernel.api.constraints.RelationshipPropertyConstraint;
 import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
+import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.schema.*;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
+import org.neo4j.kernel.api.properties.DefinedProperty;
+import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.RelationshipVisitor;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.register.Register.DoubleLongRegister;
@@ -596,4 +599,12 @@ public interface ReadOperations
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException, NoSuchMethodException;
 
     void virtualNodeDelete(long id) throws NoSuchMethodException, EntityNotFoundException;
+
+    Property nodeSetVirtualProperty(long nodeId, DefinedProperty property )
+            throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException,
+            InvalidTransactionTypeKernelException, NoSuchMethodException;
+
+    Property relationshipSetVirtualProperty(long nodeId, DefinedProperty property )
+            throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException,
+            InvalidTransactionTypeKernelException, NoSuchMethodException;
 }

@@ -531,6 +531,18 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
+    public Property nodeSetVirtualProperty(long nodeId, DefinedProperty property) throws EntityNotFoundException,
+            ConstraintValidationKernelException, AutoIndexingKernelException,
+            InvalidTransactionTypeKernelException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
+    public Property relationshipSetVirtualProperty(long nodeId, DefinedProperty property) throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException, NoSuchMethodException {
+        throw new NoSuchMethodException("");
+    }
+
+    @Override
     public Set<ProcedureSignature> proceduresGetAll()
     {
         statement.assertOpen();
