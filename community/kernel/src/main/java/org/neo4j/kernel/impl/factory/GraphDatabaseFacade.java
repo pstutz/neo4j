@@ -359,6 +359,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         InternalTransaction transaction = beginTransaction( KernelTransaction.Type.implicit, AccessMode.Static.FULL );
         TransactionalContext transactionalContext =
                 new Neo4jTransactionalContext( spi.queryService(), transaction, spi.currentStatement(), locker );
+
         return spi.executeQuery( query, parameters, QueryEngineProvider.embeddedSession( transactionalContext ) );
     }
 

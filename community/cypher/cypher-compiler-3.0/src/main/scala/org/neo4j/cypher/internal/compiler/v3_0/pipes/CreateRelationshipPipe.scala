@@ -28,6 +28,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.spi.QueryContext
 import org.neo4j.cypher.internal.frontend.v3_0.symbols._
 import org.neo4j.cypher.internal.frontend.v3_0.{CypherTypeException, InternalException, InvalidSemanticsException}
 import org.neo4j.graphdb.{Node, Relationship}
+import saschapeukert.CONST
 
 import scala.collection.Map
 
@@ -44,7 +45,7 @@ abstract class BaseRelationshipPipe(src: Pipe, key: String, startNode: String, t
     val typeId = typ.typ(state.query)
 
     //TODO: Sascha
-    val virtual = properties.toList.toString().contains("virtual -> {  AUTOSTRING") // change later for real virtual prop
+    val virtual = properties.toList.toString().contains(CONST.PROPERTYKEY  + " -> {  AUTO") // change later for real virtual prop
     var relationship:Relationship = null
     if(virtual) {
       relationship = state.query.createRelationship(start.getId, end.getId, typeId,false)
@@ -83,7 +84,7 @@ abstract class BaseRelationshipPipe(src: Pipe, key: String, startNode: String, t
     if (value == null) {
       handleNull(key: String)
     } else {
-      if(key=="virtual"){} else { // TODO: Change
+      if(key==CONST.PROPERTYKEY){} else { // TODO: Change
       val propertyKeyId =
         if(relId<0){
           qtx.getOrCreateVirtualPropertyKeyId(key)

@@ -35,6 +35,7 @@ import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 import org.neo4j.storageengine.api.EntityType;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.PropertyItem;
+import saschapeukert.CONST;
 
 import java.util.*;
 
@@ -432,7 +433,7 @@ public class NodeProxy
         {
             try
             {
-                if(key.equals("virtual")) // TODO: Change to actual key!
+                if(key.equals(CONST.PROPERTYKEY)) // TODO: Change to actual key!
                 {
                     return null;
                 }
@@ -541,7 +542,8 @@ public class NodeProxy
         catch ( EntityNotFoundException e )
         {
             throw new NotFoundException( "Node[" + e.entityId() +
-                                             "] is deleted or virtual and cannot be used to create a relationship" );
+                                             "] is deleted or virtual and cannot be used to create a" +
+                                             " real relationship to or from it" );
         }
         catch ( InvalidTransactionTypeKernelException e )
         {

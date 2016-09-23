@@ -172,10 +172,6 @@ public class VirtualOperationsFacade extends OperationsFacade
                 resultList.add(nodeId);
             }
         }
-        //long[] items = ArrayUtils.toPrimitive(resultList.toArray(new Long[resultList.size()]));
-
-        //return PrimitiveLongCollections.iterator(items);
-
         return new MergingPrimitiveLongIterator(originalIT,resultList);
     }
 

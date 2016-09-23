@@ -37,6 +37,7 @@ import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.storageengine.api.EntityType;
 import org.neo4j.storageengine.api.PropertyItem;
 import org.neo4j.storageengine.api.RelationshipItem;
+import saschapeukert.CONST;
 
 import java.util.*;
 
@@ -310,7 +311,7 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
         {
             try
             {
-                if(key.equals("virtual")) // TODO: Change to actual key!
+                if(key.equals(CONST.PROPERTYKEY)) // TODO: Change to actual key!
                 {
                     return null;
                 }

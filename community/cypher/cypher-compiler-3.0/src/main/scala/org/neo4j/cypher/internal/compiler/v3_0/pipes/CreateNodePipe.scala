@@ -28,6 +28,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.spi.QueryContext
 import org.neo4j.cypher.internal.frontend.v3_0.symbols._
 import org.neo4j.cypher.internal.frontend.v3_0.{CypherTypeException, InvalidSemanticsException}
 import org.neo4j.graphdb.{Label, Node, Relationship}
+import saschapeukert.CONST
 
 import scala.collection.Map
 
@@ -44,7 +45,7 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     // current check if virtual:
     // (dirty) check if prop is set (to String)
 
-    val virtual = properties.toList.toString().contains("virtual -> {  AUTOSTRING")
+    val virtual = properties.toList.toString().contains(""+CONST.PROPERTYKEY + " -> {  AUTO")
     var node:Node = null
     if(virtual) {
       //val node = state.query.createVirtualNode()
@@ -92,7 +93,7 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
     if (value == null) {
       handleNull(key)
     } else {
-      if (key == "virtual") {  // TODO: Change that
+      if (key == CONST.PROPERTYKEY) {  // TODO: Change that
 
       } else {
         val propertyKeyId =
@@ -111,6 +112,7 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
 
   private def setLabels(context: ExecutionContext, state: QueryState, nodeId: Long) = {
     val labelIds = labels.map(_.getOrCreateId(state.query).id)
+    //TODO !!!
     state.query.setLabelsOnNode(nodeId, labelIds.iterator)
   }
 

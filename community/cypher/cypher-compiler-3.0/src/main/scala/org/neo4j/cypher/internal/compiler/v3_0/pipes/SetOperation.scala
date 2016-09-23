@@ -28,6 +28,7 @@ import org.neo4j.cypher.internal.compiler.v3_0.planner.{SetLabelPattern, SetMuta
 import org.neo4j.cypher.internal.compiler.v3_0.spi.{Operations, QueryContext}
 import org.neo4j.cypher.internal.frontend.v3_0.{CypherTypeException, InvalidArgumentException, SemanticTable}
 import org.neo4j.graphdb._
+import saschapeukert.CONST
 
 import scala.collection.Map
 
@@ -94,7 +95,7 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
 
     val value = makeValueNeoSafe(expression(context)(state))
 
-    if((propertyKey.name=="virtual") && (value.equals(false))){  // TODO: Sascha change to actual value
+    if((propertyKey.name==CONST.PROPERTYKEY) && (value.equals(false))){  // TODO: Sascha change to actual value
       //TODO make this entity real
       // and don't set the property :-)
       if(this.name.equals("SetNodeProperty")){
