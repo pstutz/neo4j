@@ -182,7 +182,7 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
         val virtualRelationship = state.query.relationshipOps.getById(itemId);
         val relType = virtualRelationship.getType
 
-        // create this node
+        // create this relationship
         val relationship = state.query.createRelationship(
           virtualRelationship.getStartNode,
           virtualRelationship.getEndNode,
