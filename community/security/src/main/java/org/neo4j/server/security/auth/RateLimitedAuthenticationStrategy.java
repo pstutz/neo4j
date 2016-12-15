@@ -24,6 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.neo4j.kernel.api.security.AuthenticationResult;
+
 public class RateLimitedAuthenticationStrategy implements AuthenticationStrategy
 {
     private static final int FAILED_AUTH_COOLDOWN_PERIOD = 5_000;
@@ -64,9 +66,10 @@ public class RateLimitedAuthenticationStrategy implements AuthenticationStrategy
         this.maxFailedAttempts = maxFailedAttempts;
     }
 
-    public AuthenticationResult authenticate( User user, String password )
+    @Override
+    public AuthenticationResult authenticate( User user, String password)
     {
-        AuthenticationMetadata authMetadata = authMetadataFor( user );
+        AuthenticationMetadata authMetadata = authMetadataFor( user.name() );
 
         if ( !authMetadata.authenticationPermitted() )
         {
@@ -84,9 +87,8 @@ public class RateLimitedAuthenticationStrategy implements AuthenticationStrategy
         }
     }
 
-    private AuthenticationMetadata authMetadataFor( User user )
+    private AuthenticationMetadata authMetadataFor( String username )
     {
-        String username = user.name();
         AuthenticationMetadata authMeta = authenticationData.get( username );
 
         if ( authMeta == null )

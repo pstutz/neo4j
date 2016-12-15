@@ -19,41 +19,40 @@
  */
 package org.neo4j.cypher
 
-import org.neo4j.cypher.internal.compiler.v3_0._
-import scala.collection.JavaConverters._
+import org.neo4j.cypher.internal.compiler.v3_1._
 
 class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
 
-  test("cost should be default planner in 3.0") {
+  test("cost should be default planner in 3.1") {
     given("match (n) return n")
-      .withCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
 
-  test("interpreted should be default runtime in 3.0") {
+  test("interpreted should be default runtime in 3.1") {
     given("match (n) return n")
-      .withCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
       .shouldHaveRuntime(InterpretedRuntimeName)
   }
 
-  test("should use cost for varlength in 3.0") {
+  test("should use cost for varlength in 3.1") {
     given("match (a)-[r:T1*]->(b) return a,r,b")
-      .withCypherVersion(CypherVersion.v3_0)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
 
-  test("should use cost for cycles in 3.0") {
+  test("should use cost for cycles in 3.1") {
     given("match (a)-[r]->(a) return a")
-      .withCypherVersion(CypherVersion.v3_0)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
 
-  test("should handle updates in 3.0") {
+  test("should handle updates in 3.1") {
     given("create() return 1")
-      .withCypherVersion(CypherVersion.v3_0)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
 
@@ -62,9 +61,9 @@ class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
       """MATCH p=(n:Person {first_name: 'Shawna'})-[:FRIEND_OF]-(m:Person)
         |RETURN p UNION MATCH p=(n:Person {first_name: 'Shawna'})-[:FRIEND_OF]-()-[:FRIEND_OF]-(m:Person) RETURN p"""
         .stripMargin)
-      .withCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
       .withPlanner(RulePlannerName)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(RulePlannerName)
   }
 
@@ -75,8 +74,8 @@ class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
         |RETURN coc, COUNT(*) AS times
         |ORDER BY times DESC
         |LIMIT 10""".stripMargin)
-      .withCypherVersion(CypherVersion.v3_0)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
 
@@ -85,31 +84,31 @@ class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
       """MATCH (s:Location {name:'DeliverySegment-257227'}), (e:Location {name:'DeliverySegment-476821'})
         |MATCH (s)<-[:DELIVERY_ROUTE]-(db1) MATCH (db2)-[:DELIVERY_ROUTE]->(e)
         |MATCH (db1)<-[:CONNECTED_TO]-()-[:CONNECTED_TO]-(db2) RETURN s""".stripMargin)
-      .withCypherVersion(CypherVersion.v3_0)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
 
   test("query that does not go through the compiled runtime") {
     given("MATCH (n) RETURN n, count(*)")
-      .withCypherVersion(CypherVersion.v3_0)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHaveRuntime(InterpretedRuntimeName)
   }
 
   test("query that lacks support from the compiled runtime") {
     given("CREATE ()")
-      .withCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
       .withRuntime(CompiledRuntimeName)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHaveRuntime(InterpretedRuntimeName)
   }
 
   test("query that should go through the compiled runtime") {
     given("MATCH (a)-->(b) RETURN a")
-      .withCypherVersion(CypherVersion.v3_0)
+      .withCypherVersion(CypherVersion.v3_1)
       .withRuntime(CompiledRuntimeName)
-      .shouldHaveCypherVersion(CypherVersion.v3_0)
+      .shouldHaveCypherVersion(CypherVersion.v3_1)
       .shouldHaveRuntime(CompiledRuntimeName)
       .shouldHavePlanner(CostBasedPlannerName.default)
   }
@@ -159,7 +158,7 @@ class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
   }
 
   test("EstimatedRows should be properly formatted") {
-    given("match (n) return n").planDescription.getArguments.get("EstimatedRows") should equal(0)
+    given("match (n) return n").planDescription.getArguments.get("EstimatedRows") should equal(1) // on missing statistics, we fake cardinality to one
   }
 
   for(planner <- Seq(IDPPlannerName, DPPlannerName, RulePlannerName);
@@ -170,7 +169,7 @@ class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
       given("match (n) return n")
         .withPlanner(planner)
         .withRuntime(runtime)
-        .shouldHaveCypherVersion(CypherVersion.v3_0)
+        .shouldHaveCypherVersion(CypherVersion.v3_1)
         .shouldHavePlanner(planner)
         .shouldHaveRuntime(runtime)
     }
@@ -214,10 +213,11 @@ class RootPlanAcceptanceTest extends ExecutionEngineFunSuite {
         case _ =>
           val version = cypherVersion.map(_.name).getOrElse("")
           val plannerString = planner.map("planner=" + _.name).getOrElse("")
-          val runtimeString = runtime.map("runtime=" + _.name).getOrElse("")
+          // TODO: Remove this in the 3.2 branch
+          val runtimeString = runtime.map("runtime=" + _.name.replaceAll("COMPILED","compiledExperimentalFeatureNotSupportedForProductionUse")).getOrElse("")
           s"CYPHER $version $plannerString $runtimeString"
       }
-      val result = eengine.profile(s"$prepend $query", Map.empty[String, Object], graph.session())
+      val result = eengine.profile(s"$prepend $query", Map.empty[String, Object])
       result.size
       val executionResult = result.executionPlanDescription()
       executionResult.asJava

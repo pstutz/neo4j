@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.api;
 
 import org.neo4j.collection.RawIterator;
+import org.neo4j.collection.primitive.PrimitiveIntCollection;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
@@ -35,15 +36,17 @@ import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelExce
 import org.neo4j.kernel.api.exceptions.schema.*;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
-import org.neo4j.kernel.api.proc.CallableProcedure;
-import org.neo4j.kernel.api.proc.ProcedureSignature;
-import org.neo4j.kernel.api.proc.ProcedureSignature.ProcedureName;
+import org.neo4j.kernel.api.proc.*;
 import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.api.operations.*;
+import org.neo4j.kernel.impl.api.security.OverriddenAccessMode;
+import org.neo4j.kernel.impl.api.security.RestrictedAccessMode;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.impl.query.QuerySource;
 import org.neo4j.register.Register.DoubleLongRegister;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
@@ -53,23 +56,33 @@ import org.neo4j.storageengine.api.schema.PopulationProgress;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Stream;
 
-public class OperationsFacade implements ReadOperations, DataWriteOperations, SchemaWriteOperations
+import static java.lang.String.format;
+
+public class OperationsFacade
+        implements ReadOperations, DataWriteOperations, SchemaWriteOperations, QueryRegistryOperations,
+        ProcedureCallOperations
 {
     protected final KernelTransaction tx;
     protected final KernelStatement statement;
-    protected final StatementOperationParts operations;
-    private final Procedures procedures;
+    protected final Procedures procedures;
+    protected StatementOperationParts operations;
 
     OperationsFacade( KernelTransaction tx, KernelStatement statement,
-                      StatementOperationParts operations, Procedures procedures )
+                      Procedures procedures )
     {
         this.tx = tx;
         this.statement = statement;
-        this.operations = operations;
         this.procedures = procedures;
+    }
+
+    public void initialize( StatementOperationParts operationParts )
+    {
+        this.operations = operationParts;
     }
 
     final KeyReadOperations tokenRead()
@@ -110,6 +123,11 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     final org.neo4j.kernel.impl.api.operations.SchemaWriteOperations schemaWrite()
     {
         return operations.schemaWriteOperations();
+    }
+
+    final QueryRegistrationOperations queryRegistrationOperations()
+    {
+        return operations.queryRegistrationOperations();
     }
 
     final SchemaStateOperations schemaState()
@@ -297,6 +315,10 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         {
             return node.get().getProperty( propertyKeyId );
         }
+        finally
+        {
+            statement.assertOpen();
+        }
     }
 
     @Override
@@ -399,6 +421,10 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         {
             return relationship.get().getProperty( propertyKeyId );
         }
+        finally
+        {
+            statement.assertOpen();
+        }
     }
 
     @Override
@@ -429,7 +455,12 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         statement.assertOpen();
         try ( Cursor<NodeItem> node = dataRead().nodeCursorById( statement, nodeId ) )
         {
-            return node.get().getPropertyKeys();
+            PrimitiveIntCollection propertyKeys = node.get().getPropertyKeys();
+            return propertyKeys.iterator();
+        }
+        finally
+        {
+            statement.assertOpen();
         }
     }
 
@@ -439,7 +470,12 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         statement.assertOpen();
         try ( Cursor<RelationshipItem> relationship = dataRead().relationshipCursorById( statement, relationshipId ) )
         {
-            return relationship.get().getPropertyKeys();
+            PrimitiveIntCollection propertyKeys = relationship.get().getPropertyKeys();
+            return propertyKeys.iterator();
+        }
+        finally
+        {
+            statement.assertOpen();
         }
     }
 
@@ -473,16 +509,31 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
-    public ProcedureSignature procedureGet( ProcedureName name ) throws ProcedureException
+    public ProcedureSignature procedureGet( QualifiedName name ) throws ProcedureException
     {
         statement.assertOpen();
-        return procedures.get( name );
+        return procedures.procedure( name );
     }
 
     @Override
-    public RawIterator<Object[], ProcedureException> procedureCallRead( ProcedureName name, Object[] input ) throws ProcedureException
+    public Optional<UserFunctionSignature> functionGet( QualifiedName name )
     {
-        return callProcedure( name, input, AccessMode.Static.READ );
+        statement.assertOpen();
+        return procedures.function( name );
+    }
+
+    @Override
+    public Set<UserFunctionSignature> functionsGetAll()
+    {
+        statement.assertOpen();
+        return procedures.getAllFunctions();
+    }
+
+    @Override
+    public Set<ProcedureSignature> proceduresGetAll()
+    {
+        statement.assertOpen();
+        return procedures.getAllProcedures();
     }
 
     @Override
@@ -531,22 +582,13 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
-    public Property nodeSetVirtualProperty(long nodeId, DefinedProperty property) throws EntityNotFoundException,
-            ConstraintValidationKernelException, AutoIndexingKernelException,
-            InvalidTransactionTypeKernelException, NoSuchMethodException {
+    public Property nodeSetVirtualProperty(long nodeId, DefinedProperty property) throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException, NoSuchMethodException {
         throw new NoSuchMethodException("");
     }
 
     @Override
     public Property relationshipSetVirtualProperty(long nodeId, DefinedProperty property) throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException, NoSuchMethodException {
         throw new NoSuchMethodException("");
-    }
-
-    @Override
-    public Set<ProcedureSignature> proceduresGetAll()
-    {
-        statement.assertOpen();
-        return procedures.getAll();
     }
     // </DataRead>
 
@@ -938,7 +980,6 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
                 relationshipTypeName, id );
     }
 
-
     // </TokenWrite>
 
     // <SchemaState>
@@ -947,7 +988,6 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     {
         return schemaState().schemaStateGetOrCreate( statement, key, creator );
     }
-
 
     @Override
     public void schemaStateFlush()
@@ -970,6 +1010,13 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     {
         statement.assertOpen();
         dataWrite().nodeDelete( statement, nodeId );
+    }
+
+    @Override
+    public int nodeDetachDelete( long nodeId ) throws KernelException
+    {
+        statement.assertOpen();
+        return dataWrite().nodeDetachDelete( statement, nodeId );
     }
 
     @Override
@@ -1049,12 +1096,6 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
         return dataWrite().graphRemoveProperty( statement, propertyKeyId );
     }
 
-    @Override
-    public RawIterator<Object[], ProcedureException> procedureCallWrite( ProcedureName name, Object[] input ) throws ProcedureException
-    {
-        // FIXME: should this be AccessMode.Static.WRITE instead?
-        return callProcedure( name, input, AccessMode.Static.FULL );
-    }
     // </DataWrite>
 
     // <SchemaWrite>
@@ -1420,22 +1461,182 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
 
     // </Counts>
 
+    // query monitoring
+
+    @Override
+    public void setMetaData( Map<String,Object> data )
+    {
+        statement.assertOpen();
+        statement.getTransaction().setMetaData( data );
+    }
+
+    @Override
+    public Stream<ExecutingQuery> executingQueries()
+    {
+        statement.assertOpen();
+        return queryRegistrationOperations().executingQueries( statement );
+    }
+
+    @Override
+    public ExecutingQuery startQueryExecution(
+        QuerySource descriptor,
+        String queryText,
+        Map<String,Object> queryParameters )
+    {
+        statement.assertOpen();
+        return queryRegistrationOperations().startQueryExecution( statement, descriptor, queryText, queryParameters );
+    }
+
+    @Override
+    public void registerExecutingQuery( ExecutingQuery executingQuery )
+    {
+        statement.assertOpen();
+        queryRegistrationOperations().registerExecutingQuery( statement, executingQuery );
+    }
+
+    @Override
+    public void unregisterExecutingQuery( ExecutingQuery executingQuery )
+    {
+        queryRegistrationOperations().unregisterExecutingQuery( statement, executingQuery );
+    }
+
+    // query monitoring
+
     // <Procedures>
 
+    @Override
+    public RawIterator<Object[],ProcedureException> procedureCallRead( QualifiedName name, Object[] input )
+            throws ProcedureException
+    {
+        AccessMode accessMode = tx.securityContext().mode();
+        if ( !accessMode.allowsReads() )
+        {
+            throw accessMode.onViolation( format( "Read operations are not allowed for %s.",
+                    tx.securityContext().description() ) );
+        }
+        return callProcedure( name, input, new RestrictedAccessMode( tx.securityContext().mode(), AccessMode.Static
+                .READ ) );
+    }
+
+    @Override
+    public RawIterator<Object[],ProcedureException> procedureCallReadOverride( QualifiedName name, Object[] input )
+            throws ProcedureException
+    {
+        return callProcedure( name, input,
+                new OverriddenAccessMode( tx.securityContext().mode(), AccessMode.Static.READ ) );
+    }
+
+    @Override
+    public RawIterator<Object[],ProcedureException> procedureCallWrite( QualifiedName name, Object[] input )
+            throws ProcedureException
+    {
+        AccessMode accessMode = tx.securityContext().mode();
+        if ( !accessMode.allowsWrites() )
+        {
+            throw accessMode.onViolation( format( "Write operations are not allowed for %s.",
+                    tx.securityContext().description() ) );
+        }
+        return callProcedure( name, input,
+                new RestrictedAccessMode( tx.securityContext().mode(), AccessMode.Static.WRITE ) );
+    }
+
+    @Override
+    public RawIterator<Object[],ProcedureException> procedureCallWriteOverride( QualifiedName name, Object[] input )
+            throws ProcedureException
+    {
+        return callProcedure( name, input,
+                new OverriddenAccessMode( tx.securityContext().mode(), AccessMode.Static.WRITE ) );
+    }
+
+    @Override
+    public RawIterator<Object[],ProcedureException> procedureCallSchema( QualifiedName name, Object[] input )
+            throws ProcedureException
+    {
+        AccessMode accessMode = tx.securityContext().mode();
+        if ( !accessMode.allowsSchemaWrites() )
+        {
+            throw accessMode.onViolation( format( "Schema operations are not allowed for %s.",
+                    tx.securityContext().description() ) );
+        }
+        return callProcedure( name, input,
+                new RestrictedAccessMode( tx.securityContext().mode(), AccessMode.Static.FULL ) );
+    }
+
+    @Override
+    public RawIterator<Object[],ProcedureException> procedureCallSchemaOverride( QualifiedName name, Object[] input )
+            throws ProcedureException
+    {
+        return callProcedure( name, input,
+                new OverriddenAccessMode( tx.securityContext().mode(), AccessMode.Static.FULL ) );
+    }
+
     private RawIterator<Object[],ProcedureException> callProcedure(
-            ProcedureName name, Object[] input, AccessMode mode )
+            QualifiedName name, Object[] input, final AccessMode override  )
             throws ProcedureException
     {
         statement.assertOpen();
 
-        try ( KernelTransaction.Revertable revertable = tx.restrict( mode ) )
+        final SecurityContext procedureSecurityContext = tx.securityContext().withMode( override );
+        final RawIterator<Object[],ProcedureException> procedureCall;
+        try ( KernelTransaction.Revertable ignore = tx.overrideWith( procedureSecurityContext ) )
         {
-            CallableProcedure.BasicContext ctx = new CallableProcedure.BasicContext();
-            ctx.put( CallableProcedure.Context.KERNEL_TRANSACTION, tx );
-            ctx.put( CallableProcedure.Context.THREAD, Thread.currentThread() );
-            return procedures.call( ctx, name, input );
+            BasicContext ctx = new BasicContext();
+            ctx.put( Context.KERNEL_TRANSACTION, tx );
+            ctx.put( Context.THREAD, Thread.currentThread() );
+            procedureCall = procedures.callProcedure( ctx, name, input );
         }
+        return new RawIterator<Object[],ProcedureException>()
+        {
+            @Override
+            public boolean hasNext() throws ProcedureException
+            {
+                try ( KernelTransaction.Revertable ignore = tx.overrideWith( procedureSecurityContext ) )
+                {
+                    return procedureCall.hasNext();
+                }
+            }
+
+            @Override
+            public Object[] next() throws ProcedureException
+            {
+                try ( KernelTransaction.Revertable ignore = tx.overrideWith( procedureSecurityContext ) )
+                {
+                    return procedureCall.next();
+                }
+            }
+        };
     }
 
+    @Override
+    public Object functionCall( QualifiedName name, Object[] arguments ) throws ProcedureException
+    {
+        if ( !tx.securityContext().mode().allowsReads() )
+        {
+            throw tx.securityContext().mode().onViolation(
+                    format( "Read operations are not allowed for %s.", tx.securityContext().description() ) );
+        }
+        return callFunction( name, arguments,
+                new RestrictedAccessMode( tx.securityContext().mode(), AccessMode.Static.READ ) );
+    }
+
+    @Override
+    public Object functionCallOverride( QualifiedName name, Object[] arguments ) throws ProcedureException
+    {
+        return callFunction( name, arguments,
+                new OverriddenAccessMode( tx.securityContext().mode(), AccessMode.Static.READ ) );
+    }
+
+    private Object callFunction( QualifiedName name, Object[] input, final AccessMode mode ) throws ProcedureException
+    {
+        statement.assertOpen();
+
+        try ( KernelTransaction.Revertable ignore = tx.overrideWith( tx.securityContext().withMode( mode ) ) )
+        {
+            BasicContext ctx = new BasicContext();
+            ctx.put( Context.KERNEL_TRANSACTION, tx );
+            ctx.put( Context.THREAD, Thread.currentThread() );
+            return procedures.callFunction( ctx, name, input );
+        }
+    }
     // </Procedures>
 }

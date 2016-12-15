@@ -26,14 +26,15 @@ import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.NumericRangeQuery;
 import org.apache.lucene.search.Sort;
+import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.SortedNumericSortField;
+import org.apache.lucene.search.SortedSetSortField;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.similarities.DefaultSimilarity;
 import org.hamcrest.CoreMatchers;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Future;
@@ -41,7 +42,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
@@ -56,6 +56,7 @@ import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.index.lucene.QueryContext;
 import org.neo4j.index.lucene.ValueContext;
+import org.neo4j.kernel.impl.MyRelTypes;
 import org.neo4j.kernel.impl.index.IndexConfigStore;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 
@@ -112,6 +113,73 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
         restartTx();
         assertThat( index.get( key, value ), Contains.contains( entity1, entity2 ) );
         index.delete();
+    }
+
+    @Test
+    public void queryIndexWithSortByNumeric() throws Exception
+    {
+        Index<Node> index = nodeIndex( stringMap() );
+        String numericProperty = "NODE_ID";
+
+        try ( Transaction transaction = graphDb.beginTx() )
+        {
+            for ( int i = 0; i < 15; i++ )
+            {
+                Node node = graphDb.createNode();
+                node.setProperty( numericProperty, i );
+                index.add( node, numericProperty, new ValueContext( i ).indexNumeric() );
+            }
+            transaction.success();
+        }
+
+        try ( Transaction transaction = graphDb.beginTx() )
+        {
+            QueryContext queryContext = new QueryContext( numericProperty + ":**" );
+            queryContext.sort( new Sort( new SortedNumericSortField( numericProperty, SortField.Type.INT, false ) ) );
+            IndexHits<Node> nodes = index.query( queryContext );
+
+            int expectedIndexId = 0;
+            for ( Node node : nodes )
+            {
+                assertEquals("Nodes should be sorted by numeric property", expectedIndexId++, node.getProperty( numericProperty ));
+            }
+            transaction.success();
+        }
+    }
+
+    @Test
+    public void queryIndexWithSortByString() throws Exception
+    {
+        Index<Node> index = nodeIndex( stringMap() );
+        String stringProperty = "NODE_NAME";
+
+        String[] names = new String[]{"Fry", "Leela", "Bender", "Amy", "Hubert", "Calculon"};
+        try ( Transaction transaction = graphDb.beginTx() )
+        {
+            for ( String name : names )
+            {
+                Node node = graphDb.createNode();
+                node.setProperty( stringProperty, name );
+                index.add( node, stringProperty, name );
+            }
+            transaction.success();
+        }
+
+        try ( Transaction transaction = graphDb.beginTx() )
+        {
+            QueryContext queryContext = new QueryContext( stringProperty + ":**" );
+            queryContext.sort( new Sort( new SortedSetSortField( stringProperty, true ) ) );
+            IndexHits<Node> nodes = index.query( queryContext );
+
+            int nameIndex = 0;
+            String[] sortedNames = new String[]{"Leela", "Hubert", "Fry", "Calculon", "Bender", "Amy"};
+            for ( Node node : nodes )
+            {
+                assertEquals("Nodes should be sorted by string property", sortedNames[nameIndex++],
+                        node.getProperty( stringProperty ));
+            }
+            transaction.success();
+        }
     }
 
     @Test
@@ -453,7 +521,6 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
             assertThat( index.query( "username:*@matrix AND sex:male" ), Contains.contains( neo ) );
             assertThat( index.query( new QueryContext( "username:*@matrix sex:male" ).defaultOperator( Operator.AND ) ), Contains
 
-
                     .contains( neo ) );
             assertThat( index.query( "username:*@matrix OR sex:male" ), Contains.contains( neo, trinity ) );
             assertThat( index.query( new QueryContext( "username:*@matrix sex:male" ).defaultOperator( Operator.OR ) ), Contains
@@ -755,7 +822,6 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
         Node node2 = graphDb.createNode();
         index.add( node2, "number", new ValueContext[]{ numeric( 47 ), numeric( 100 ) } );
 
-
         IndexHits<Node> indexResult1 = index.query( "number", newIntRange( "number", 47, 98, true, true ) );
         assertThat( indexResult1, Contains.contains( node1, node2 ) );
         assertThat( indexResult1.size(), is( 2 ));
@@ -982,15 +1048,15 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
         creator.delete( b );
         restartTx();
 
-        Iterators.count( (Iterator<Node>) index.get( key, value ) );
+        Iterators.count( index.get( key, value ) );
         rollbackTx();
         beginTx();
 
-        Iterators.count( (Iterator<Node>) index.get( key, value ) );
+        Iterators.count( index.get( key, value ) );
         index.add( c, "something", "whatever" );
         restartTx();
 
-        Iterators.count( (Iterator<Node>) index.get( key, value ) );
+        Iterators.count( index.get( key, value ) );
     }
 
     @Test
@@ -1502,14 +1568,12 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
     @Test
     public void exactIndexWithCaseInsensitiveWithBetterConfig() throws Exception
     {
-        // START SNIPPET: exact-case-insensitive
         Index<Node> index = graphDb.index().forNodes( "exact-case-insensitive",
                 stringMap( "type", "exact", "to_lower_case", "true" ) );
         Node node = graphDb.createNode();
         index.add( node, "name", "Thomas Anderson" );
         assertContains( index.query( "name", "\"Thomas Anderson\"" ), node );
         assertContains( index.query( "name", "\"thoMas ANDerson\"" ), node );
-        // END SNIPPET: exact-case-insensitive
         restartTx();
         assertContains( index.query( "name", "\"Thomas Anderson\"" ), node );
         assertContains( index.query( "name", "\"thoMas ANDerson\"" ), node );
@@ -1537,28 +1601,6 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
         }
         catch ( IllegalArgumentException e )
         {   // OK
-        }
-    }
-
-    @Ignore( "an issue that should be fixed at some point" )
-    @Test( expected = NotFoundException.class )
-    public void shouldNotBeAbleToIndexNodeThatIsNotCommitted() throws Exception
-    {
-        Index<Node> index = nodeIndex(
-                LuceneIndexImplementation.EXACT_CONFIG );
-        Node node = graphDb.createNode();
-        String key = "noob";
-        String value = "Johan";
-
-        WorkThread thread = new WorkThread( "other thread", index, graphDb, node );
-        thread.beginTransaction();
-        try
-        {
-            thread.add( node, key, value );
-        }
-        finally
-        {
-            thread.rollback();
         }
     }
 
@@ -1892,5 +1934,65 @@ public class TestLuceneIndex extends AbstractLuceneIndexTest
         hits = index.get( "Type", type.name(), start, end );
         assertEquals( 0, count( hits ) );
         assertEquals( 0, hits.size() );
+    }
+
+    @Test
+    public void shouldNotBeAbleToAddNullValuesToNodeIndex() throws Exception
+    {
+        // GIVEN
+        Index<Node> index = nodeIndex( EXACT_CONFIG );
+
+        // WHEN single null
+        try
+        {
+            index.add( graphDb.createNode(), "key", null );
+            fail( "Should have failed" );
+        }
+        catch ( IllegalArgumentException e )
+        {
+            // THEN Good
+        }
+
+        // WHEN null in array
+        try
+        {
+            index.add( graphDb.createNode(), "key", new String[] {"a", null, "c"} );
+            fail( "Should have failed" );
+        }
+        catch ( IllegalArgumentException e )
+        {
+            // THEN Good
+        }
+    }
+
+    @Test
+    public void shouldNotBeAbleToAddNullValuesToRelationshipIndex() throws Exception
+    {
+        // GIVEN
+        RelationshipIndex index = relationshipIndex( EXACT_CONFIG );
+
+        // WHEN single null
+        try
+        {
+            index.add( graphDb.createNode().createRelationshipTo( graphDb.createNode(), MyRelTypes.TEST ), "key",
+                    null );
+            fail( "Should have failed" );
+        }
+        catch ( IllegalArgumentException e )
+        {
+            // THEN Good
+        }
+
+        // WHEN null in array
+        try
+        {
+            index.add( graphDb.createNode().createRelationshipTo( graphDb.createNode(), MyRelTypes.TEST ), "key",
+                    new String[] {"a", null, "c"} );
+            fail( "Should have failed" );
+        }
+        catch ( IllegalArgumentException e )
+        {
+            // THEN Good
+        }
     }
 }

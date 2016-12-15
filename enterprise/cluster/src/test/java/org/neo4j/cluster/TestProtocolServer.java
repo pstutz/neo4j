@@ -60,7 +60,7 @@ public class TestProtocolServer
 
         stateMachineExecutor = new DelayedDirectExecutor( logProvider );
 
-        server = factory.newProtocolServer( instanceId, timeoutStrategy, receiver, sender, acceptorInstanceStore,
+        server = factory.newProtocolServer( instanceId, 10, timeoutStrategy, receiver, sender, acceptorInstanceStore,
                 electionCredentialsProvider, stateMachineExecutor, new ObjectStreamFactory(), new ObjectStreamFactory() );
 
         server.listeningAt( serverUri );
@@ -148,12 +148,12 @@ public class TestProtocolServer
     public class TestMessageSource
             implements MessageSource, MessageProcessor
     {
-        Iterable<MessageProcessor> listeners = Listeners.newListeners();
+        final Listeners<MessageProcessor> listeners = new Listeners<>();
 
         @Override
         public void addMessageProcessor( MessageProcessor listener )
         {
-            listeners = Listeners.addListener( listener, listeners );
+            listeners.add( listener );
         }
 
         @Override

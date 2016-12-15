@@ -20,10 +20,10 @@
 package org.neo4j.kernel.ha.cluster.modeswitch;
 
 import org.neo4j.kernel.ha.DelegateInvocationHandler;
+import org.neo4j.kernel.ha.MasterUpdatePuller;
 import org.neo4j.kernel.ha.PullerFactory;
 import org.neo4j.kernel.ha.SlaveUpdatePuller;
 import org.neo4j.kernel.ha.UpdatePuller;
-import org.neo4j.kernel.lifecycle.LifeSupport;
 
 /**
  * UpdatePullerSwitcher will provide different implementations of {@link UpdatePuller}
@@ -36,9 +36,6 @@ public class UpdatePullerSwitcher extends AbstractComponentSwitcher<UpdatePuller
 {
     private final PullerFactory pullerFactory;
 
-    // Field is volatile because it is used by threads from executor in HighAvailabilityModeSwitcher
-    private volatile LifeSupport life;
-
     public UpdatePullerSwitcher( DelegateInvocationHandler<UpdatePuller> delegate, PullerFactory pullerFactory )
     {
         super( delegate );
@@ -48,37 +45,31 @@ public class UpdatePullerSwitcher extends AbstractComponentSwitcher<UpdatePuller
     @Override
     protected UpdatePuller getMasterImpl()
     {
-        return UpdatePuller.NONE;
+        return MasterUpdatePuller.INSTANCE;
     }
 
     @Override
     protected UpdatePuller getSlaveImpl()
     {
-        SlaveUpdatePuller slaveUpdatePuller = pullerFactory.createSlaveUpdatePuller();
-        startUpdatePuller( slaveUpdatePuller );
-        return slaveUpdatePuller;
+        return pullerFactory.createSlaveUpdatePuller();
     }
 
     @Override
-    protected void shutdownCurrent()
+    protected void shutdownOldDelegate( UpdatePuller updatePuller )
     {
-        super.shutdownCurrent();
-        shutdownCurrentPuller();
-    }
-
-    private void shutdownCurrentPuller()
-    {
-        if ( life != null )
+        if ( updatePuller != null )
         {
-            life.shutdown();
-            life = null;
+            updatePuller.stop();
         }
     }
 
-    private void startUpdatePuller( SlaveUpdatePuller slaveUpdatePuller )
+    @Override
+    protected void startNewDelegate( UpdatePuller updatePuller )
     {
-        life = new LifeSupport();
-        life.add( slaveUpdatePuller );
-        life.start();
+        if ( updatePuller != null )
+        {
+            updatePuller.start();
+        }
     }
+
 }

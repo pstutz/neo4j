@@ -30,11 +30,10 @@ import java.io.IOException;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.logging.NullLogProvider;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 import org.neo4j.unsafe.impl.batchimport.input.InputNode;
 import org.neo4j.unsafe.impl.batchimport.staging.StageControl;
 import org.neo4j.unsafe.impl.batchimport.staging.Step;
@@ -49,8 +48,10 @@ import static org.neo4j.unsafe.impl.batchimport.Configuration.DEFAULT;
 
 public class PropertyEncoderStepTest
 {
-    public final @Rule EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
-    public final @Rule PageCacheRule pageCacheRule = new PageCacheRule();
+    @Rule
+    public final EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
+    @Rule
+    public final PageCacheRule pageCacheRule = new PageCacheRule();
     private NeoStores neoStores;
     private PageCache pageCache;
 
@@ -59,9 +60,8 @@ public class PropertyEncoderStepTest
     {
         File storeDir = new File( "dir" );
         pageCache = pageCacheRule.getPageCache( fsRule.get() );
-        StoreFactory storeFactory = new StoreFactory( fsRule.get(), storeDir, pageCache, StandardV3_0.RECORD_FORMATS,
-                        NullLogProvider.getInstance() );
-        neoStores = storeFactory.openAllNeoStores( true );
+        StoreFactory factory = new StoreFactory( storeDir, pageCache, fsRule.get(), NullLogProvider.getInstance() );
+        neoStores = factory.openAllNeoStores( true );
     }
 
     @After
@@ -94,6 +94,7 @@ public class PropertyEncoderStepTest
         // THEN
         verify( downstream ).receive( anyLong(), any() );
         verifyNoMoreInteractions( control );
+        step.close();
     }
 
     private void awaitCompleted( Step<?> step, StageControl control ) throws InterruptedException

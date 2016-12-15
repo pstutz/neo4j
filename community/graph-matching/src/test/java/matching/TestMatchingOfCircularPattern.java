@@ -44,19 +44,18 @@ import org.neo4j.graphmatching.PatternMatch;
 import org.neo4j.graphmatching.PatternMatcher;
 import org.neo4j.graphmatching.PatternNode;
 import org.neo4j.helpers.collection.IteratorWrapper;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.fail;
-
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.graphdb.traversal.Evaluators.toDepth;
 
 public class TestMatchingOfCircularPattern
 {
-    static private final boolean STATIC_PATTERN = false;
+    private static final boolean STATIC_PATTERN = false;
 
     private static class VisibleMessagesByFollowedUsers implements
             Iterable<Node>
@@ -292,6 +291,5 @@ public class TestMatchingOfCircularPattern
     }
 
     @ClassRule
-    public static TargetDirectory.TestDirectory testDirectory =
-            TargetDirectory.testDirForTest( TestMatchingOfCircularPattern.class );
+    public static TestDirectory testDirectory = TestDirectory.testDirectory();
 }

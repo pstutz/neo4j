@@ -42,16 +42,17 @@ import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.entry.OnePhaseCommit;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.stresstest.workload.Runner;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
+import static org.neo4j.function.Suppliers.untilTimeExpired;
 
 public class TransactionAppenderStressTest
 {
     @Rule
-    public final TargetDirectory.TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory directory = TestDirectory.testDirectory( );
 
     @Test
     public void concurrentTransactionAppendingTest() throws Exception
@@ -59,7 +60,7 @@ public class TransactionAppenderStressTest
         int threads = 10;
         File workingDirectory = directory.directory( "work" );
         Callable<Long> runner = new Builder()
-                .with( Builder.untilTimeExpired( 10, SECONDS ) )
+                .with( untilTimeExpired( 10, SECONDS ) )
                 .withWorkingDirectory( workingDirectory )
                 .withNumThreads( threads )
                 .build();
@@ -74,12 +75,6 @@ public class TransactionAppenderStressTest
         private BooleanSupplier condition;
         private File workingDirectory;
         private int threads;
-
-        public static BooleanSupplier untilTimeExpired( long duration, TimeUnit unit )
-        {
-            final long endTimeInMilliseconds = currentTimeMillis() + unit.toMillis( duration );
-            return () -> currentTimeMillis() <= endTimeInMilliseconds;
-        }
 
         public Builder with( BooleanSupplier condition )
         {
@@ -107,7 +102,7 @@ public class TransactionAppenderStressTest
 
     public static class TransactionIdChecker
     {
-        private File workingDirectory;
+        private final File workingDirectory;
 
         public TransactionIdChecker( File workingDirectory )
         {
@@ -136,7 +131,7 @@ public class TransactionAppenderStressTest
         private ReadableLogChannel openLogFile( FileSystemAbstraction fs, int version ) throws IOException
         {
             PhysicalLogFiles logFiles = new PhysicalLogFiles( workingDirectory, fs );
-            PhysicalLogVersionedStoreChannel channel = PhysicalLogFile.openForVersion( logFiles, fs, version );
+            PhysicalLogVersionedStoreChannel channel = PhysicalLogFile.openForVersion( logFiles, fs, version, false );
             return new ReadAheadLogChannel( channel, new ReaderLogVersionBridge( fs, logFiles ) );
         }
     }

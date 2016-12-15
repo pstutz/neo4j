@@ -11,7 +11,7 @@
 
   <groupId>org.neo4j</groupId>
   <artifactId>parent</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.1.0-SNAPSHOT</version>
 
   <packaging>pom</packaging>
   <name>Neo4j</name>
@@ -19,9 +19,9 @@
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <jta.groupId>org.apache.geronimo.specs</jta.groupId>
-    <jta.artifactId>geronimo-jta_1.1_spec</jta.artifactId>
-    <jta.version>1.1.1</jta.version>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <neo4j.java.version>${maven.compiler.source}</neo4j.java.version>
     <pico.version>2.14.3</pico.version>
     <licensing.prepend.text>notice-agpl-prefix.txt</licensing.prepend.text>
     <licensing.phase>compile</licensing.phase>
@@ -29,11 +29,12 @@
     <bouncycastle.version>1.53</bouncycastle.version>
     <generate-config-docs-phase>prepare-package</generate-config-docs-phase>
     <hsqldb.version>2.3.2</hsqldb.version>
-    <test.runner.jvm.settings>-Xmx1G -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=target/test-data -Dorg.neo4j.unsafe.impl.internal.dragons.UnsafeUtil.DIRTY_MEMORY=true -XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields</test.runner.jvm.settings>
+    <test.runner.jvm.settings.additional></test.runner.jvm.settings.additional>
+    <test.runner.jvm.settings>-Xmx2G -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=target/test-data -Dorg.neo4j.unsafe.impl.internal.dragons.UnsafeUtil.DIRTY_MEMORY=true -Dorg.neo4j.unsafe.impl.internal.dragons.UnsafeUtil.CHECK_NATIVE_ACCESS=true -Dorg.neo4j.io.pagecache.impl.muninn.usePreciseCursorErrorStackTraces=true -XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields ${test.runner.jvm.settings.additional}</test.runner.jvm.settings>
     <doclint-groups>reference</doclint-groups>
-    <neo4j.java.version>1.8</neo4j.java.version>
     <jetty.version>9.2.9.v20150224</jetty.version>
-    <findbugs.version>3.0.0</findbugs.version>
+    <findbugs.version>3.0.1</findbugs.version>
+    <git.commit>unknown-commit</git.commit>
   </properties>
 
   <modules>
@@ -42,6 +43,7 @@
     <module>integrationtests</module>
     <module>stresstests</module>
     <module>tools</module>
+    <module>packaging</module>
   </modules>
 
   <build>
@@ -50,6 +52,9 @@
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
           <argLine>${test.runner.jvm.settings}</argLine>
+          <systemPropertyVariables>
+            <dbms.pagecache.memory.default.override>8m</dbms.pagecache.memory.default.override>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
       <plugin>
@@ -73,14 +78,30 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>2.17</version>
+        <configuration>
+          <configLocation>build/checkstyle.xml</configLocation>
+          <consoleOutput>true</consoleOutput>
+          <logViolationsToConsole>true</logViolationsToConsole>
+          <failsOnError>true</failsOnError>
+          <failOnViolation>true</failOnViolation>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+        </configuration>
+        <executions>
+          <execution>
+            <id>validate</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
     <pluginManagement>
       <plugins>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>clirr-maven-plugin</artifactId>
-          <version>2.4</version>
-        </plugin>
         <plugin>
           <groupId>org.neo4j.build.plugins</groupId>
           <artifactId>clirr-maven-plugin</artifactId>
@@ -95,37 +116,6 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>exec-maven-plugin</artifactId>
           <version>1.4.0</version>
-        </plugin>
-        <plugin>
-          <groupId>org.codehaus.mojo</groupId>
-          <artifactId>findbugs-maven-plugin</artifactId>
-          <version>3.0.3</version>
-          <configuration>
-            <!--
-                Enables analysis which takes more memory but finds more bugs.
-                If you run out of memory, changes the value of the effort element
-                to 'Low'.
-            -->
-            <effort>Max</effort>
-            <!-- (values are low, medium, and max) -->
-            <threshold>Medium</threshold>
-            <!-- Fail the build or only generate report -->
-            <failOnError>false</failOnError>
-            <!-- Produces XML report -->
-            <xmlOutput>true</xmlOutput>
-            <includeTests>true</includeTests>
-            <!-- Configures the directory in which the XML report is created -->
-            <findbugsXmlOutputDirectory>${project.build.directory}/findbugs</findbugsXmlOutputDirectory>
-          </configuration>
-          <executions>
-            <!-- Run with as part of the build -->
-              <execution>
-                <phase>verify</phase>
-                <goals>
-                  <goal>check</goal>
-                </goals>
-              </execution>
-          </executions>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -163,7 +153,7 @@
             <plainTextReport>true</plainTextReport>
             <prependText>${licensing.prepend.text}</prependText>
             <excludedGroups>
-              ^((org.neo4j){1}|(org.neo4j.app){1}|(org.neo4j.doc){1}|(org.neo4j.server.plugin){1}|(org.neo4j.assembly){1}|(org.neo4j.bolt){1}|(org.neo4j.build){1}|(org.neo4j.examples){1}|(org.neo4j.test){1})$
+              ^((org.neo4j){1}|(org.neo4j.app){1}|(org.neo4j.server.plugin){1}|(org.neo4j.assembly){1}|(org.neo4j.bolt){1}|(org.neo4j.build){1}|(org.neo4j.test){1})$
             </excludedGroups>
             <excludedArtifacts>^((neo4j-browser))$</excludedArtifacts>
             <includedScopes>compile</includedScopes>
@@ -262,23 +252,9 @@
      Git information extraction profiles.
      Activate by adding the required Git information to the environment, e.g. on *nix:
 
-     export GIT_BRANCH
      export GIT_COMMIT
-     GIT_BRANCH=$(git rev-parse - -abbrev-ref HEAD)
-     GIT_COMMIT=$(git rev-parse - -short HEAD)
+     GIT_COMMIT=$(git rev-parse HEAD)
     -->
-    <profile>
-      <id>attach-git-info-branch</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-        <property>
-          <name>env.GIT_BRANCH</name>
-        </property>
-      </activation>
-      <properties>
-        <git.commit.id.describe>${env.GIT_BRANCH}</git.commit.id.describe>
-      </properties>
-    </profile>
     <profile>
       <id>attach-git-info-commit</id>
       <activation>
@@ -288,122 +264,11 @@
         </property>
       </activation>
       <properties>
-        <git.commit.id.describe>${env.GIT_COMMIT}</git.commit.id.describe>
+        <git.commit>${env.GIT_COMMIT}</git.commit>
       </properties>
     </profile>
 
     <!-- Build configuration profiles -->
-    <profile>
-      <id>neo-full-build</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-        <property>
-          <name>fullBuild</name>
-        </property>
-      </activation>
-      <modules>
-        <!-- <module>manual</module>  --><!--TODO: Sascha   -->
-        <module>packaging</module>
-       <!-- <module>packaging/installer-linux</module> -->
-      </modules>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.codehaus.mojo</groupId>
-            <artifactId>findbugs-maven-plugin</artifactId>
-            <dependencies>
-              <dependency>
-                <groupId>com.google.code.findbugs</groupId>
-                <artifactId>annotations</artifactId>
-                <version>${findbugs.version}</version>
-              </dependency>
-            </dependencies>
-          </plugin>
-        </plugins>
-      </build>
-      <properties>
-        <attach-docs-phase>verify</attach-docs-phase>
-      </properties>
-    </profile>
-    <profile>
-      <id>neodev</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
-      <properties>
-        <attach-test-jar-phase>package</attach-test-jar-phase>
-      </properties>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.neo4j.build.plugins</groupId>
-            <artifactId>license-maven-plugin</artifactId>
-            <!-- inserting licenses is better than checking for them -->
-            <executions>
-              <execution>
-                <id>check-licenses</id>
-                <phase>none</phase>
-              </execution>
-              <execution>
-                <id>insert-licenses</id>
-                <phase>initialize</phase>
-                <goals>
-                  <goal>format</goal>
-                </goals>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>neo-docs-build</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-        <property>
-          <name>docsBuild</name>
-        </property>
-      </activation>
-      <modules>
-        <module>manual</module>
-      </modules>
-      <properties>
-        <attach-java-sources-phase>package</attach-java-sources-phase>
-        <attach-java-test-sources-phase>package</attach-java-test-sources-phase>
-        <attach-test-jar-phase>package</attach-test-jar-phase>
-        <attach-docs-phase>verify</attach-docs-phase>
-        <integration-test-phase>integration-test</integration-test-phase>
-      </properties>
-      <build>
-        <pluginManagement>
-          <plugins>
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-surefire-plugin</artifactId>
-              <configuration>
-                <includes>
-                  <include>**/DocTest*.java</include>
-                  <include>**/*DocTest.java</include>
-                  <include>**/*DocTests.java</include>
-                  <include>**/*DocTestCase.java</include>
-                </includes>
-              </configuration>
-            </plugin>
-            <plugin>
-              <groupId>org.apache.maven.plugins</groupId>
-              <artifactId>maven-failsafe-plugin</artifactId>
-              <configuration>
-                <includes>
-                  <include>**/DocIT*.java</include>
-                  <include>**/*DocIT.java</include>
-                  <include>**/*DocITCase.java</include>
-                </includes>
-              </configuration>
-            </plugin>
-          </plugins>
-        </pluginManagement>
-      </build>
-    </profile>
     <profile>
       <id>neo-minimal-build</id>
       <activation>
@@ -436,6 +301,12 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>causal-clustering-tests-only</id>
+      <properties>
+        <test-phase>none</test-phase>
+      </properties>
     </profile>
     <profile>
       <id>java8-set-javadoc-doclint</id>
@@ -487,13 +358,13 @@
           </exclusion>
         </exclusions>
       </dependency>
-      <!-- special -->
-      <dependency>
-        <groupId>${jta.groupId}</groupId>
-        <artifactId>${jta.artifactId}</artifactId>
-        <version>${jta.version}</version>
-      </dependency>
       <!-- testing -->
+      <dependency>
+        <groupId>org.neo4j.driver</groupId>
+        <artifactId>neo4j-java-driver</artifactId>
+        <version>1.1.0-M06</version>
+        <scope>test</scope>
+      </dependency>
       <dependency>
         <groupId>org.apache.httpcomponents</groupId>
         <artifactId>httpclient</artifactId>
@@ -519,6 +390,13 @@
         <version>${pico.version}</version>
         <scope>test</scope>
       </dependency>
+      <dependency>
+        <groupId>com.google.jimfs</groupId>
+        <artifactId>jimfs</artifactId>
+        <version>1.1</version>
+        <scope>test</scope>
+      </dependency>
+
 
       <!-- The JUnit-Hamcrest-Mockito combo -->
       <dependency>
@@ -554,12 +432,6 @@
           <scope>test</scope>
       </dependency>
 
-      <dependency>
-        <groupId>geronimo-spec</groupId>
-        <artifactId>geronimo-spec-j2ee</artifactId>
-        <version>1.4-rc4</version>
-        <scope>test</scope>
-      </dependency>
       <dependency>
         <groupId>org.hsqldb</groupId>
         <artifactId>hsqldb</artifactId>
@@ -609,6 +481,11 @@
         <artifactId>commons-lang3</artifactId>
         <version>3.3.2</version>
       </dependency>
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-compress</artifactId>
+        <version>1.12</version>
+      </dependency>
 
       <!-- Netty is used by three components: Com, Cluster and Bolt Socket Transport.
            Netty 4 is a significant improvement over Netty 3, in that it introduces
@@ -620,12 +497,12 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty</artifactId>
-        <version>3.6.3.Final</version>
+        <version>3.9.9.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.28.Final</version>
+        <version>4.1.6.Final</version>
       </dependency>
 
       <dependency>
@@ -637,11 +514,6 @@
         <groupId>org.codehaus.janino</groupId>
         <artifactId>janino</artifactId>
         <version>2.6.1</version>
-      </dependency>
-      <dependency>
-        <groupId>com.googlecode.concurrentlinkedhashmap</groupId>
-        <artifactId>concurrentlinkedhashmap-lru</artifactId>
-        <version>1.4.2</version>
       </dependency>
       <dependency>
         <groupId>net.sf.opencsv</groupId>

@@ -23,7 +23,6 @@ import org.junit.Test;
 
 import java.io.StringReader;
 import java.util.Map;
-import java.util.function.Function;
 import java.util.function.Supplier;
 
 import org.neo4j.csv.reader.CharReadable;
@@ -31,7 +30,7 @@ import org.neo4j.csv.reader.Readables;
 import org.neo4j.unsafe.impl.batchimport.input.InputEntity;
 import org.neo4j.unsafe.impl.batchimport.input.InputNode;
 import org.neo4j.unsafe.impl.batchimport.input.UpdateBehaviour;
-import org.neo4j.unsafe.impl.batchimport.input.csv.Configuration.Overriden;
+import org.neo4j.unsafe.impl.batchimport.input.csv.Configuration.Overridden;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -55,7 +54,7 @@ public class ExternalPropertiesDecoratorTest
                 "4,dude@yo";
         Configuration config = config();
         IdType idType = IdType.STRING;
-        Function<InputNode,InputNode> externalPropertiesDecorator = new ExternalPropertiesDecorator(
+        Decorator<InputNode> externalPropertiesDecorator = new ExternalPropertiesDecorator(
                 DataFactories.<InputNode>data( NO_NODE_DECORATOR, readable( propertyData ) ),
                 defaultFormatNodeFileHeader(), config, idType, UpdateBehaviour.ADD,
                 silentBadCollector( 0 ));
@@ -70,6 +69,7 @@ public class ExternalPropertiesDecoratorTest
                 "key", "value3", "email", "chris@abc" );
         assertProperties( externalPropertiesDecorator.apply( node( "4", "key", "value4" ) ),
                 "key", "value4", "email", "dude@yo" );
+        externalPropertiesDecorator.close();
     }
 
     @Test
@@ -83,7 +83,7 @@ public class ExternalPropertiesDecoratorTest
                 "4,dude@yo";
         Configuration config = config();
         IdType idType = IdType.STRING;
-        Function<InputNode,InputNode> externalPropertiesDecorator = new ExternalPropertiesDecorator(
+        Decorator<InputNode> externalPropertiesDecorator = new ExternalPropertiesDecorator(
                 DataFactories.<InputNode>data( NO_NODE_DECORATOR, readable( propertyData ) ),
                 defaultFormatNodeFileHeader(), config, idType, UpdateBehaviour.ADD,
                 silentBadCollector( 0 ));
@@ -98,6 +98,7 @@ public class ExternalPropertiesDecoratorTest
                 "key", "value3", "email", new String[] {"chris@abc"} );
         assertProperties( externalPropertiesDecorator.apply( node( "4", "key", "value4" ) ),
                 "key", "value4", "email", new String[] {"dude@yo"} );
+        externalPropertiesDecorator.close();
     }
 
     private void assertProperties( InputNode decoratedNode, Object... expectedKeyValuePairs )
@@ -131,9 +132,9 @@ public class ExternalPropertiesDecoratorTest
         return () -> Readables.wrap( new StringReader( data ) );
     }
 
-    private Overriden config()
+    private Overridden config()
     {
-        return new Configuration.Overriden( Configuration.COMMAS )
+        return new Configuration.Overridden( Configuration.COMMAS )
         {
             @Override
             public int bufferSize()

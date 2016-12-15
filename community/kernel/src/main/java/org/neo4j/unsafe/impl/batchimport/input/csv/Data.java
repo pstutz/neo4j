@@ -19,8 +19,7 @@
  */
 package org.neo4j.unsafe.impl.batchimport.input.csv;
 
-import java.util.function.Function;
-
+import org.neo4j.csv.reader.CharReadable;
 import org.neo4j.csv.reader.CharSeeker;
 import org.neo4j.unsafe.impl.batchimport.input.InputEntity;
 
@@ -30,7 +29,7 @@ import org.neo4j.unsafe.impl.batchimport.input.InputEntity;
  */
 public interface Data<ENTITY extends InputEntity>
 {
-    CharSeeker stream();
+    CharReadable stream();
 
-    Function<ENTITY,ENTITY> decorator();
+    Decorator<ENTITY> decorator();
 }

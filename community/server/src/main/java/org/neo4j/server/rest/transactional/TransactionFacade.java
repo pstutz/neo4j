@@ -23,7 +23,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.GraphDatabaseQueryService;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.server.rest.transactional.error.TransactionLifecycleException;
@@ -55,20 +56,23 @@ public class TransactionFacade
     private final QueryExecutionEngine engine;
     private final TransactionRegistry registry;
     private final LogProvider logProvider;
+    private GraphDatabaseQueryService queryService;
 
     public TransactionFacade( TransitionalPeriodTransactionMessContainer kernel, QueryExecutionEngine engine,
-                              TransactionRegistry registry, LogProvider logProvider )
+            GraphDatabaseQueryService queryService, TransactionRegistry registry, LogProvider logProvider )
     {
         this.kernel = kernel;
         this.engine = engine;
+        this.queryService = queryService;
         this.registry = registry;
         this.logProvider = logProvider;
     }
 
-    public TransactionHandle newTransactionHandle( TransactionUriScheme uriScheme, boolean implicitTransaction, AccessMode mode )
-            throws TransactionLifecycleException
+    public TransactionHandle newTransactionHandle( TransactionUriScheme uriScheme, boolean implicitTransaction,
+            SecurityContext securityContext, long customTransactionTimeout ) throws TransactionLifecycleException
     {
-        return new TransactionHandle( kernel, engine, registry, uriScheme, implicitTransaction, mode, logProvider );
+        return new TransactionHandle( kernel, engine, queryService, registry, uriScheme, implicitTransaction,
+                securityContext, customTransactionTimeout, logProvider );
     }
 
     public TransactionHandle findTransactionHandle( long txId ) throws TransactionLifecycleException

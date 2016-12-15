@@ -23,6 +23,7 @@ import java.util.function.Supplier;
 
 import org.neo4j.helpers.Service;
 import org.neo4j.io.fs.FileSystemAbstraction;
+import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.NeoStoreDataSource;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
@@ -32,7 +33,6 @@ import org.neo4j.kernel.impl.transaction.log.LogFileInformation;
 import org.neo4j.kernel.impl.transaction.log.LogicalTransactionStore;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointer;
-import org.neo4j.kernel.impl.util.CustomIOConfigValidator;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.monitoring.Monitors;
@@ -41,7 +41,6 @@ import org.neo4j.kernel.monitoring.Monitors;
 public class OnlineBackupExtensionFactory extends KernelExtensionFactory<OnlineBackupExtensionFactory.Dependencies>
 {
     static final String KEY = "online backup";
-    static final String CUSTOM_IO_EXCEPTION_MESSAGE = "Online Backup not allowed with custom IO integration";
 
     public interface Dependencies
     {
@@ -64,6 +63,8 @@ public class OnlineBackupExtensionFactory extends KernelExtensionFactory<OnlineB
         Supplier<LogFileInformation> logFileInformationSupplier();
 
         FileSystemAbstraction fileSystemAbstraction();
+
+        PageCache pageCache();
     }
 
     public OnlineBackupExtensionFactory()
@@ -80,8 +81,6 @@ public class OnlineBackupExtensionFactory extends KernelExtensionFactory<OnlineB
     @Override
     public Lifecycle newInstance( KernelContext context, Dependencies dependencies ) throws Throwable
     {
-        CustomIOConfigValidator.assertCustomIOConfigNotUsed( dependencies.getConfig(), CUSTOM_IO_EXCEPTION_MESSAGE );
-
         return new OnlineBackupKernelExtension( dependencies.getConfig(), dependencies.getGraphDatabaseAPI(),
                 dependencies.logService().getInternalLogProvider(), dependencies.monitors(),
                 dependencies.neoStoreDataSource(),
@@ -89,6 +88,7 @@ public class OnlineBackupExtensionFactory extends KernelExtensionFactory<OnlineB
                 dependencies.transactionIdStoreSupplier(),
                 dependencies.logicalTransactionStoreSupplier(),
                 dependencies.logFileInformationSupplier(),
-                dependencies.fileSystemAbstraction());
+                dependencies.fileSystemAbstraction(),
+                dependencies.pageCache() );
     }
 }

@@ -22,8 +22,8 @@ package org.neo4j.kernel.impl.store;
 import org.junit.Test;
 
 import java.util.Collection;
-import java.util.Collections;
 
+import org.neo4j.kernel.impl.store.allocator.ReusableRecordsAllocator;
 import org.neo4j.kernel.impl.store.id.IdSequence;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -46,12 +46,12 @@ public class NodeRecordTest
     public void cloneShouldProduceExactCopy() throws Exception
     {
         // Given
-        long relId = 1337l;
-        long propId = 1338l;
-        long inlinedLabels = 12l;
+        long relId = 1337L;
+        long propId = 1338L;
+        long inlinedLabels = 12L;
 
-        NodeRecord node = new NodeRecord( 1l, false, relId, propId );
-        node.setLabelField( inlinedLabels, asList( new DynamicRecord( 1l ), new DynamicRecord( 2l ) ) );
+        NodeRecord node = new NodeRecord( 1L, false, relId, propId );
+        node.setLabelField( inlinedLabels, asList( new DynamicRecord( 1L ), new DynamicRecord( 2L ) ) );
         node.setInUse( true );
 
         // When
@@ -71,10 +71,10 @@ public class NodeRecordTest
     {
         // Given
         NodeRecord node = new NodeRecord( 1, false, -1, -1 );
-        long inlinedLabels = 12l;
-        DynamicRecord dynamic1 = dynamicRecord( 1l, true );
-        DynamicRecord dynamic2 = dynamicRecord( 2l, true );
-        DynamicRecord dynamic3 = dynamicRecord( 3l, true );
+        long inlinedLabels = 12L;
+        DynamicRecord dynamic1 = dynamicRecord( 1L, true );
+        DynamicRecord dynamic2 = dynamicRecord( 2L, true );
+        DynamicRecord dynamic3 = dynamicRecord( 3L, true );
 
         node.setLabelField( inlinedLabels, asList( dynamic1, dynamic2, dynamic3 ) );
 
@@ -93,12 +93,13 @@ public class NodeRecordTest
         // GIVEN
         IdSequence ids = mock( IdSequence.class );
         when( ids.nextId() ).thenReturn( 1L, 2L );
-        DynamicRecordAllocator allocator = new ExistingThenNewRecordAllocator( 30, ids );
+        ReusableRecordsAllocator recordAllocator =
+                new ReusableRecordsAllocator( 30, new DynamicRecord( 1 ), new DynamicRecord( 2 ) );
         NodeRecord node = newUsedNodeRecord( 0 );
         long labelId = 10_123;
         // A dynamic label record
-        Collection<DynamicRecord> existing = allocateRecordsForDynamicLabels( node.getId(),
-                new long[] {labelId}, Collections.<DynamicRecord>emptyIterator(), allocator );
+        Collection<DynamicRecord> existing = allocateRecordsForDynamicLabels( node.getId(), new long[]{labelId},
+                recordAllocator );
         // and a deleted one as well (simulating some deleted labels)
         DynamicRecord unused = newDeletedDynamicRecord( ids.nextId() );
         unused.setInUse( false );

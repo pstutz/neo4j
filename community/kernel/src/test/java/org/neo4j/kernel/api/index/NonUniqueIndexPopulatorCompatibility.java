@@ -67,7 +67,7 @@ public class NonUniqueIndexPopulatorCompatibility extends IndexProviderCompatibi
         try ( IndexReader reader = accessor.newReader() )
         {
             PrimitiveLongIterator nodes = reader.seek( "value1" );
-            assertEquals( asSet( 1l, 2l ), PrimitiveLongCollections.toSet( nodes ) );
+            assertEquals( asSet( 1L, 2L ), PrimitiveLongCollections.toSet( nodes ) );
         }
         accessor.close();
     }
@@ -129,6 +129,7 @@ public class NonUniqueIndexPopulatorCompatibility extends IndexProviderCompatibi
         IndexSamplingConfig indexSamplingConfig = new IndexSamplingConfig( Config.empty() );
         IndexPopulator populator = indexProvider.getPopulator( 17, descriptor, config, indexSamplingConfig );
         populator.create();
+        populator.configureSampling( true );
         long nodeId = 1;
         int propertyKeyId = 10, labelId = 11; // Can we just use arbitrary ids here?
         final String propertyValue = "value1";
@@ -151,14 +152,12 @@ public class NonUniqueIndexPopulatorCompatibility extends IndexProviderCompatibi
 
         populator.close( true );
 
-
-
         // then
         IndexAccessor accessor = indexProvider.getOnlineAccessor( 17, IndexConfiguration.NON_UNIQUE, indexSamplingConfig );
         try ( IndexReader reader = accessor.newReader() )
         {
             PrimitiveLongIterator nodes = reader.seek( propertyValue );
-            assertEquals( asSet( 1l ), PrimitiveLongCollections.toSet( nodes ) );
+            assertEquals( asSet( 1L ), PrimitiveLongCollections.toSet( nodes ) );
         }
         accessor.close();
     }

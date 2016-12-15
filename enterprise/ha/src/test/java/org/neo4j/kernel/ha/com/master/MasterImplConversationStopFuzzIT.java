@@ -42,7 +42,6 @@ import org.neo4j.com.Response;
 import org.neo4j.com.TransactionNotPresentOnMasterException;
 import org.neo4j.com.TransactionObligationResponse;
 import org.neo4j.com.storecopy.StoreWriter;
-import org.neo4j.helpers.Clock;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.ha.cluster.ConversationSPI;
@@ -63,7 +62,8 @@ import org.neo4j.kernel.impl.util.collection.TimedRepository;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.FormattedLog;
-import org.neo4j.test.rules.VerboseTimeout;
+import org.neo4j.test.rule.VerboseTimeout;
+import org.neo4j.time.Clocks;
 
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -164,7 +164,7 @@ public class MasterImplConversationStopFuzzIT
         private final int machineId;
 
         private State state = State.UNINITIALIZED;
-        private long lastTx = 0;
+        private final long lastTx = 0;
         private long epoch;
         private RequestContext requestContext;
 
@@ -245,7 +245,7 @@ public class MasterImplConversationStopFuzzIT
                                 }
                                 else
                                 {
-                                    worker.master.endLockSession( worker.requestContext, true );
+                                    endLockSession( worker );
                                     return IDLE;
                                 }
                             }
@@ -262,7 +262,7 @@ public class MasterImplConversationStopFuzzIT
                             }
                             else
                             {
-                                worker.master.endLockSession( worker.requestContext, true );
+                                endLockSession( worker );
                                 return IDLE;
                             }
                         }
@@ -323,15 +323,16 @@ public class MasterImplConversationStopFuzzIT
         {
             return random.nextInt();
         }
+
+        private static void endLockSession( SlaveEmulatorWorker worker )
+        {
+            boolean successfulSession = worker.random.nextBoolean();
+            worker.master.endLockSession( worker.requestContext, successfulSession );
+        }
     }
 
     static class ConversationTestMasterSPI implements MasterImpl.SPI
     {
-
-        public ConversationTestMasterSPI()
-        {
-        }
-
         @Override
         public boolean isAccessible()
         {
@@ -484,7 +485,7 @@ public class MasterImplConversationStopFuzzIT
         protected TimedRepository<RequestContext,Conversation> createConversationStore()
         {
             conversationStore = new TimedRepository<>( getConversationFactory(), getConversationReaper(),
-                    1, Clock.SYSTEM_CLOCK );
+                    1, Clocks.systemClock() );
             return conversationStore;
         }
     }

@@ -1,6 +1,9 @@
 package org.neo4j.kernel.impl.api;
 
+import org.neo4j.collection.primitive.Primitive;
+import org.neo4j.collection.primitive.PrimitiveIntCollection;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
+import org.neo4j.collection.primitive.PrimitiveIntSet;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
@@ -13,7 +16,7 @@ import java.util.function.IntSupplier;
 /**
  * Created by Sascha Peukert on 26.08.2016.
  */
-public class VirtualNodeItem implements NodeItem{
+public class VirtualNodeItem implements NodeItem {
 
     private long id;
     private VirtualOperationsFacade ops;
@@ -347,12 +350,14 @@ public class VirtualNodeItem implements NodeItem{
     }
 
     @Override
-    public PrimitiveIntIterator getPropertyKeys() {
+    public PrimitiveIntCollection getPropertyKeys() {
+
+        PrimitiveIntSet col = Primitive.intSet();
         try {
-            return ops.nodeGetPropertyKeys(id);
+            col.addAll(ops.nodeGetPropertyKeys(id));
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
-            return new MergingPrimitiveIntIterator(null,null);
         }
+        return col;
     }
 }

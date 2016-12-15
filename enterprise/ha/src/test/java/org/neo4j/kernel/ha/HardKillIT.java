@@ -42,7 +42,7 @@ import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
 import org.neo4j.graphdb.factory.TestHighlyAvailableGraphDatabaseFactory;
 import org.neo4j.kernel.ha.cluster.modeswitch.HighAvailabilityModeSwitcher;
 import org.neo4j.test.ProcessStreamHandler;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
@@ -52,7 +52,7 @@ import static org.junit.Assert.fail;
 public class HardKillIT
 {
     @Rule
-    public final TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory testDirectory = TestDirectory.testDirectory();
 
     private ProcessStreamHandler processHandler;
 
@@ -186,10 +186,10 @@ public class HardKillIT
     {
         GraphDatabaseBuilder builder = new TestHighlyAvailableGraphDatabaseFactory()
                 .newEmbeddedDatabaseBuilder( path )
-                .setConfig( ClusterSettings.initial_hosts, "127.0.0.1:5002,127.0.0.1:5003" )
-                .setConfig( ClusterSettings.cluster_server, "127.0.0.1:" + (5001 + serverId) )
+                .setConfig( ClusterSettings.initial_hosts, "127.0.0.1:7102,127.0.0.1:7103" )
+                .setConfig( ClusterSettings.cluster_server, "127.0.0.1:" + (7101 + serverId) )
                 .setConfig( ClusterSettings.server_id, "" + serverId )
-                .setConfig( HaSettings.ha_server, ":" + (8001 + serverId) )
+                .setConfig( HaSettings.ha_server, ":" + (7501 + serverId) )
                 .setConfig( HaSettings.tx_push_factor, "0" );
         HighlyAvailableGraphDatabase db = (HighlyAvailableGraphDatabase) builder.newGraphDatabase();
         db.beginTx().close();

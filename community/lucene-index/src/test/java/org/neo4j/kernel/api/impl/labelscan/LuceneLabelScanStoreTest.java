@@ -19,11 +19,14 @@
  */
 package org.neo4j.kernel.api.impl.labelscan;
 
+import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.store.LockObtainFailedException;
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
@@ -44,8 +47,11 @@ import java.util.TreeSet;
 
 import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
+import org.neo4j.graphdb.ResourceIterator;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.collection.BoundedIterable;
 import org.neo4j.helpers.collection.Iterators;
+import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.helpers.collection.PrefetchingIterator;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
@@ -54,14 +60,18 @@ import org.neo4j.kernel.api.impl.labelscan.storestrategy.BitmapDocumentFormat;
 import org.neo4j.kernel.api.labelscan.LabelScanWriter;
 import org.neo4j.kernel.api.labelscan.NodeLabelRange;
 import org.neo4j.kernel.api.labelscan.NodeLabelUpdate;
+import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.api.scan.LabelScanStoreProvider.FullStoreChangeStream;
+import org.neo4j.kernel.impl.factory.OperationalMode;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.storageengine.api.schema.LabelScanReader;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
+import static java.util.stream.Collectors.toList;
+import static org.hamcrest.Matchers.startsWith;
 import static org.hamcrest.core.IsCollectionContaining.hasItem;
 import static org.hamcrest.core.IsCollectionContaining.hasItems;
 import static org.junit.Assert.assertArrayEquals;
@@ -69,6 +79,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.neo4j.collection.primitive.PrimitiveLongCollections.EMPTY_LONG_ARRAY;
 import static org.neo4j.helpers.collection.Iterators.iterator;
 import static org.neo4j.helpers.collection.Iterators.single;
 import static org.neo4j.io.fs.FileUtils.deleteRecursively;
@@ -78,7 +89,9 @@ import static org.neo4j.kernel.api.labelscan.NodeLabelUpdate.labelChanges;
 public class LuceneLabelScanStoreTest
 {
     @Rule
-    public final TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory testDirectory = TestDirectory.testDirectory();
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
 
     private static final long[] NO_LABELS = new long[0];
     private final BitmapDocumentFormat documentFormat;
@@ -108,9 +121,53 @@ public class LuceneLabelScanStoreTest
     }
 
     @After
-    public void shutdown() throws IOException
+    public void shutdown()
     {
         life.shutdown();
+    }
+
+    @Test
+    public void failToRetrieveWriterOnReadOnlyScanStore() throws IOException
+    {
+        startReadOnlyLabelScanStore();
+        expectedException.expect( UnsupportedOperationException.class );
+        store.newWriter();
+    }
+
+    @Test
+    public void forceShouldNotForceWriterOnReadOnlyScanStore()
+    {
+        startReadOnlyLabelScanStore();
+        store.force();
+    }
+
+    @Test
+    public void failToGetWriterOnReadOnlyScanStore() throws Exception
+    {
+        startReadOnlyLabelScanStore();
+        expectedException.expect( UnsupportedOperationException.class );
+        store.newWriter();
+    }
+
+    @Test
+    public void failToStartIfLabelScanStoreIndexDoesNotExistInReadOnlyMode()
+    {
+        expectedException.expectCause( Matchers.instanceOf( UnsupportedOperationException.class ) );
+        startLabelScanStore( Config.empty().with( MapUtil.stringMap( GraphDatabaseSettings.read_only.name(), "true" ) ) );
+        assertTrue( monitor.noIndexCalled );
+    }
+
+    @Test
+    public void snapshotReadOnlyLabelScanStore() throws IOException
+    {
+        prepareIndex();
+        startReadOnlyLabelScanStore();
+        try (ResourceIterator<File> indexFiles = store.snapshotStoreFiles())
+        {
+            List<String> filesNames = indexFiles.stream().map( File::getName ).collect( toList() );
+            assertThat( "Should have at least index segment file.", filesNames,
+                    hasItem( startsWith( IndexFileNames.SEGMENTS ) ) );
+        }
     }
 
     @Test
@@ -270,7 +327,7 @@ public class LuceneLabelScanStoreTest
         start( label0Updates );
 
         // when
-        write( Collections.<NodeLabelUpdate>emptyIterator() );
+        write( Collections.emptyIterator() );
 
         // then
         LabelScanReader reader = store.newReader();
@@ -328,7 +385,6 @@ public class LuceneLabelScanStoreTest
 
         // WHEN the index is corrupted and then started again
         scrambleIndexFilesAndRestart( data );
-
 
         assertTrue( "Index corruption should be detected", monitor.corruptedIndex );
         assertTrue( "Index should be rebuild", monitor.rebuildingCalled );
@@ -388,6 +444,84 @@ public class LuceneLabelScanStoreTest
         reader.close();
     }
 
+    @Test
+    public void shouldFindNodesWithAnyOfGivenLabels() throws Exception
+    {
+        // GIVEN
+        int labelId1 = 3, labelId2 = 5, labelId3 = 13;
+        start();
+
+        // WHEN
+        write( iterator(
+                labelChanges( 2, EMPTY_LONG_ARRAY, new long[] {labelId1, labelId2} ),
+                labelChanges( 1, EMPTY_LONG_ARRAY, new long[] {labelId1} ),
+                labelChanges( 4, EMPTY_LONG_ARRAY, new long[] {labelId1,           labelId3} ),
+                labelChanges( 5, EMPTY_LONG_ARRAY, new long[] {labelId1, labelId2, labelId3} ),
+                labelChanges( 3, EMPTY_LONG_ARRAY, new long[] {labelId1} ),
+                labelChanges( 7, EMPTY_LONG_ARRAY, new long[] {          labelId2} ),
+                labelChanges( 8, EMPTY_LONG_ARRAY, new long[] {                    labelId3} ),
+                labelChanges( 6, EMPTY_LONG_ARRAY, new long[] {          labelId2} ),
+                labelChanges( 9, EMPTY_LONG_ARRAY, new long[] {                    labelId3} ) ) );
+
+        // THEN
+        try ( LabelScanReader reader = store.newReader() )
+        {
+            assertArrayEquals(
+                    new long[] {1, 2, 3, 4, 5, 6, 7},
+                    PrimitiveLongCollections.asArray( reader.nodesWithAnyOfLabels( labelId1, labelId2 ) ) );
+            assertArrayEquals(
+                    new long[] {1, 2, 3, 4, 5, 8, 9},
+                    PrimitiveLongCollections.asArray( reader.nodesWithAnyOfLabels( labelId1, labelId3 ) ) );
+            assertArrayEquals(
+                    new long[] {1, 2, 3, 4, 5, 6, 7, 8, 9},
+                    PrimitiveLongCollections.asArray( reader.nodesWithAnyOfLabels( labelId1, labelId2, labelId3 ) ) );
+        }
+    }
+
+    @Test
+    public void shouldFindNodesWithAllGivenLabels() throws Exception
+    {
+        // GIVEN
+        int labelId1 = 3, labelId2 = 5, labelId3 = 13;
+        start();
+
+        // WHEN
+        write( iterator(
+                labelChanges( 5, EMPTY_LONG_ARRAY, new long[] {labelId1, labelId2, labelId3} ),
+                labelChanges( 8, EMPTY_LONG_ARRAY, new long[] {                    labelId3} ),
+                labelChanges( 3, EMPTY_LONG_ARRAY, new long[] {labelId1} ),
+                labelChanges( 6, EMPTY_LONG_ARRAY, new long[] {          labelId2} ),
+                labelChanges( 1, EMPTY_LONG_ARRAY, new long[] {labelId1} ),
+                labelChanges( 7, EMPTY_LONG_ARRAY, new long[] {          labelId2} ),
+                labelChanges( 4, EMPTY_LONG_ARRAY, new long[] {labelId1,           labelId3} ),
+                labelChanges( 2, EMPTY_LONG_ARRAY, new long[] {labelId1, labelId2} ),
+                labelChanges( 9, EMPTY_LONG_ARRAY, new long[] {                    labelId3} ) ) );
+
+        // THEN
+        try ( LabelScanReader reader = store.newReader() )
+        {
+            assertArrayEquals(
+                    new long[] {2, 5},
+                    PrimitiveLongCollections.asArray( reader.nodesWithAllLabels( labelId1, labelId2 ) ) );
+            assertArrayEquals(
+                    new long[] {4, 5},
+                    PrimitiveLongCollections.asArray( reader.nodesWithAllLabels( labelId1, labelId3 ) ) );
+            assertArrayEquals(
+                    new long[] {5},
+                    PrimitiveLongCollections.asArray( reader.nodesWithAllLabels( labelId1, labelId2, labelId3 ) ) );
+        }
+    }
+
+    private void prepareIndex() throws IOException
+    {
+        start();
+        try ( LabelScanWriter labelScanWriter = store.newWriter() )
+        {
+            labelScanWriter.write( NodeLabelUpdate.labelChanges( 1, new long[]{}, new long[]{1} ) );
+        }
+        store.shutdown();
+    }
+
     private Set<Long> gaps( Set<Long> ids, int expectedCount )
     {
         Set<Long> gaps = new HashSet<>();
@@ -440,14 +574,37 @@ public class LuceneLabelScanStoreTest
 
     private void start( List<NodeLabelUpdate> existingData )
     {
+        startLabelScanStore( existingData, Config.empty() );
+        assertTrue( monitor.initCalled );
+    }
+
+    private void startReadOnlyLabelScanStore()
+    {
+        // create label scan store and shutdown it
+        startLabelScanStore( Config.empty() );
+        life.shutdown();
+
+        Config config = Config.empty().with( MapUtil.stringMap( GraphDatabaseSettings.read_only.name(), "true" ) );
+        startLabelScanStore( config );
+    }
+
+    private void startLabelScanStore( Config config )
+    {
+        startLabelScanStore( Collections.emptyList(), config );
+    }
+
+    private void startLabelScanStore( List<NodeLabelUpdate> existingData, Config config )
+    {
         life = new LifeSupport();
         monitor = new TrackingMonitor();
 
         indexStorage = new PartitionedIndexStorage( directoryFactory, new DefaultFileSystemAbstraction(), dir,
-                LuceneLabelScanIndexBuilder.DEFAULT_INDEX_IDENTIFIER );
-        LuceneLabelScanIndex index = LuceneLabelScanIndexBuilder.create()
+                LuceneLabelScanIndexBuilder.DEFAULT_INDEX_IDENTIFIER, false );
+        LabelScanIndex index = LuceneLabelScanIndexBuilder.create()
                                 .withDirectoryFactory( directoryFactory )
                                 .withIndexStorage( indexStorage )
+                                .withOperationalMode( OperationalMode.single )
+                                .withConfig( config )
                                 .withDocumentFormat( documentFormat )
                                 .build();
 
@@ -460,19 +617,15 @@ public class LuceneLabelScanStoreTest
 
     private FullStoreChangeStream asStream( final List<NodeLabelUpdate> existingData )
     {
-        return new FullStoreChangeStream()
+        return writer ->
         {
-            @Override
-            public long applyTo( LabelScanWriter writer ) throws IOException
+            long count = 0;
+            for ( NodeLabelUpdate update : existingData )
             {
-                long count = 0;
-                for ( NodeLabelUpdate update : existingData )
-                {
-                    writer.write( update );
-                    count++;
-                }
-                return count;
+                writer.write( update );
+                count++;
             }
+            return count;
         };
     }
 

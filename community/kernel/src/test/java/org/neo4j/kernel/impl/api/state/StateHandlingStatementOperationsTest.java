@@ -44,7 +44,6 @@ import org.neo4j.kernel.impl.api.legacyindex.InternalAutoIndexing;
 import org.neo4j.kernel.impl.api.store.StoreStatement;
 import org.neo4j.kernel.impl.index.LegacyIndexStore;
 import org.neo4j.kernel.impl.locking.ReentrantLockService;
-import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.kernel.impl.util.diffsets.DiffSets;
 import org.neo4j.storageengine.api.LabelItem;
@@ -70,6 +69,7 @@ import static org.neo4j.kernel.api.properties.Property.intProperty;
 import static org.neo4j.kernel.impl.api.StatementOperationsTestHelper.mockedState;
 import static org.neo4j.kernel.impl.api.state.StubCursors.asNodeCursor;
 import static org.neo4j.kernel.impl.api.state.StubCursors.asPropertyCursor;
+import static org.neo4j.test.MockedNeoStores.basicMockedNeoStores;
 
 public class StateHandlingStatementOperationsTest
 {
@@ -450,8 +450,8 @@ public class StateHandlingStatementOperationsTest
 
         StoreStatementWithSingleFreshIndexReader( IndexReader reader )
         {
-            super( mock( NeoStores.class ), new ReentrantLockService(), () -> mock( IndexReaderFactory.class ),
-                    () -> mock( LabelScanReader.class ) );
+            super( basicMockedNeoStores(), () -> mock( IndexReaderFactory.class ),
+                    () -> mock( LabelScanReader.class ),  new ReentrantLockService() );
             this.reader = reader;
         }
 

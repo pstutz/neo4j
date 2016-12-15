@@ -36,7 +36,6 @@ import org.neo4j.kernel.impl.store.SchemaStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.StoreType;
 import org.neo4j.kernel.impl.store.TokenStore;
-import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
@@ -46,6 +45,7 @@ import org.neo4j.kernel.impl.util.HexPrinter;
 import org.neo4j.logging.FormattedLogProvider;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.logging.PrintStreamLogger;
 import org.neo4j.storageengine.api.Token;
 
 import static org.neo4j.kernel.impl.pagecache.StandalonePageCacheFactory.createPageCache;
@@ -70,9 +70,8 @@ public class DumpStore<RECORD extends AbstractBaseRecord, STORE extends RecordSt
         final DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( fs );
         try ( PageCache pageCache = createPageCache( fs ) )
         {
-            Function<File,StoreFactory> createStoreFactory =
-                    file -> new StoreFactory( file.getParentFile(), Config.defaults(), idGeneratorFactory, pageCache, fs,
-                            RecordFormatSelector.autoSelectFormat(), logProvider() );
+            Function<File,StoreFactory> createStoreFactory = file -> new StoreFactory( file.getParentFile(),
+                    Config.defaults(), idGeneratorFactory, pageCache, fs, logProvider() );
 
             for ( String arg : args )
             {
@@ -81,9 +80,9 @@ public class DumpStore<RECORD extends AbstractBaseRecord, STORE extends RecordSt
         }
     }
 
-    private static void dumpFile( Function<File, StoreFactory> createStoreFactory, String arg ) throws Exception
+    private static void dumpFile( Function<File, StoreFactory> createStoreFactory, String fileName ) throws Exception
     {
-        File file = new File( arg );
+        File file = new File( fileName );
         long[] ids = null; // null means all possible ids
 
         if( file.isFile() )
@@ -96,26 +95,30 @@ public class DumpStore<RECORD extends AbstractBaseRecord, STORE extends RecordSt
                    of the path contains a colon, thus it is very likely an attempt to use the
                    id-specifying syntax. */
 
-            int idStart = arg.lastIndexOf( ':' );
+            int idStart = fileName.lastIndexOf( ':' );
 
-            String[] idStrings = arg.substring( idStart + 1 ).split( "," );
+            String[] idStrings = fileName.substring( idStart + 1 ).split( "," );
             ids = new long[idStrings.length];
             for ( int i = 0; i < ids.length; i++ )
             {
                 ids[i] = Long.parseLong( idStrings[i] );
             }
-            file = new File( arg.substring( 0, idStart ) );
+            file = new File( fileName.substring( 0, idStart ) );
 
             if ( !file.isFile() )
             {
-                throw new IllegalArgumentException( "No such file: " + arg );
+                throw new IllegalArgumentException( "No such file: " + fileName );
             }
         }
-        StoreType storeType = StoreType.typeOf( file.getName() );
+        StoreType storeType = StoreType.typeOf( file.getName() ).orElseThrow(
+                () -> new IllegalArgumentException( "Not a store file: " + fileName ) );
         try ( NeoStores neoStores = createStoreFactory.apply( file ).openNeoStores( storeType ) )
         {
             switch ( storeType )
             {
+            case META_DATA:
+                dumpMetaDataStore( neoStores );
+                break;
             case NODE:
                 dumpNodeStore( neoStores, ids );
                 break;
@@ -146,7 +149,10 @@ public class DumpStore<RECORD extends AbstractBaseRecord, STORE extends RecordSt
         }
     }
 
-
+    private static void dumpMetaDataStore( NeoStores neoStores )
+    {
+        neoStores.getMetaDataStore().logRecords( new PrintStreamLogger( System.out ) );
+    }
 
     private static LogProvider logProvider()
     {
@@ -214,7 +220,7 @@ public class DumpStore<RECORD extends AbstractBaseRecord, STORE extends RecordSt
         dump( ids, neoStores.getPropertyStore() );
     }
 
-    private static void dumpSchemaStore( NeoStores neoStores, long ids[] ) throws Exception
+    private static void dumpSchemaStore( NeoStores neoStores, long[] ids ) throws Exception
     {
         try ( SchemaStore store = neoStores.getSchemaStore() )
         {

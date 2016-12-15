@@ -19,10 +19,10 @@
  */
 package org.neo4j.kernel.impl.transaction.state;
 
-import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
+
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.api.properties.DefinedProperty;
@@ -73,13 +73,6 @@ import static org.neo4j.kernel.impl.store.NodeLabelsField.parseLabelsField;
  * keeping track of transaction state, serialization and deserialization to and from logical log, and applying things
  * to store. It would most likely do this by keeping a component derived from the current WriteTransaction
  * implementation as a sub-component, responsible for handling logical log commands.
- *
- * The class XAResourceManager plays in here as well, in that it shares responsibilities with WriteTransaction to
- * write data to the logical log. As we continue to refactor this subsystem, XAResourceManager should ideally not know
- * about the logical log, but defer entirely to the Kernel to handle this. Doing that will give the kernel full
- * discretion to start experimenting with higher-performing logical log implementations, without being hindered by
- * having to contend with the JTA compliance layers. In short, it would encapsulate the logical log/storage logic better
- * and thus make it easier to change.
  */
 public class TransactionRecordState implements RecordState
 {
@@ -103,7 +96,6 @@ public class TransactionRecordState implements RecordState
 
     private RecordChanges<Long,NeoStoreRecord, Void> neoStoreRecord;
     private boolean prepared;
-
 
     public TransactionRecordState( NeoStores neoStores, IntegrityValidator integrityValidator,
             RecordChangeSet recordChangeSet, long lastCommittedTxWhenTransactionStarted,
@@ -140,7 +132,7 @@ public class TransactionRecordState implements RecordState
     @Override
     public void extractCommands( Collection<StorageCommand> commands ) throws TransactionFailureException
     {
-    	assert !prepared : "Transaction has already been prepared";
+        assert !prepared : "Transaction has already been prepared";
 
         integrityValidator.validateTransactionStartKnowledge( lastCommittedTxWhenTransactionStarted );
 
@@ -376,7 +368,7 @@ public class TransactionRecordState implements RecordState
     public DefinedProperty relChangeProperty( long relId, int propertyKey, Object value )
     {
         RecordProxy<Long, RelationshipRecord, Void> rel = recordChangeSet.getRelRecords().getOrLoad( relId, null );
-        propertyCreator.primitiveChangeProperty( rel, propertyKey, value, recordChangeSet.getPropertyRecords() );
+        propertyCreator.primitiveSetProperty( rel, propertyKey, value, recordChangeSet.getPropertyRecords() );
         return Property.property( propertyKey, value );
     }
 
@@ -392,7 +384,7 @@ public class TransactionRecordState implements RecordState
     public DefinedProperty nodeChangeProperty( long nodeId, int propertyKey, Object value )
     {
         RecordProxy<Long, NodeRecord, Void> node = recordChangeSet.getNodeRecords().getOrLoad( nodeId, null );
-        propertyCreator.primitiveChangeProperty( node, propertyKey, value, recordChangeSet.getPropertyRecords() );
+        propertyCreator.primitiveSetProperty( node, propertyKey, value, recordChangeSet.getPropertyRecords() );
         return Property.property( propertyKey, value );
     }
 
@@ -408,7 +400,7 @@ public class TransactionRecordState implements RecordState
     public DefinedProperty relAddProperty( long relId, int propertyKey, Object value )
     {
         RecordProxy<Long, RelationshipRecord, Void> rel = recordChangeSet.getRelRecords().getOrLoad( relId, null );
-        propertyCreator.primitiveAddProperty( rel, propertyKey, value, recordChangeSet.getPropertyRecords() );
+        propertyCreator.primitiveSetProperty( rel, propertyKey, value, recordChangeSet.getPropertyRecords() );
         return Property.property( propertyKey, value );
     }
 
@@ -423,7 +415,7 @@ public class TransactionRecordState implements RecordState
     public DefinedProperty nodeAddProperty( long nodeId, int propertyKey, Object value )
     {
         RecordProxy<Long, NodeRecord, Void> node = recordChangeSet.getNodeRecords().getOrLoad( nodeId, null );
-        propertyCreator.primitiveAddProperty( node, propertyKey, value, recordChangeSet.getPropertyRecords() );
+        propertyCreator.primitiveSetProperty( node, propertyKey, value, recordChangeSet.getPropertyRecords() );
         return Property.property( propertyKey, value );
     }
 
@@ -559,7 +551,7 @@ public class TransactionRecordState implements RecordState
      */
     public DefinedProperty graphAddProperty( int propertyKey, Object value )
     {
-        propertyCreator.primitiveAddProperty( getOrLoadNeoStoreRecord(), propertyKey, value,
+        propertyCreator.primitiveSetProperty( getOrLoadNeoStoreRecord(), propertyKey, value,
                 recordChangeSet.getPropertyRecords() );
         return Property.property( propertyKey, value );
     }
@@ -574,7 +566,7 @@ public class TransactionRecordState implements RecordState
      */
     public DefinedProperty graphChangeProperty( int propertyKey, Object value )
     {
-        propertyCreator.primitiveChangeProperty( getOrLoadNeoStoreRecord(), propertyKey, value,
+        propertyCreator.primitiveSetProperty( getOrLoadNeoStoreRecord(), propertyKey, value,
                 recordChangeSet.getPropertyRecords() );
         return Property.property( propertyKey, value );
     }

@@ -31,15 +31,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.neo4j.bolt.v1.messaging.MessageFormat;
+import org.neo4j.bolt.v1.messaging.BoltRequestMessageReader;
+import org.neo4j.bolt.v1.messaging.BoltRequestMessageRecorder;
+import org.neo4j.bolt.v1.messaging.BoltRequestMessageWriter;
+import org.neo4j.bolt.v1.messaging.BoltResponseMessageReader;
+import org.neo4j.bolt.v1.messaging.BoltResponseMessageRecorder;
+import org.neo4j.bolt.v1.messaging.BoltResponseMessageWriter;
 import org.neo4j.bolt.v1.messaging.Neo4jPack;
-import org.neo4j.bolt.v1.messaging.PackStreamMessageFormatV1;
 import org.neo4j.bolt.v1.messaging.RecordingByteChannel;
-import org.neo4j.bolt.v1.messaging.RecordingMessageHandler;
 import org.neo4j.bolt.v1.messaging.message.FailureMessage;
 import org.neo4j.bolt.v1.messaging.message.IgnoredMessage;
-import org.neo4j.bolt.v1.messaging.message.Message;
 import org.neo4j.bolt.v1.messaging.message.RecordMessage;
+import org.neo4j.bolt.v1.messaging.message.RequestMessage;
+import org.neo4j.bolt.v1.messaging.message.ResponseMessage;
 import org.neo4j.bolt.v1.messaging.message.SuccessMessage;
 import org.neo4j.bolt.v1.packstream.BufferedChannelInput;
 import org.neo4j.bolt.v1.packstream.BufferedChannelOutput;
@@ -53,17 +57,17 @@ import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
 import static org.junit.Assert.assertThat;
-import static org.neo4j.bolt.v1.messaging.PackStreamMessageFormatV1.Writer.NO_OP;
+import static org.neo4j.bolt.v1.messaging.BoltResponseMessageWriter.NO_BOUNDARY_HOOK;
 
 public class MessageMatchers
 {
 
-    public static Matcher<List<Message>> equalsMessages( final Matcher<Message>... messageMatchers )
+    public static Matcher<List<ResponseMessage>> equalsMessages( final Matcher<ResponseMessage>... messageMatchers )
     {
-        return new TypeSafeMatcher<List<Message>>()
+        return new TypeSafeMatcher<List<ResponseMessage>>()
         {
             @Override
-            protected boolean matchesSafely( List<Message> messages )
+            protected boolean matchesSafely( List<ResponseMessage> messages )
             {
                 if ( messageMatchers.length != messages.size() )
                 {
@@ -85,12 +89,12 @@ public class MessageMatchers
         };
     }
 
-    public static Matcher<Message> hasNotification( Notification notification)
+    public static Matcher<ResponseMessage> hasNotification( Notification notification)
     {
-        return new TypeSafeMatcher<Message>()
+        return new TypeSafeMatcher<ResponseMessage>()
         {
             @Override
-            protected boolean matchesSafely( Message t )
+            protected boolean matchesSafely( ResponseMessage t )
             {
                 assertThat( t, instanceOf( SuccessMessage.class ) );
                 Map<String,Object> meta = ((SuccessMessage) t).meta();
@@ -113,12 +117,12 @@ public class MessageMatchers
         };
     }
 
-    public static Matcher<Message> msgSuccess( final Map<String,Object> metadata )
+    public static Matcher<ResponseMessage> msgSuccess( final Map<String,Object> metadata )
     {
-        return new TypeSafeMatcher<Message>()
+        return new TypeSafeMatcher<ResponseMessage>()
         {
             @Override
-            protected boolean matchesSafely( Message t )
+            protected boolean matchesSafely( ResponseMessage t )
             {
                 assertThat( t, instanceOf( SuccessMessage.class ) );
                 assertThat( ((SuccessMessage) t).meta(), equalTo( metadata ) );
@@ -133,12 +137,32 @@ public class MessageMatchers
         };
     }
 
-    public static Matcher<Message> msgSuccess()
+    public static Matcher<ResponseMessage> msgSuccess( final Matcher<Map<? extends String,?>> matcher )
     {
-        return new TypeSafeMatcher<Message>()
+        return new TypeSafeMatcher<ResponseMessage>()
         {
             @Override
-            protected boolean matchesSafely( Message t )
+            protected boolean matchesSafely( ResponseMessage t )
+            {
+                assertThat( t, instanceOf( SuccessMessage.class ) );
+                assertThat( ((SuccessMessage) t).meta(), matcher );
+                return true;
+            }
+
+            @Override
+            public void describeTo( Description description )
+            {
+                description.appendText( "SUCCESS" );
+            }
+        };
+    }
+
+    public static Matcher<ResponseMessage> msgSuccess()
+    {
+        return new TypeSafeMatcher<ResponseMessage>()
+        {
+            @Override
+            protected boolean matchesSafely( ResponseMessage t )
             {
                 assertThat( t, instanceOf( SuccessMessage.class ) );
                 return true;
@@ -152,12 +176,12 @@ public class MessageMatchers
         };
     }
 
-    public static Matcher<Message> msgIgnored()
+    public static Matcher<ResponseMessage> msgIgnored()
     {
-        return new TypeSafeMatcher<Message>()
+        return new TypeSafeMatcher<ResponseMessage>()
         {
             @Override
-            protected boolean matchesSafely( Message t )
+            protected boolean matchesSafely( ResponseMessage t )
             {
                 assertThat( t, instanceOf( IgnoredMessage.class ) );
                 return true;
@@ -171,12 +195,12 @@ public class MessageMatchers
         };
     }
 
-    public static Matcher<Message> msgFailure( final Status status, final String message )
+    public static Matcher<ResponseMessage> msgFailure( final Status status, final String message )
     {
-        return new TypeSafeMatcher<Message>()
+        return new TypeSafeMatcher<ResponseMessage>()
         {
             @Override
-            protected boolean matchesSafely( Message t )
+            protected boolean matchesSafely( ResponseMessage t )
             {
                 assertThat( t, instanceOf( FailureMessage.class ) );
                 FailureMessage msg = (FailureMessage) t;
@@ -193,12 +217,12 @@ public class MessageMatchers
         };
     }
 
-    public static Matcher<Message> msgRecord( final Matcher<Record> matcher )
+    public static Matcher<ResponseMessage> msgRecord( final Matcher<Record> matcher )
     {
-        return new TypeSafeMatcher<Message>()
+        return new TypeSafeMatcher<ResponseMessage>()
         {
             @Override
-            protected boolean matchesSafely( Message t )
+            protected boolean matchesSafely( ResponseMessage t )
             {
                 assertThat( t, instanceOf( RecordMessage.class ) );
 
@@ -216,13 +240,13 @@ public class MessageMatchers
         };
     }
 
-    public static byte[] serialize( Message... messages ) throws IOException
+    public static byte[] serialize( RequestMessage... messages ) throws IOException
     {
         final RecordingByteChannel rawData = new RecordingByteChannel();
-        final MessageFormat.Writer packer = new PackStreamMessageFormatV1.Writer( new Neo4jPack.Packer( new
-                BufferedChannelOutput( rawData )), NO_OP );
+        final BoltRequestMessageWriter packer = new BoltRequestMessageWriter( new Neo4jPack.Packer( new
+                BufferedChannelOutput( rawData )), NO_BOUNDARY_HOOK );
 
-        for ( Message message : messages )
+        for ( RequestMessage message : messages )
         {
             packer.write( message );
         }
@@ -231,10 +255,25 @@ public class MessageMatchers
         return rawData.getBytes();
     }
 
-    public static List<Message> messages( byte[] bytes ) throws IOException
+    public static byte[] serialize( ResponseMessage... messages ) throws IOException
     {
-        PackStreamMessageFormatV1.Reader unpacker = reader( bytes );
-        RecordingMessageHandler consumer = new RecordingMessageHandler();
+        final RecordingByteChannel rawData = new RecordingByteChannel();
+        final BoltResponseMessageWriter packer = new BoltResponseMessageWriter( new Neo4jPack.Packer( new
+                BufferedChannelOutput( rawData )), NO_BOUNDARY_HOOK );
+
+        for ( ResponseMessage message : messages )
+        {
+            message.dispatch( packer );
+        }
+        packer.flush();
+
+        return rawData.getBytes();
+    }
+
+    public static List<RequestMessage> messages( byte[] bytes ) throws IOException
+    {
+        BoltRequestMessageReader unpacker = requestReader( bytes );
+        BoltRequestMessageRecorder consumer = new BoltRequestMessageRecorder();
 
         try
         {
@@ -254,10 +293,10 @@ public class MessageMatchers
         }
     }
 
-    public static Message message( byte[] bytes ) throws IOException
+    public static ResponseMessage responseMessage( byte[] bytes ) throws IOException
     {
-        PackStreamMessageFormatV1.Reader unpacker = reader( bytes );
-        RecordingMessageHandler consumer = new RecordingMessageHandler();
+        BoltResponseMessageReader unpacker = responseReader( bytes );
+        BoltResponseMessageRecorder consumer = new BoltResponseMessageRecorder();
 
         try
         {
@@ -276,10 +315,16 @@ public class MessageMatchers
         }
     }
 
-    private static PackStreamMessageFormatV1.Reader reader( byte[] bytes )
+    private static BoltRequestMessageReader requestReader( byte[] bytes )
     {
-        return new PackStreamMessageFormatV1.Reader(
+        return new BoltRequestMessageReader(
                     new Neo4jPack.Unpacker( new BufferedChannelInput( 128 ).reset( new ArrayByteChannel( bytes ) ) ) );
+    }
+
+    private static BoltResponseMessageReader responseReader( byte[] bytes )
+    {
+        return new BoltResponseMessageReader(
+                new Neo4jPack.Unpacker( new BufferedChannelInput( 128 ).reset( new ArrayByteChannel( bytes ) ) ) );
     }
 
 }

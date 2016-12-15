@@ -38,10 +38,9 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.logging.LogProvider;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.SystemExitRule;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.instanceOf;
@@ -56,16 +55,15 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.test.EphemeralFileSystemRule.shutdownDbAction;
+import static org.neo4j.test.rule.fs.EphemeralFileSystemRule.shutdownDbAction;
 
 public class ConsistencyCheckToolTest
 {
-    private SystemExitRule systemExitRule = SystemExitRule.none();
-    private TargetDirectory.TestDirectory storeDirectory = TargetDirectory.testDirForTest( getClass() );
-    private EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
+    private final TestDirectory storeDirectory = TestDirectory.testDirectory();
+    private final EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
 
     @Rule
-    public RuleChain ruleChain = RuleChain.outerRule( systemExitRule ).around( storeDirectory ).around( fs );
+    public RuleChain ruleChain = RuleChain.outerRule( storeDirectory ).around( fs );
 
     @Test
     public void runsConsistencyCheck() throws Exception
@@ -176,10 +174,9 @@ public class ConsistencyCheckToolTest
         verifyZeroInteractions( service );
     }
 
-    @Test
+    @Test( expected = ToolFailureException.class )
     public void failWhenStoreWasNonCleanlyShutdown() throws Exception
     {
-        systemExitRule.expectExit( 1 );
         createGraphDbAndKillIt();
 
         runConsistencyCheckToolWith( fs.get(), storeDirectory.graphDbDir().getAbsolutePath() );

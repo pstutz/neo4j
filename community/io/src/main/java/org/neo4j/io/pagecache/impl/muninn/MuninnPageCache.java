@@ -21,21 +21,26 @@ package org.neo4j.io.pagecache.impl.muninn;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.CopyOption;
 import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
+import java.util.stream.Stream;
 
+import org.neo4j.io.pagecache.FileHandle;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCacheOpenOptions;
 import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.impl.FileIsMappedException;
 import org.neo4j.io.pagecache.tracing.EvictionEvent;
 import org.neo4j.io.pagecache.tracing.EvictionRunEvent;
 import org.neo4j.io.pagecache.tracing.FlushEventOpportunity;
@@ -280,10 +285,10 @@ public class MuninnPageCache implements PageCache
                     "Cannot map files with a filePageSize (" + filePageSize + ") that is greater than the " +
                     "cachePageSize (" + cachePageSize + ")" );
         }
+        file = file.getCanonicalFile();
         boolean createIfNotExists = false;
         boolean truncateExisting = false;
         boolean deleteOnClose = false;
-        boolean exclusiveMapping = false;
         boolean anyPageSize = false;
         for ( OpenOption option : openOptions )
         {
@@ -298,10 +303,6 @@ public class MuninnPageCache implements PageCache
             else if ( option.equals( StandardOpenOption.DELETE_ON_CLOSE ) )
             {
                 deleteOnClose = true;
-            }
-            else if ( option.equals( PageCacheOpenOptions.EXCLUSIVE ) )
-            {
-                exclusiveMapping = true;
             }
             else if ( option.equals( PageCacheOpenOptions.ANY_PAGE_SIZE ) )
             {
@@ -334,19 +335,6 @@ public class MuninnPageCache implements PageCache
                 {
                     throw new UnsupportedOperationException( "Cannot truncate a file that is already mapped" );
                 }
-                if ( exclusiveMapping || pagedFile.isExclusiveMapping() )
-                {
-                    String msg;
-                    if ( exclusiveMapping )
-                    {
-                        msg = "Cannot exclusively map file because it is already mapped: " + file;
-                    }
-                    else
-                    {
-                        msg = "Cannot map file because it is already exclusively mapped: " + file;
-                    }
-                    throw new IOException( msg );
-                }
                 pagedFile.incrementRefCount();
                 pagedFile.markDeleteOnClose( deleteOnClose );
                 return pagedFile;
@@ -369,8 +357,7 @@ public class MuninnPageCache implements PageCache
                 swapperFactory,
                 tracer,
                 createIfNotExists,
-                truncateExisting,
-                exclusiveMapping );
+                truncateExisting );
         pagedFile.incrementRefCount();
         pagedFile.markDeleteOnClose( deleteOnClose );
         current = new FileMapping( file, pagedFile );
@@ -378,6 +365,90 @@ public class MuninnPageCache implements PageCache
         mappedFiles = current;
         tracer.mappedFile( file );
         return pagedFile;
+    }
+
+    @Override
+    public synchronized Optional<PagedFile> getExistingMapping( File file ) throws IOException
+    {
+        assertHealthy();
+        ensureThreadsInitialised();
+
+        file = file.getCanonicalFile();
+        MuninnPagedFile pagedFile = tryGetMappingOrNull( file );
+        if ( pagedFile != null )
+        {
+            pagedFile.incrementRefCount();
+            return Optional.of( pagedFile );
+        }
+        return Optional.empty();
+    }
+
+    private MuninnPagedFile tryGetMappingOrNull( File file ) throws IOException
+    {
+        FileMapping current = mappedFiles;
+
+        // find an existing mapping
+        while ( current != null )
+        {
+            if ( current.file.equals( file ) )
+            {
+                return current.pagedFile;
+            }
+            current = current.next;
+        }
+
+        // no mapping exists
+        return null;
+    }
+
+    @Override
+    public Stream<FileHandle> streamFilesRecursive( File directory ) throws IOException
+    {
+        return swapperFactory.streamFilesRecursive( directory.getCanonicalFile() ).map( this::checkingFileHandle );
+    }
+
+    private FileHandle checkingFileHandle( FileHandle fileHandle )
+    {
+        return new FileHandle()
+        {
+            @Override
+            public File getFile()
+            {
+                return fileHandle.getFile();
+            }
+
+            @Override
+            public void rename( File targetFile, CopyOption... options ) throws IOException
+            {
+                synchronized ( MuninnPageCache.this )
+                {
+                    File sourceFile = getFile();
+                    sourceFile = sourceFile.getCanonicalFile();
+                    targetFile = targetFile.getCanonicalFile();
+                    assertNotMapped( sourceFile, FileIsMappedException.Operation.RENAME );
+                    assertNotMapped( targetFile, FileIsMappedException.Operation.RENAME );
+                    fileHandle.rename( targetFile, options );
+                }
+            }
+
+            @Override
+            public void delete() throws IOException
+            {
+                synchronized ( MuninnPageCache.this )
+                {
+                    assertNotMapped( getFile(), FileIsMappedException.Operation.DELETE );
+                    fileHandle.delete();
+                }
+            }
+        };
+    }
+
+    private void assertNotMapped( File file, FileIsMappedException.Operation operation ) throws IOException
+    {
+        if ( tryGetMappingOrNull( file ) != null )
+        {
+            throw new FileIsMappedException( file, operation );
+        }
     }
 
     /**
@@ -402,7 +473,7 @@ public class MuninnPageCache implements PageCache
             {
                 close();
             }
-            catch ( IOException closeException )
+            catch ( Exception closeException )
             {
                 exception.addSuppressed( closeException );
             }
@@ -515,7 +586,7 @@ public class MuninnPageCache implements PageCache
     }
 
     @Override
-    public synchronized void close() throws IOException
+    public synchronized void close()
     {
         if ( closed )
         {
@@ -531,7 +602,7 @@ public class MuninnPageCache implements PageCache
             {
                 int refCount = files.pagedFile.getRefCount();
                 msg.append( "\n\t" );
-                msg.append( files.file.getName() );
+                msg.append( files.file );
                 msg.append( " (" ).append( refCount );
                 msg.append( refCount == 1? " mapping)" : " mappings)" );
                 files = files.next;
@@ -548,6 +619,9 @@ public class MuninnPageCache implements PageCache
 
         interrupt( evictionThread );
         evictionThread = null;
+
+        // Close the page swapper factory last. If this fails then we will still consider ourselves closed.
+        swapperFactory.close();
     }
 
     private void interrupt( Thread thread )

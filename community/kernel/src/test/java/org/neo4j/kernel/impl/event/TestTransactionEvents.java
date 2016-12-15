@@ -45,9 +45,9 @@ import org.neo4j.graphdb.event.TransactionData;
 import org.neo4j.graphdb.event.TransactionEventHandler;
 import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.kernel.impl.MyRelTypes;
-import org.neo4j.test.DatabaseRule;
-import org.neo4j.test.ImpermanentDatabaseRule;
 import org.neo4j.test.TestLabels;
+import org.neo4j.test.rule.DatabaseRule;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
@@ -58,16 +58,19 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.graphdb.Neo4jMatchers.hasProperty;
-import static org.neo4j.graphdb.Neo4jMatchers.inTx;
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.graphdb.index.IndexManager.PROVIDER;
 import static org.neo4j.helpers.collection.Iterables.count;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.kernel.impl.index.DummyIndexExtensionFactory.IDENTIFIER;
+import static org.neo4j.test.mockito.matcher.Neo4jMatchers.hasProperty;
+import static org.neo4j.test.mockito.matcher.Neo4jMatchers.inTx;
 
 public class TestTransactionEvents
 {
+    @Rule
+    public final DatabaseRule dbRule = new ImpermanentDatabaseRule();
+
     @Test
     public void testRegisterUnregisterHandlers()
     {
@@ -339,7 +342,7 @@ public class TestTransactionEvents
             }
             catch ( TransactionFailureException e )
             {
-            	Throwable currentEx = e;
+                Throwable currentEx = e;
                 do
                 {
                     currentEx = currentEx.getCause();
@@ -403,7 +406,7 @@ public class TestTransactionEvents
         Map<String,Object> relProps = new HashMap<>();
 
         @Override
-		public void afterCommit( TransactionData data, Object state )
+        public void afterCommit( TransactionData data, Object state )
         {
             for ( PropertyEntry<Node> entry : data.removedNodeProperties() )
             {
@@ -418,12 +421,12 @@ public class TestTransactionEvents
         }
 
         @Override
-		public void afterRollback( TransactionData data, Object state )
+        public void afterRollback( TransactionData data, Object state )
         {
         }
 
         @Override
-		public Object beforeCommit( TransactionData data )
+        public Object beforeCommit( TransactionData data )
                 throws Exception
         {
             return null;
@@ -472,19 +475,19 @@ public class TestTransactionEvents
         }
 
         @Override
-		public void afterCommit( TransactionData data, T state )
+        public void afterCommit( TransactionData data, T state )
         {
             source.afterCommit( data, state );
         }
 
         @Override
-		public void afterRollback( TransactionData data, T state )
+        public void afterRollback( TransactionData data, T state )
         {
             source.afterRollback( data, state );
         }
 
         @Override
-		public T beforeCommit( TransactionData data ) throws Exception
+        public T beforeCommit( TransactionData data ) throws Exception
         {
             if ( willFail )
             {
@@ -496,9 +499,9 @@ public class TestTransactionEvents
 
     private static class ExceptionThrowingEventHandler implements TransactionEventHandler<Object>
     {
-    	private final Exception beforeCommitException;
-    	private final Exception afterCommitException;
-    	private final Exception afterRollbackException;
+        private final Exception beforeCommitException;
+        private final Exception afterCommitException;
+        private final Exception afterRollbackException;
 
         public ExceptionThrowingEventHandler( Exception exceptionForAll )
         {
@@ -557,7 +560,7 @@ public class TestTransactionEvents
         }
 
         @Override
-		public void afterCommit( TransactionData data, T state )
+        public void afterCommit( TransactionData data, T state )
         {
             assertNotNull( data );
             this.receivedState = state;
@@ -565,7 +568,7 @@ public class TestTransactionEvents
         }
 
         @Override
-		public void afterRollback( TransactionData data, T state )
+        public void afterRollback( TransactionData data, T state )
         {
             assertNotNull( data );
             this.receivedState = state;
@@ -573,7 +576,7 @@ public class TestTransactionEvents
         }
 
         @Override
-		public T beforeCommit( TransactionData data ) throws Exception
+        public T beforeCommit( TransactionData data ) throws Exception
         {
             assertNotNull( data );
             this.receivedTransactionData = data;
@@ -1190,9 +1193,6 @@ public class TestTransactionEvents
             active = false;
         }
     }
-
-    @Rule
-    public final DatabaseRule dbRule = new ImpermanentDatabaseRule();
 
     private static class RelationshipData
     {

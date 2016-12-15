@@ -22,7 +22,6 @@ package org.neo4j.backup.stresstests;
 import org.junit.Test;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.Callable;
 
 import org.neo4j.backup.BackupServiceStressTestingBuilder;
@@ -31,10 +30,11 @@ import org.neo4j.io.fs.FileUtils;
 import static java.lang.Integer.parseInt;
 import static java.lang.Long.parseLong;
 import static java.lang.System.getProperty;
-import static java.lang.System.getenv;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static org.junit.Assert.assertEquals;
-import static org.neo4j.backup.BackupServiceStressTestingBuilder.untilTimeExpired;
+import static org.neo4j.StressTestingHelper.ensureExistsAndEmpty;
+import static org.neo4j.StressTestingHelper.fromEnv;
+import static org.neo4j.function.Suppliers.untilTimeExpired;
 
 /**
  * Notice the class name: this is _not_ going to be run as part of the main build.
@@ -58,8 +58,8 @@ public class BackupServiceStressTesting
         File workDirectory = new File( directory, "work" );
         Callable<Integer> callable = new BackupServiceStressTestingBuilder()
                 .until( untilTimeExpired( durationInMinutes, MINUTES ) )
-                .withStore( ensureExists( storeDirectory ) )
-                .withBackupDirectory( ensureExists( workDirectory ) )
+                .withStore( ensureExistsAndEmpty( storeDirectory ) )
+                .withBackupDirectory( ensureExistsAndEmpty( workDirectory ) )
                 .withBackupAddress( backupHostname, backupPort )
                 .build();
 
@@ -67,23 +67,8 @@ public class BackupServiceStressTesting
 
         assertEquals( 0, brokenStores );
 
+        // let's cleanup disk space when everything went well
         FileUtils.deleteRecursively( storeDirectory );
         FileUtils.deleteRecursively( workDirectory );
-    }
-
-    private static File ensureExists( File directory ) throws IOException
-    {
-        FileUtils.deleteRecursively( directory );
-        if ( !directory.mkdirs() )
-        {
-            throw new IOException( "Unable to create directory: '" + directory.getAbsolutePath() + "'" );
-        }
-        return directory;
-    }
-
-    private static String fromEnv( String environmentVariableName, String defaultValue )
-    {
-        String environmentVariableValue = getenv( environmentVariableName );
-        return environmentVariableValue == null ? defaultValue : environmentVariableValue;
     }
 }

@@ -22,11 +22,12 @@ package org.neo4j.server.rest.transactional;
 import org.junit.Test;
 
 import java.net.URI;
+import java.time.Clock;
 import javax.servlet.http.HttpServletRequest;
 
-import org.neo4j.helpers.Clock;
+import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.server.rest.transactional.error.InvalidConcurrentTransactionAccess;
 import org.neo4j.server.rest.web.TransactionUriScheme;
@@ -35,6 +36,7 @@ import org.neo4j.test.DoubleLatch;
 import static javax.xml.bind.DatatypeConverter.parseLong;
 import static org.junit.Assert.fail;
 import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -47,17 +49,19 @@ public class ConcurrentTransactionAccessTest
         TransactionRegistry registry =
                 new TransactionHandleRegistry( mock( Clock.class), 0, NullLogProvider.getInstance() );
         TransitionalPeriodTransactionMessContainer kernel = mock( TransitionalPeriodTransactionMessContainer.class );
-        when(kernel.newTransaction( any( KernelTransaction.Type.class ), any( AccessMode.class ) ) )
+        GraphDatabaseQueryService queryService = mock( GraphDatabaseQueryService.class );
+        when(kernel.newTransaction( any( KernelTransaction.Type.class ), any( SecurityContext.class ), anyLong() ) )
                 .thenReturn( mock(TransitionalTxManagementKernelTransaction.class) );
-        TransactionFacade actions = new TransactionFacade( kernel, null, registry, NullLogProvider.getInstance() );
+        TransactionFacade actions = new TransactionFacade( kernel, null, queryService, registry, NullLogProvider.getInstance() );
 
-        final TransactionHandle transactionHandle = actions.newTransactionHandle( new DisgustingUriScheme(), true, AccessMode.Static.FULL );
+        final TransactionHandle transactionHandle =
+                actions.newTransactionHandle( new DisgustingUriScheme(), true, SecurityContext.AUTH_DISABLED, -1 );
 
         final DoubleLatch latch = new DoubleLatch();
 
         final StatementDeserializer statements = mock( StatementDeserializer.class );
         when( statements.hasNext() ).thenAnswer( invocation -> {
-            latch.startAndAwaitFinish();
+            latch.startAndWaitForAllToStartAndFinish();
             return false;
         } );
 
@@ -67,7 +71,7 @@ public class ConcurrentTransactionAccessTest
                     HttpServletRequest.class ) );
         } ).start();
 
-        latch.awaitStart();
+        latch.waitForAllToStart();
 
         try
         {

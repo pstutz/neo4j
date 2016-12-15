@@ -23,10 +23,10 @@ import org.junit.Rule;
 import org.junit.Test;
 
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.MyRelTypes;
-import org.neo4j.test.ImpermanentDatabaseRule;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.neo4j.helpers.collection.Iterables.single;
@@ -41,7 +41,6 @@ public class DenseNodeIT
     {
         // GIVEN
         GraphDatabaseService db = databaseRule.getGraphDatabaseAPI();
-
 
         Node root;
         try( Transaction tx = db.beginTx() )
@@ -103,7 +102,6 @@ public class DenseNodeIT
             assertEquals( 0, root.getDegree( Direction.INCOMING ) );
             tx.success();
         }
-
 
         try( Transaction tx = db.beginTx() )
         {

@@ -36,7 +36,6 @@ import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeLabels;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -45,8 +44,8 @@ import org.neo4j.kernel.impl.transaction.command.PhysicalLogCommandReaderV3_0;
 import org.neo4j.kernel.impl.transaction.log.InMemoryClosableChannel;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.storageengine.api.CommandReader;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static java.util.Collections.singletonList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -174,12 +173,12 @@ public class NodeCommandTest
         NodeRecord before = new NodeRecord( 12, false, 1, 2 );
         before.setInUse( true );
         List<DynamicRecord> beforeDyn = singletonList( dynamicRecord(
-                0, true, true, -1l, LONG.intValue(), new byte[]{1, 2, 3, 4, 5, 6, 7, 8} ) );
+                0, true, true, -1L, LONG.intValue(), new byte[]{1, 2, 3, 4, 5, 6, 7, 8} ) );
         before.setLabelField( dynamicPointer( beforeDyn ), beforeDyn );
         NodeRecord after = new NodeRecord( 12, false, 2, 1 );
         after.setInUse( true );
         List<DynamicRecord> dynamicRecords = singletonList( dynamicRecord(
-                0, false, true, -1l, LONG.intValue(), new byte[]{ 1, 2, 3, 4, 5, 6, 7, 8} ) );
+                0, false, true, -1L, LONG.intValue(), new byte[]{ 1, 2, 3, 4, 5, 6, 7, 8} ) );
         after.setLabelField( dynamicPointer( dynamicRecords ), dynamicRecords );
         // When
         Command.NodeCommand cmd = new Command.NodeCommand( before, after );
@@ -246,8 +245,7 @@ public class NodeCommandTest
         fs.get().mkdirs( dir );
         @SuppressWarnings("deprecation")
         StoreFactory storeFactory = new StoreFactory( dir, Config.empty(), new DefaultIdGeneratorFactory( fs.get() ),
-                pageCacheRule.getPageCache( fs.get() ), fs.get(), StandardV3_0.RECORD_FORMATS,
-                NullLogProvider.getInstance() );
+                pageCacheRule.getPageCache( fs.get() ), fs.get(), NullLogProvider.getInstance() );
         neoStores = storeFactory.openAllNeoStores( true );
         nodeStore = neoStores.getNodeStore();
     }

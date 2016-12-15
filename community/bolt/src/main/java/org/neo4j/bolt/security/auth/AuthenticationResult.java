@@ -19,11 +19,26 @@
  */
 package org.neo4j.bolt.security.auth;
 
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 
 public interface AuthenticationResult
 {
-    AccessMode getAccessMode();
+    SecurityContext getSecurityContext();
 
     boolean credentialsExpired();
+
+    AuthenticationResult AUTH_DISABLED = new AuthenticationResult()
+    {
+        @Override
+        public SecurityContext getSecurityContext()
+        {
+            return SecurityContext.AUTH_DISABLED;
+        }
+
+        @Override
+        public boolean credentialsExpired()
+        {
+            return false;
+        }
+    };
 }

@@ -19,31 +19,38 @@
  */
 package org.neo4j.kernel.impl.store.counts;
 
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.neo4j.adversaries.ClassGuardedAdversary;
 import org.neo4j.adversaries.CountingAdversary;
+import org.neo4j.function.ThrowingFunction;
+import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.TransactionFailureException;
 import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
+import org.neo4j.kernel.impl.api.CountsAccessor;
 import org.neo4j.kernel.impl.api.CountsVisitor;
 import org.neo4j.kernel.impl.core.LabelTokenHolder;
 import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngine;
@@ -52,17 +59,21 @@ import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKeyFactory;
+import org.neo4j.kernel.impl.store.kvstore.RotationTimeoutException;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointer;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.SimpleTriggerInfo;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.TriggerInfo;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.register.Register;
+import org.neo4j.register.Registers;
 import org.neo4j.test.AdversarialPageCacheGraphDatabaseFactory;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.TestDirectory;
+import org.neo4j.test.rule.concurrent.ThreadingRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
@@ -70,13 +81,42 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
 import static org.neo4j.kernel.impl.store.counts.FileVersion.INITIAL_MINOR_VERSION;
 import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_ID;
 import static org.neo4j.register.Registers.newDoubleLongRegister;
 
 public class CountsRotationTest
 {
+    private static final String COUNTS_STORE_BASE = MetaDataStore.DEFAULT_NAME + StoreFactory.COUNTS_STORE;
+
+    private final Label A = Label.label( "A" );
+    private final Label B = Label.label( "B" );
+    private final Label C = Label.label( "C" );
+
+    @Rule
+    public PageCacheRule pcRule = new PageCacheRule();
+    @Rule
+    public EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
+    @Rule
+    public TestDirectory testDir = TestDirectory.testDirectory( getClass(), fsRule.get() );
+
+    @Rule
+    public ThreadingRule threadingRule = new ThreadingRule();
+
+    private FileSystemAbstraction fs;
+    private File dir;
+    private GraphDatabaseBuilder dbBuilder;
+    private PageCache pageCache;
+
+    @Before
+    public void setup()
+    {
+        fs = fsRule.get();
+        dir = testDir.directory( "dir" ).getAbsoluteFile();
+        dbBuilder = new TestGraphDatabaseFactory().setFileSystem( fs ).newImpermanentDatabaseBuilder( dir );
+        pageCache = pcRule.getPageCache( fs );
+    }
+
     @Test
     public void shouldCreateEmptyCountsTrackerStoreWhenCreatingDatabase() throws IOException
     {
@@ -108,6 +148,88 @@ public class CountsRotationTest
             assertEquals( 0, store.totalEntriesStored() );
             assertEquals( 0, allRecords( store ).size() );
         }
+    }
+
+    @Test
+    public void shouldUnMapThePrestateFileWhenTimingOutOnRotationAndAllowForShutdownInTheFailedRotationState()
+            throws Throwable
+    {
+        // Given
+        dbBuilder.newGraphDatabase().shutdown();
+        CountsTracker store = createCountsTracker( pageCache, Config.defaults().augment( Collections
+                .singletonMap( GraphDatabaseSettings.counts_store_rotation_timeout.name(), "100ms" ) ) );
+        try ( Lifespan lifespan = new Lifespan( store ) )
+        {
+            try ( CountsAccessor.Updater updater = store.apply( 2 ).get() )
+            {
+                updater.incrementNodeCount( 0, 1 );
+            }
+
+            try
+            {
+                // when
+                store.rotate( 3 );
+                fail( "should have thrown" );
+            }
+            catch ( RotationTimeoutException ex )
+            {
+                // good
+            }
+        }
+
+        // and also no exceptions closing the page cache
+        pageCache.close();
+    }
+
+    @Test
+    public void rotationShouldNotCauseUnmappedFileProblem() throws IOException
+    {
+        // GIVEN
+        GraphDatabaseAPI db = (GraphDatabaseAPI) dbBuilder.newGraphDatabase();
+
+        DependencyResolver resolver = db.getDependencyResolver();
+        RecordStorageEngine storageEngine = resolver.resolveDependency( RecordStorageEngine.class );
+        CountsTracker countStore = storageEngine.testAccessNeoStores().getCounts();
+
+        AtomicBoolean workerContinueFlag = new AtomicBoolean( true );
+        AtomicLong lookupsCounter = new AtomicLong();
+        int rotations = 100;
+        for ( int i = 0; i < 5; i++ )
+        {
+            threadingRule.execute( countStoreLookup( workerContinueFlag, lookupsCounter ), countStore );
+        }
+
+        long startTxId = countStore.txId();
+        for ( int i = 1; (i < rotations) || (lookupsCounter.get() == 0); i++ )
+        {
+            try ( Transaction tx = db.beginTx() )
+            {
+                db.createNode( B );
+                tx.success();
+            }
+            checkPoint( db );
+        }
+        workerContinueFlag.set( false );
+
+        assertEquals( "Should perform at least 100 rotations.", rotations, Math.min( rotations, countStore.txId() - startTxId) );
+        assertTrue( "Should perform more then 0 lookups without exceptions.", lookupsCounter.get() > 0 );
+
+        db.shutdown();
+    }
+
+    private static ThrowingFunction<CountsTracker,Void,RuntimeException> countStoreLookup(
+            AtomicBoolean workerContinueFlag, AtomicLong lookups )
+    {
+        return countsTracker ->
+        {
+            while ( workerContinueFlag.get() )
+            {
+                Register.DoubleLongRegister register = Registers.newDoubleLongRegister();
+                countsTracker.get( CountsKeyFactory.nodeKey( 0 ), register );
+                lookups.incrementAndGet();
+            }
+            return null;
+        };
     }
 
     @Test
@@ -256,7 +378,12 @@ public class CountsRotationTest
 
     private CountsTracker createCountsTracker( PageCache pageCache )
     {
-        return new CountsTracker( NullLogProvider.getInstance(), fs, pageCache, Config.empty(),
+        return createCountsTracker( pageCache, Config.defaults() );
+    }
+
+    private CountsTracker createCountsTracker( PageCache pageCache, Config config )
+    {
+        return new CountsTracker( NullLogProvider.getInstance(), fs, pageCache, config,
                 new File( dir.getPath(), COUNTS_STORE_BASE ) );
     }
 
@@ -265,34 +392,6 @@ public class CountsRotationTest
         TriggerInfo triggerInfo = new SimpleTriggerInfo( "test" );
         db.getDependencyResolver().resolveDependency( CheckPointer.class ).forceCheckPoint( triggerInfo );
     }
-
-    private final Label A = Label.label( "A" );
-    private final Label B = Label.label( "B" );
-    private final Label C = Label.label( "C" );
-
-    @Rule
-    public PageCacheRule pcRule = new PageCacheRule();
-    @Rule
-    public EphemeralFileSystemRule fsRule = new EphemeralFileSystemRule();
-    @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTestWithEphemeralFS( fsRule.get(),
-            getClass() );
-
-    private FileSystemAbstraction fs;
-    private File dir;
-    private GraphDatabaseBuilder dbBuilder;
-    private PageCache pageCache;
-
-    @Before
-    public void setup()
-    {
-        fs = fsRule.get();
-        dir = testDir.directory( "dir" ).getAbsoluteFile();
-        dbBuilder = new TestGraphDatabaseFactory().setFileSystem( fs ).newImpermanentDatabaseBuilder( dir );
-        pageCache = pcRule.getPageCache( fs );
-    }
-
-    private static final String COUNTS_STORE_BASE = MetaDataStore.DEFAULT_NAME + StoreFactory.COUNTS_STORE;
 
     private File alphaStoreFile()
     {
@@ -303,7 +402,6 @@ public class CountsRotationTest
     {
         return new File( dir.getPath(), COUNTS_STORE_BASE + CountsTracker.RIGHT );
     }
-
 
     private Collection<Pair<? extends CountsKey, Long>> allRecords( CountsVisitor.Visitable store )
     {

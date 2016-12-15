@@ -40,8 +40,9 @@ import org.neo4j.helpers.collection.Pair;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.proc.CallableProcedure;
+import org.neo4j.kernel.api.proc.Context;
 import org.neo4j.kernel.api.proc.Neo4jTypes;
-import org.neo4j.kernel.api.proc.ProcedureSignature;
+import org.neo4j.kernel.api.proc.QualifiedName;
 
 import static java.util.Arrays.asList;
 import static org.neo4j.helpers.collection.MapUtil.map;
@@ -52,13 +53,14 @@ public class JmxQueryProcedure extends CallableProcedure.BasicProcedure
 {
     private final MBeanServer jmxServer;
 
-    public JmxQueryProcedure( ProcedureSignature.ProcedureName name, MBeanServer jmxServer )
+    public JmxQueryProcedure( QualifiedName name, MBeanServer jmxServer )
     {
         super( procedureSignature( name )
                 .in( "query", Neo4jTypes.NTString )
                 .out( "name", Neo4jTypes.NTString )
                 .out( "description", Neo4jTypes.NTString )
                 .out( "attributes", Neo4jTypes.NTMap )
+                .description( "Query JMX management data by domain and name. For instance, \"org.neo4j:*\"" )
                 .build() );
         this.jmxServer = jmxServer;
     }

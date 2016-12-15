@@ -27,9 +27,15 @@ import java.net.BindException;
  */
 public class PortBindException extends BindException
 {
-    public PortBindException( HostnamePort address, BindException original )
+    public PortBindException( ListenSocketAddress address, BindException original )
     {
         super( String.format("Address %s is already in use, cannot bind to it.", address) );
+        setStackTrace( original.getStackTrace() );
+    }
+
+    public PortBindException( ListenSocketAddress address, ListenSocketAddress other, BindException original )
+    {
+        super( String.format("At least one of the addresses %s or %s is already in use, cannot bind to it.", address, other) );
         setStackTrace( original.getStackTrace() );
     }
 }

@@ -40,19 +40,19 @@ package org.neo4j.graphdb;
  * relationship's start node and end node and their relation to
  * {@link Direction#OUTGOING} and {@link Direction#INCOMING} are defined so that
  * the assertions in the following code are <code>true</code>:
- * 
+ *
  * <pre>
  * <code>
  * {@link Node} a = graphDb.{@link GraphDatabaseService#createNode() createNode}(), b = graphDb.{@link GraphDatabaseService#createNode() createNode}();
  * {@link Relationship} rel = a.{@link Node#createRelationshipTo(Node, RelationshipType) createRelationshipTo}( b, {@link RelationshipType MyRels.REL_TYPE} );
  * // Now we have: (a) --- REL_TYPE ---&gt; (b)
- * 
+ *
  * assert rel.{@link Relationship#getStartNode() getStartNode}().equals( a );
  * assert rel.{@link Relationship#getEndNode() getEndNode}().equals( b );
  * assert rel.{@link Relationship#getNodes() getNodes}()[0].equals( a ) &amp;&amp; rel.{@link Relationship#getNodes() getNodes}()[1].equals( b );
  * </code>
  * </pre>
- * 
+ *
  * Even though all relationships have a direction they are equally well
  * traversed in both directions so there's no need to create duplicate
  * relationships in the opposite direction (with regard to traversal or
@@ -63,20 +63,20 @@ package org.neo4j.graphdb;
  * {@link #getOtherNode(Node)} and {@link #getNodes()} are guaranteed to always
  * return valid, non-null nodes.
  * <p>
- * A node's id is unique, but note the following: Neo4j reuses its internal ids
+ * A relationship's id is unique, but note the following: Neo4j reuses its internal ids
  * when nodes and relationships are deleted, which means it's bad practice to
  * refer to them this way. Instead, use application generated ids.
  */
-public interface Relationship extends PropertyContainer
+public interface Relationship extends Entity
 {
     /**
      * Returns the unique id of this relationship. Ids are garbage collected
      * over time so they are only guaranteed to be unique during a specific time
      * span: if the relationship is deleted, it's likely that a new relationship
-     * at some point will get the old id. This makes relationship ids brittle as
-     * public APIs.
+     * at some point will get the old id. <b>Note</b>: This makes relationship
+     * ids brittle as public APIs.
      *
-     * @return the id of this node
+     * @return The id of this relationship
      */
      long getId();
 
@@ -118,8 +118,8 @@ public interface Relationship extends PropertyContainer
      * a relationship, use the following:
      * <p>
      * <code>
-	 * Node endNode = node.getSingleRelationship( MyRels.REL_TYPE ).getOtherNode( node );
-	 * </code>
+     * Node endNode = node.getSingleRelationship( MyRels.REL_TYPE ).getOtherNode( node );
+     * </code>
      * <p>
      * This operation will throw a runtime exception if <code>node</code> is
      * neither this relationship's start node nor its end node.

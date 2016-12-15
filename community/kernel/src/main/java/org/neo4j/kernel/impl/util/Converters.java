@@ -20,11 +20,15 @@
 package org.neo4j.kernel.impl.util;
 
 import java.io.File;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.function.Function;
+
+import org.neo4j.helpers.HostnamePort;
 
 public class Converters
 {
@@ -48,6 +52,16 @@ public class Converters
     public static Function<String,File> toFile()
     {
         return File::new;
+    }
+
+    public static Function<String, Path> toPath()
+    {
+        return Paths::get;
+    }
+
+    public static Function<String, String> identity()
+    {
+        return s -> s;
     }
 
     public static final Comparator<File> BY_FILE_NAME = ( o1, o2 ) -> o1.getName().compareTo( o2.getName() );
@@ -90,5 +104,26 @@ public class Converters
     public static Function<String,Integer> toInt()
     {
         return Integer::new;
+    }
+
+    public static Function<String, HostnamePort> toHostnamePort( HostnamePort defaultAddress )
+    {
+        return from ->
+        {
+            if ( !from.contains( ":" ) )
+            {
+                from = from + ":" + defaultAddress.getPort();
+            }
+            if ( from.endsWith( ":" ) )
+            {
+                from = from + defaultAddress.getPort();
+            }
+            if ( from.startsWith( ":" ) )
+            {
+                from = defaultAddress.getHost() + from;
+            }
+            String[] parts = from.split( ":" );
+            return new HostnamePort( parts[0], Integer.parseInt( parts[1] ) );
+        };
     }
 }

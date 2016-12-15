@@ -19,17 +19,21 @@
  */
 package org.neo4j.kernel.builtinprocs;
 
-import org.hamcrest.Matcher;
-import org.junit.Before;
-import org.junit.Test;
-import org.mockito.stubbing.Answer;
-
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import org.hamcrest.Matcher;
+import org.junit.Before;
+import org.junit.Test;
+import org.mockito.stubbing.Answer;
+
+import org.neo4j.graphdb.DependencyResolver;
+import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.Path;
+import org.neo4j.graphdb.Relationship;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.ReadOperations;
@@ -37,18 +41,22 @@ import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.constraints.NodePropertyExistenceConstraint;
 import org.neo4j.kernel.api.constraints.PropertyConstraint;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
-import org.neo4j.kernel.api.dbms.DbmsOperations;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
-import org.neo4j.kernel.api.proc.CallableProcedure;
+import org.neo4j.kernel.api.proc.BasicContext;
+import org.neo4j.kernel.api.proc.Key;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
 import org.neo4j.kernel.impl.factory.Edition;
 import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.impl.proc.TypeMappers;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.kernel.internal.Version;
 import org.neo4j.storageengine.api.Token;
 
 import static java.util.Collections.emptyIterator;
 import static java.util.Collections.singletonList;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -57,9 +65,12 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.neo4j.kernel.api.proc.CallableProcedure.Context.KERNEL_TRANSACTION;
-import static org.neo4j.kernel.builtinprocs.ListIndexesProcedure.IndexType.NODE_LABEL_PROPERTY;
-import static org.neo4j.kernel.builtinprocs.ListIndexesProcedure.IndexType.NODE_UNIQUE_PROPERTY;
+
+import static org.neo4j.kernel.api.proc.Context.KERNEL_TRANSACTION;
+
+import static org.neo4j.kernel.api.proc.Neo4jTypes.NTNode;
+import static org.neo4j.kernel.api.proc.Neo4jTypes.NTPath;
+import static org.neo4j.kernel.api.proc.Neo4jTypes.NTRelationship;
 
 public class BuiltInProceduresTest
 {
@@ -70,10 +81,11 @@ public class BuiltInProceduresTest
     private final Map<Integer, String> propKeys = new HashMap<>();
     private final Map<Integer, String> relTypes = new HashMap<>();
 
-    private final ReadOperations read = mock(ReadOperations.class);
-    private final DbmsOperations dbms = mock(DbmsOperations.class);
-    private final Statement statement = mock(Statement.class);
-    private final KernelTransaction tx = mock(KernelTransaction.class);
+    private final ReadOperations read = mock( ReadOperations.class );
+    private final Statement statement = mock( Statement.class );
+    private final KernelTransaction tx = mock( KernelTransaction.class );
+    private final DependencyResolver resolver = mock( DependencyResolver.class );
+    private final GraphDatabaseAPI graphDatabaseAPI = mock(GraphDatabaseAPI.class);
 
     private final Procedures procs = new Procedures();
 
@@ -84,10 +96,8 @@ public class BuiltInProceduresTest
         givenIndex( "User", "name" );
 
         // When/Then
-
-        List<Object[]> call = call( "db.indexes" );
-        assertThat( call,
-            contains( record( "INDEX ON :User(name)", "online", NODE_LABEL_PROPERTY.typeName() ) ) );
+        assertThat( call("db.indexes"),
+            contains( record( "INDEX ON :User(name)", "ONLINE", "node_label_property" ) ) );
     }
 
     @Test
@@ -98,7 +108,7 @@ public class BuiltInProceduresTest
 
         // When/Then
         assertThat( call( "db.indexes" ),
-                contains( record( "INDEX ON :User(name)", "online", NODE_UNIQUE_PROPERTY.typeName() ) ) );
+                contains( record( "INDEX ON :User(name)", "ONLINE", "node_unique_property" ) ) );
     }
 
     @Test
@@ -155,19 +165,39 @@ public class BuiltInProceduresTest
     }
 
     @Test
+    public void shouldEscapeLabelNameContainingColons() throws Throwable
+    {
+        // Given
+        givenUniqueConstraint( "FOO:BAR", "x.y" );
+        givenNodePropExistenceConstraint( "FOO:BAR", "x.y" );
+
+        // When/Then
+        List<Object[]> call = call( "db.constraints" );
+        assertThat( call,
+                contains(
+                        record( "CONSTRAINT ON ( `foo:bar`:`FOO:BAR` ) ASSERT `foo:bar`.x.y IS UNIQUE" ),
+                        record( "CONSTRAINT ON ( `foo:bar`:`FOO:BAR` ) ASSERT exists(`foo:bar`.x.y)" ) ) );
+    }
+
+    @Test
     public void shouldListCorrectBuiltinProcedures() throws Throwable
     {
         // When/Then
-        assertThat( call( "dbms.procedures" ), contains(
-            record( "db.constraints", "db.constraints() :: (description :: STRING?)" ),
-            record( "db.indexes", "db.indexes() :: (description :: STRING?, state :: STRING?, type :: STRING?)" ),
-            record( "db.labels", "db.labels() :: (label :: STRING?)" ),
-            record( "db.propertyKeys", "db.propertyKeys() :: (propertyKey :: STRING?)" ),
-            record( "db.relationshipTypes", "db.relationshipTypes() :: (relationshipType :: STRING?)" ),
-            record( "dbms.changePassword", "dbms.changePassword(password :: STRING?) :: ()" ),
-            record( "dbms.components", "dbms.components() :: (name :: STRING?, versions :: LIST? OF STRING?, edition :: STRING?)" ),
-            record( "dbms.procedures", "dbms.procedures() :: (name :: STRING?, signature :: STRING?)" ),
-            record( "dbms.queryJmx", "dbms.queryJmx(query :: STRING?) :: (name :: STRING?, description :: STRING?, attributes :: MAP?)")
+        assertThat( call( "dbms.procedures" ), containsInAnyOrder(
+            record( "db.awaitIndex", "db.awaitIndex(index :: STRING?, timeOutSeconds = 300 :: INTEGER?) :: VOID", "Wait for an index to come online (for example: CALL db.awaitIndex(\":Person(name)\"))." ),
+            record( "db.constraints", "db.constraints() :: (description :: STRING?)", "List all constraints in the database." ),
+            record( "db.indexes", "db.indexes() :: (description :: STRING?, state :: STRING?, type :: STRING?)", "List all indexes in the database." ),
+            record( "db.labels", "db.labels() :: (label :: STRING?)", "List all labels in the database." ),
+            record( "db.propertyKeys", "db.propertyKeys() :: (propertyKey :: STRING?)", "List all property keys in the database." ),
+            record( "db.relationshipTypes", "db.relationshipTypes() :: (relationshipType :: STRING?)", "List all relationship types in the database." ),
+            record( "db.resampleIndex", "db.resampleIndex(index :: STRING?) :: VOID", "Schedule resampling of an index (for example: CALL db.resampleIndex(\":Person(name)\"))." ),
+            record( "db.resampleOutdatedIndexes", "db.resampleOutdatedIndexes() :: VOID", "Schedule resampling of all outdated indexes." ),
+            record( "db.schema", "db.schema() :: (nodes :: LIST? OF NODE?, relationships :: LIST? OF RELATIONSHIP?)",
+             "Show the schema of the data."),
+            record( "dbms.components", "dbms.components() :: (name :: STRING?, versions :: LIST? OF STRING?, edition :: STRING?)", "List DBMS components and their versions." ),
+            record( "dbms.procedures", "dbms.procedures() :: (name :: STRING?, signature :: STRING?, description :: STRING?)", "List all procedures in the DBMS." ),
+            record( "dbms.functions", "dbms.functions() :: (name :: STRING?, signature :: STRING?, description :: STRING?)", "List all user functions in the DBMS." ),
+            record( "dbms.queryJmx", "dbms.queryJmx(query :: STRING?) :: (name :: STRING?, description :: STRING?, attributes :: MAP?)", "Query JMX management data by domain and name. For instance, \"org.neo4j:*\"")
         ) );
     }
 
@@ -191,14 +221,6 @@ public class BuiltInProceduresTest
         int propId = token( propKey, propKeys );
 
         indexes.add( new IndexDescriptor( labelId, propId ) );
-    }
-
-    private void givenUniqueIndex( String label, String propKey )
-    {
-        int labelId = token( label, labels );
-        int propId = token( propKey, propKeys );
-
-        uniqueIndexes.add( new IndexDescriptor( labelId, propId ) );
     }
 
     private void givenUniqueConstraint( String label, String propKey )
@@ -257,7 +279,17 @@ public class BuiltInProceduresTest
     @Before
     public void setup() throws Exception
     {
-        new BuiltInProcedures("1.3.37", Edition.enterprise.toString() ).accept( procs );
+        procs.registerComponent( KernelTransaction.class, ( ctx ) -> ctx.get( KERNEL_TRANSACTION ) );
+        procs.registerComponent( DependencyResolver.class, ( ctx ) -> ctx.get( DEPENDENCY_RESOLVER ) );
+        procs.registerComponent( GraphDatabaseAPI.class, ( ctx ) -> ctx.get( GRAPHDATABASEAPI ) );
+
+        procs.registerType( Node.class, new TypeMappers.SimpleConverter( NTNode, Node.class ) );
+        procs.registerType( Relationship.class, new TypeMappers.SimpleConverter( NTRelationship, Relationship.class ) );
+        procs.registerType( Path.class, new TypeMappers.SimpleConverter( NTPath, Path.class ) );
+
+        new SpecialBuiltInProcedures("1.3.37", Edition.enterprise.toString() ).accept( procs );
+        procs.registerProcedure( BuiltInProcedures.class );
+        procs.registerProcedure( BuiltInDbmsProcedures.class );
 
         when(tx.acquireStatement()).thenReturn( statement );
         when(statement.readOperations()).thenReturn( read );
@@ -268,7 +300,7 @@ public class BuiltInProceduresTest
         when(read.indexesGetAll()).thenAnswer( (i) -> indexes.iterator() );
         when(read.uniqueIndexesGetAll()).thenAnswer( (i) -> uniqueIndexes.iterator() );
         when(read.constraintsGetAll()).thenAnswer( (i) -> constraints.iterator() );
-        when(read.proceduresGetAll() ).thenReturn( procs.getAll() );
+        when(read.proceduresGetAll() ).thenReturn( procs.getAllProcedures() );
 
         when(read.propertyKeyGetName( anyInt() ))
                 .thenAnswer( (invocation) -> propKeys.get( (int)invocation.getArguments()[0] ) );
@@ -297,8 +329,18 @@ public class BuiltInProceduresTest
 
     private List<Object[]> call(String name, Object ... args) throws ProcedureException
     {
-        CallableProcedure.BasicContext ctx = new CallableProcedure.BasicContext();
+        BasicContext ctx = new BasicContext();
         ctx.put( KERNEL_TRANSACTION, tx );
-        return Iterators.asList( procs.call( ctx, ProcedureSignature.procedureName( name.split( "\\." ) ), args ) );
+        ctx.put( DEPENDENCY_RESOLVER, resolver );
+        ctx.put( GRAPHDATABASEAPI, graphDatabaseAPI);
+        when( graphDatabaseAPI.getDependencyResolver() ).thenReturn( resolver );
+        when( resolver.resolveDependency( Procedures.class ) ).thenReturn( procs );
+        return Iterators.asList( procs.callProcedure( ctx, ProcedureSignature.procedureName( name.split( "\\." ) ), args ) );
     }
+
+    private static final Key<DependencyResolver> DEPENDENCY_RESOLVER =
+            Key.key( "DependencyResolver", DependencyResolver.class );
+
+    private static final Key<GraphDatabaseAPI> GRAPHDATABASEAPI =
+            Key.key( "GraphDatabaseAPI", GraphDatabaseAPI.class );
 }

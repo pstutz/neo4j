@@ -19,7 +19,7 @@
  */
 package org.neo4j.kernel.api.cursor;
 
-import org.neo4j.collection.primitive.PrimitiveIntIterator;
+import org.neo4j.collection.primitive.PrimitiveIntCollection;
 import org.neo4j.collection.primitive.PrimitiveIntStack;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.NotFoundException;
@@ -57,7 +57,7 @@ public abstract class EntityItemHelper
     }
 
     @Override
-    public PrimitiveIntIterator getPropertyKeys()
+    public PrimitiveIntCollection getPropertyKeys()
     {
         PrimitiveIntStack keys = new PrimitiveIntStack();
         try ( Cursor<PropertyItem> properties = properties() )
@@ -68,6 +68,6 @@ public abstract class EntityItemHelper
             }
         }
 
-        return keys.iterator();
+        return keys;
     }
 }

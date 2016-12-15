@@ -122,7 +122,7 @@ class InvalidSemanticsException(message: String, cause: Throwable) extends Cyphe
 }
 
 class MergeConstraintConflictException(message: String, cause: Throwable) extends CypherException(message, cause) {
-  val status = Status.Statement.ConstraintVerificationFailed
+  val status = Status.Schema.ConstraintValidationFailed
   def this(message: String) = this(message, null)
 }
 
@@ -136,12 +136,12 @@ class ArithmeticException(message: String, cause: Throwable) extends CypherExcep
 }
 
 class IncomparableValuesException(lhs: String, rhs: String, cause: Throwable)
-  extends SyntaxException(s"Don't know how to compare that. Left: ${lhs}; Right: ${rhs}", cause) {
+  extends CypherTypeException(s"Don't know how to compare that. Left: $lhs; Right: $rhs", cause) {
   def this(lhs: String, rhs: String) = this(lhs, rhs, null)
 }
 
 class PeriodicCommitInOpenTransactionException(cause: Throwable)
-  extends InvalidSemanticsException("Executing queries that use periodic commit in an open transaction is not possible.", cause) {
+  extends InvalidSemanticsException("Executing stream that use periodic commit in an open transaction is not possible.", cause) {
   def this() = this(null)
 }
 

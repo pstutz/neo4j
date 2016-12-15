@@ -23,18 +23,16 @@ import org.neo4j.cursor.Cursor;
 import org.neo4j.kernel.api.cursor.EntityItemHelper;
 import org.neo4j.kernel.impl.locking.Lock;
 import org.neo4j.kernel.impl.locking.LockService;
-import org.neo4j.kernel.impl.store.NeoStores;
-import org.neo4j.kernel.impl.store.RecordStore;
-import org.neo4j.kernel.impl.store.RelationshipStore;
+import org.neo4j.kernel.impl.store.RecordCursor;
+import org.neo4j.kernel.impl.store.RecordCursors;
 import org.neo4j.kernel.impl.store.record.Record;
-import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.util.InstanceCache;
 import org.neo4j.storageengine.api.PropertyItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 
 import static org.neo4j.kernel.impl.locking.LockService.NO_LOCK_SERVICE;
-import static org.neo4j.kernel.impl.store.record.RecordLoad.CHECK;
+import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 
 /**
  * Base cursor for relationships.
@@ -43,30 +41,25 @@ public abstract class StoreAbstractRelationshipCursor extends EntityItemHelper
         implements Cursor<RelationshipItem>, RelationshipItem
 {
     protected final RelationshipRecord relationshipRecord;
-    protected final RelationshipStore relationshipStore;
-    protected final RecordStore<RelationshipGroupRecord> relationshipGroupStore;
+    protected final RecordCursor<RelationshipRecord> relationshipRecordCursor;
     private final LockService lockService;
-    protected StoreStatement storeStatement;
 
-    private InstanceCache<StoreSinglePropertyCursor> singlePropertyCursor;
-    private InstanceCache<StorePropertyCursor> allPropertyCursor;
+    private final InstanceCache<StoreSinglePropertyCursor> singlePropertyCursor;
+    private final InstanceCache<StorePropertyCursor> allPropertyCursor;
 
-    public StoreAbstractRelationshipCursor( RelationshipRecord relationshipRecord, final NeoStores neoStores,
-            StoreStatement storeStatement, LockService lockService )
+    public StoreAbstractRelationshipCursor( RelationshipRecord relationshipRecord, RecordCursors cursors,
+            LockService lockService )
     {
-        this.lockService = lockService;
-        this.relationshipStore = neoStores.getRelationshipStore();
-        this.relationshipGroupStore = neoStores.getRelationshipGroupStore();
+        this.relationshipRecordCursor = cursors.relationship();
         this.relationshipRecord = relationshipRecord;
-
-        this.storeStatement = storeStatement;
+        this.lockService = lockService;
 
         singlePropertyCursor = new InstanceCache<StoreSinglePropertyCursor>()
         {
             @Override
             protected StoreSinglePropertyCursor create()
             {
-                return new StoreSinglePropertyCursor( neoStores.getPropertyStore(), this );
+                return new StoreSinglePropertyCursor( cursors, this );
             }
         };
         allPropertyCursor = new InstanceCache<StorePropertyCursor>()
@@ -74,7 +67,7 @@ public abstract class StoreAbstractRelationshipCursor extends EntityItemHelper
             @Override
             protected StorePropertyCursor create()
             {
-                return new StorePropertyCursor( neoStores.getPropertyStore(), this );
+                return new StorePropertyCursor( cursors, this );
             }
         };
     }
@@ -113,25 +106,19 @@ public abstract class StoreAbstractRelationshipCursor extends EntityItemHelper
     public long otherNode( long nodeId )
     {
         return relationshipRecord.getFirstNode() == nodeId ?
-                relationshipRecord.getSecondNode() : relationshipRecord.getFirstNode();
+               relationshipRecord.getSecondNode() : relationshipRecord.getFirstNode();
     }
 
-    /**
-     * Acquires a read lock for the relationship in this cursor and then re-reads the record to get consistent data.
-     * This method should be called <strong>before</strong> accessing other fields of the entity record.
-     *
-     * @return the {@link Lock} that must be closed after all related data have been read.
-     */
     private Lock shortLivedReadLock()
     {
         Lock lock = lockService.acquireRelationshipLock( relationshipRecord.getId(), LockService.LockType.READ_LOCK );
         if ( lockService != NO_LOCK_SERVICE )
         {
-            boolean success = true;
+            boolean success = false;
             try
             {
                 // It's safer to re-read the relationship record here, specifically nextProp, after acquiring the lock
-                if ( !relationshipStore.getRecord( relationshipRecord.getId(), relationshipRecord, CHECK ).inUse() )
+                if ( !relationshipRecordCursor.next( relationshipRecord.getId(), relationshipRecord, FORCE ) )
                 {
                     // So it looks like the node has been deleted. The current behavior of RelationshipStore#fillRecord
                     // w/ FORCE is to only set the inUse field on loading an unused record. This should (and will)
@@ -156,14 +143,12 @@ public abstract class StoreAbstractRelationshipCursor extends EntityItemHelper
     @Override
     public Cursor<PropertyItem> properties()
     {
-        Lock lock = shortLivedReadLock();
-        return allPropertyCursor.get().init( relationshipRecord.getNextProp(), lock );
+        return allPropertyCursor.get().init( relationshipRecord.getNextProp(), shortLivedReadLock() );
     }
 
     @Override
     public Cursor<PropertyItem> property( int propertyKeyId )
     {
-        Lock lock = shortLivedReadLock();
-        return singlePropertyCursor.get().init( relationshipRecord.getNextProp(), propertyKeyId, lock );
+        return singlePropertyCursor.get().init( relationshipRecord.getNextProp(), propertyKeyId, shortLivedReadLock() );
     }
 }

@@ -23,7 +23,7 @@ import java.util
 
 import org.neo4j.graphdb._
 import org.neo4j.kernel.api.KernelTransaction
-import org.neo4j.kernel.api.security.AccessMode
+import org.neo4j.kernel.api.security.AnonymousContext
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge
 import org.scalatest.Assertions
 
@@ -181,7 +181,7 @@ class MutatingIntegrationTest extends ExecutionEngineFunSuite with Assertions wi
     relate(a, b, "HATES")
     relate(a, b, "LOVES")
 
-    intercept[ConstraintValidationException](executeWithRulePlanner("match (n) where id(n) = 0 match (n)-[r:HATES]->() delete n,r"))
+    intercept[ConstraintValidationException](executeWithAllPlanners("match (n) where id(n) = 0 match (n)-[r:HATES]->() delete n,r"))
   }
 
   test("delete and return") {
@@ -222,7 +222,7 @@ class MutatingIntegrationTest extends ExecutionEngineFunSuite with Assertions wi
       Map("name" -> "Peter", "prefers" -> "Java"))
 
     intercept[CypherTypeException](
-        eengine.execute("cypher planner=rule create ({params})", Map("params" -> maps), graph.session())
+        executeWithCostPlannerOnly("cypher planner=rule create ({params})", "params" -> maps)
     )
   }
 
@@ -239,7 +239,7 @@ class MutatingIntegrationTest extends ExecutionEngineFunSuite with Assertions wi
     try {
       updateWithBothPlannersAndCompatibilityMode("create (a {params1}), (b {params2})", "params1" -> maps1, "params2" -> maps2)
     } catch {
-      case e: CypherTypeException => e.getCause shouldBe a [org.neo4j.cypher.internal.frontend.v3_0.CypherTypeException]
+      case e: CypherTypeException => e.getCause shouldBe a [org.neo4j.cypher.internal.frontend.v3_1.CypherTypeException]
       case e: ParameterWrongTypeException => e.getCause shouldBe a [org.neo4j.cypher.internal.frontend.v2_3.ParameterWrongTypeException]
     }
   }
@@ -275,7 +275,7 @@ class MutatingIntegrationTest extends ExecutionEngineFunSuite with Assertions wi
     val b = createNode()
     relate(a,b)
 
-    executeWithRulePlanner("""start n=node(*) optional match (n)-[r]-() delete n,r""")
+    executeWithAllPlanners("""match (n) optional match (n)-[r]-() delete n,r""")
 
     graph.inTx {
       graph.getAllNodes.asScala shouldBe empty
@@ -352,8 +352,9 @@ class MutatingIntegrationTest extends ExecutionEngineFunSuite with Assertions wi
     createNode()
     createNode()
 
-    eengine.execute("match (a) where id(a) = 0 create unique (a)-[:X]->({foo:[1,2,3]})", Map.empty[String, Any], graph.session())
-    val result = eengine.execute("match (a) where id(a) = 0 create unique (a)-[:X]->({foo:[1,2,3]})", Map.empty[String, Any], graph.session())
+    val query = "match (a) where id(a) = 0 create unique (a)-[:X]->({foo:[1,2,3]})"
+    innerExecute(query)
+    val result = innerExecute(query)
 
     result.queryStatistics().containsUpdates should be(false)
   }
@@ -396,9 +397,9 @@ class MutatingIntegrationTest extends ExecutionEngineFunSuite with Assertions wi
   }
 
   test("failure_only_fails_inner_transaction") {
-    val tx = graph.beginTransaction( KernelTransaction.Type.explicit, AccessMode.Static.WRITE )
+    val tx = graph.beginTransaction( KernelTransaction.Type.explicit, AnonymousContext.write() )
     try {
-      executeWithRulePlanner("match (a) where id(a) = {id} set a.foo = 'bar' return a","id"->"0")
+      executeWithAllPlanners("match (a) where id(a) = {id} set a.foo = 'bar' return a","id"->"0")
     } catch {
       case _: Throwable => tx.failure()
     }

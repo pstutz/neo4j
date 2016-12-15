@@ -21,19 +21,20 @@ package org.neo4j.cypher
 
 import org.neo4j.cypher.NewPlannerMonitor.{NewPlannerMonitorCall, NewQuerySeen, UnableToHandleQuery}
 import org.neo4j.cypher.NewRuntimeMonitor.{NewPlanSeen, NewRuntimeMonitorCall, UnableToCompileQuery}
-import org.neo4j.cypher.internal.RewindableExecutionResult
-import org.neo4j.cypher.internal.compatibility.{ExecutionResultWrapperFor2_3, ExecutionResultWrapperFor3_0}
-import org.neo4j.cypher.internal.compiler.v3_0.executionplan.{InternalExecutionResult, NewLogicalPlanSuccessRateMonitor, NewRuntimeSuccessRateMonitor}
-import org.neo4j.cypher.internal.compiler.v3_0.planner.logical.plans.LogicalPlan
-import org.neo4j.cypher.internal.compiler.v3_0.planner.{CantCompileQueryException, CantHandleQueryException}
-import org.neo4j.cypher.internal.frontend.v3_0.ast.Statement
-import org.neo4j.cypher.internal.frontend.v3_0.helpers.Eagerly
-import org.neo4j.cypher.internal.frontend.v3_0.test_helpers.CypherTestSupport
+import org.neo4j.cypher.internal.{ExecutionResult, RewindableExecutionResult}
+import org.neo4j.cypher.internal.compatibility.{ClosingExecutionResult, ExecutionResultWrapperFor2_3, ExecutionResultWrapperFor3_1}
+import org.neo4j.cypher.internal.compiler.v3_1.executionplan.{InternalExecutionResult, NewLogicalPlanSuccessRateMonitor, NewRuntimeSuccessRateMonitor}
+import org.neo4j.cypher.internal.compiler.v3_1.planner.logical.plans.LogicalPlan
+import org.neo4j.cypher.internal.compiler.v3_1.planner.{CantCompileQueryException, CantHandleQueryException}
+import org.neo4j.cypher.internal.frontend.v3_1.ast.Statement
+import org.neo4j.cypher.internal.frontend.v3_1.helpers.Eagerly
+import org.neo4j.cypher.internal.frontend.v3_1.test_helpers.CypherTestSupport
 import org.neo4j.graphdb.config.Setting
 import org.neo4j.graphdb.factory.GraphDatabaseSettings
 import org.neo4j.helpers.Exceptions
 import org.scalatest.matchers.{MatchResult, Matcher}
 
+import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 
 object NewPlannerMonitor {
@@ -99,10 +100,8 @@ class NewRuntimeMonitor extends NewRuntimeSuccessRateMonitor {
 trait NewPlannerTestSupport extends CypherTestSupport {
   self: ExecutionEngineFunSuite =>
 
-  //todo once the compiled runtime handles dumpToString and plan descriptions, we should enable it by default here
-  //in that way we will notice when we support new queries
   override def databaseConfig(): Map[Setting[_], String] =
-    Map(GraphDatabaseSettings.cypher_parser_version -> CypherVersion.v3_0.name,
+    Map(GraphDatabaseSettings.cypher_parser_version -> CypherVersion.v3_1.name,
       GraphDatabaseSettings.query_non_indexed_label_warning_threshold -> "10")
 
   val newPlannerMonitor = new NewPlannerMonitor
@@ -178,7 +177,9 @@ trait NewPlannerTestSupport extends CypherTestSupport {
       null
     }
     val ruleResult = innerExecute(s"CYPHER planner=rule $queryText", params: _*)
-    val idpResult = executeWithCostPlannerOnly(queryText, params: _*)
+    //run with compiled to find new queries that are able to run with compiled runtime
+    //we cannot set it to default at the db-level since we cannot combine compiled and rule
+    val idpResult = executeWithCostPlannerOnly(s"CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse $queryText", params: _*)
 
     if (enableCompatibility) {
       assertResultsAreSame(compatibilityResult, idpResult, queryText, "Diverging results between compatibility and current")
@@ -256,7 +257,7 @@ trait NewPlannerTestSupport extends CypherTestSupport {
     val compatibilityResult = innerExecute(s"CYPHER 2.3 $queryText", params: _*)
     val ruleResult = innerExecute(s"CYPHER planner=rule $queryText", params: _*)
     val interpretedResult = innerExecute(s"CYPHER runtime=interpreted $queryText", params: _*)
-    val compiledResult = monitoringNewPlanner(innerExecute(s"CYPHER runtime=compiled $queryText", params: _*))(failedToUseNewPlanner(queryText))(failedToUseNewRuntime(queryText))
+    val compiledResult = monitoringNewPlanner(innerExecute(s"CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse $queryText", params: _*))(failedToUseNewPlanner(queryText))(failedToUseNewRuntime(queryText))
 
     assertResultsAreSame(interpretedResult, compiledResult, queryText, "Diverging results between interpreted and compiled runtime")
     assertResultsAreSame(compatibilityResult, interpretedResult, queryText, "Diverging results between compatibility and current")
@@ -278,9 +279,16 @@ trait NewPlannerTestSupport extends CypherTestSupport {
   }
 
   protected def innerExecute(queryText: String, params: (String, Any)*): InternalExecutionResult = {
-    eengine.execute(queryText, params.toMap, graph.session()) match {
-      case e: ExecutionResultWrapperFor3_0 => RewindableExecutionResult(e)
-      case e: ExecutionResultWrapperFor2_3 => RewindableExecutionResult(e)
+    val result: ExecutionResult = eengine.execute(queryText, params.toMap, graph.transactionalContext(query = queryText -> params.toMap))
+    rewindableResult(result)
+  }
+
+  private def rewindableResult(result: ExecutionResult): InternalExecutionResult = {
+    result match {
+      case e: ClosingExecutionResult => e.inner match {
+        case _: ExecutionResultWrapperFor3_1 => RewindableExecutionResult(e)
+        case _: ExecutionResultWrapperFor2_3 => RewindableExecutionResult(e)
+      }
     }
   }
 
@@ -331,12 +339,10 @@ trait NewPlannerTestSupport extends CypherTestSupport {
     def toCompararableSeq(replaceNaNs: Boolean): Seq[Map[String, Any]] = {
       def convert(v: Any): Any = v match {
         case a: Array[_] => a.toList.map(convert)
-        case m: Map[_, _] => {
+        case m: Map[_, _] =>
           Eagerly.immutableMapValues(m, convert)
-        }
-        case m: java.util.Map[_, _] => {
+        case m: java.util.Map[_, _] =>
           Eagerly.immutableMapValues(m.asScala, convert)
-        }
         case l: java.util.List[_] => l.asScala.map(convert)
         case d: java.lang.Double if replaceNaNs && java.lang.Double.isNaN(d) => NanReplacement
         case m => m

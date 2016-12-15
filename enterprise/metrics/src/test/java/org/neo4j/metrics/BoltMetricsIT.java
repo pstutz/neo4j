@@ -19,40 +19,44 @@
  */
 package org.neo4j.metrics;
 
-import java.io.File;
-import java.util.concurrent.TimeUnit;
-
 import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
-import org.neo4j.bolt.v1.messaging.message.Messages;
-import org.neo4j.bolt.v1.transport.socket.client.Connection;
+import java.io.File;
+
+import org.neo4j.bolt.v1.messaging.message.InitMessage;
 import org.neo4j.bolt.v1.transport.socket.client.SocketConnection;
+import org.neo4j.bolt.v1.transport.socket.client.TransportConnection;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.HostnamePort;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
-import org.neo4j.metrics.source.db.BoltMetrics;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-
 import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.acceptedVersions;
 import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.chunk;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.boltConnector;
 import static org.neo4j.helpers.collection.MapUtil.map;
 import static org.neo4j.metrics.MetricsTestHelper.metricsCsv;
 import static org.neo4j.metrics.MetricsTestHelper.readLongValue;
-import static org.neo4j.test.Assert.assertEventually;
+import static org.neo4j.metrics.source.db.BoltMetrics.MESSAGES_DONE;
+import static org.neo4j.metrics.source.db.BoltMetrics.MESSAGES_RECIEVED;
+import static org.neo4j.metrics.source.db.BoltMetrics.MESSAGES_STARTED;
+import static org.neo4j.metrics.source.db.BoltMetrics.TOTAL_PROCESSING_TIME;
+import static org.neo4j.metrics.source.db.BoltMetrics.TOTAL_QUEUE_TIME;
+import static org.neo4j.test.assertion.Assert.assertEventually;
 
 public class BoltMetricsIT
 {
-    @Rule public TemporaryFolder tmpDir = new TemporaryFolder();
+    @Rule
+    public TemporaryFolder tmpDir = new TemporaryFolder();
 
     private GraphDatabaseAPI db;
-    private Connection conn;
+    private TransportConnection conn;
 
     @Test
     public void shouldMonitorBolt() throws Throwable
@@ -61,10 +65,12 @@ public class BoltMetricsIT
         File metricsFolder = tmpDir.newFolder( "metrics" );
         db = (GraphDatabaseAPI) new TestGraphDatabaseFactory()
                 .newImpermanentDatabaseBuilder()
+                .setConfig( boltConnector( "0" ).type, "BOLT" )
                 .setConfig( boltConnector( "0" ).enabled, "true" )
                 .setConfig( GraphDatabaseSettings.auth_enabled, "false" )
                 .setConfig( MetricsSettings.boltMessagesEnabled, "true" )
                 .setConfig( MetricsSettings.csvEnabled, "true" )
+                .setConfig( MetricsSettings.csvInterval, "100ms" )
                 .setConfig( MetricsSettings.csvPath, metricsFolder.getAbsolutePath() )
                 .newGraphDatabase();
 
@@ -72,26 +78,23 @@ public class BoltMetricsIT
         conn = new SocketConnection()
                 .connect( new HostnamePort( "localhost", 7687 ) )
                 .send( acceptedVersions( 1, 0, 0, 0 ) )
-                .send( chunk( Messages.init( "TestClient", map("scheme", "basic", "principal", "neo4j", "credentials", "neo4j") ) ) );
+                .send( chunk( InitMessage.init( "TestClient",
+                        map("scheme", "basic", "principal", "neo4j", "credentials", "neo4j") ) ) );
 
         // Then
-        assertEventually( "init request shows up as recieved",
-                () -> readLongValue( metricsCsv( metricsFolder, BoltMetrics.MESSAGES_RECIEVED ) ),
-                equalTo( 1L ), 5, TimeUnit.SECONDS );
+        assertEventually( "init request shows up as received",
+                () -> readLongValue( metricsCsv( metricsFolder, MESSAGES_RECIEVED ) ), equalTo( 1L ), 5, SECONDS );
         assertEventually( "init request shows up as started",
-                () -> readLongValue( metricsCsv( metricsFolder, BoltMetrics.MESSAGES_STARTED ) ),
-                equalTo( 1L ), 5, TimeUnit.SECONDS );
+                () -> readLongValue( metricsCsv( metricsFolder, MESSAGES_STARTED ) ), equalTo( 1L ), 5, SECONDS );
         assertEventually( "init request shows up as done",
-                () -> readLongValue( metricsCsv( metricsFolder, BoltMetrics.MESSAGES_DONE ) ),
-                equalTo( 1L ), 5, TimeUnit.SECONDS );
+                () -> readLongValue( metricsCsv( metricsFolder, MESSAGES_DONE ) ), equalTo( 1L ), 5, SECONDS );
 
         assertEventually( "queue time shows up",
-                () -> readLongValue( metricsCsv( metricsFolder, BoltMetrics.TOTAL_QUEUE_TIME ) ),
-                greaterThanOrEqualTo( 0L ), 5, TimeUnit.SECONDS );
+                () -> readLongValue( metricsCsv( metricsFolder, TOTAL_QUEUE_TIME ) ),
+                greaterThanOrEqualTo( 0L ), 5, SECONDS );
         assertEventually( "processing time shows up",
-                () -> readLongValue( metricsCsv( metricsFolder, BoltMetrics.TOTAL_PROCESSING_TIME ) ),
-                greaterThanOrEqualTo( 0L ), 5, TimeUnit.SECONDS );
-
+                () -> readLongValue( metricsCsv( metricsFolder, TOTAL_PROCESSING_TIME ) ),
+                greaterThanOrEqualTo( 0L ), 5, SECONDS );
     }
 
     @After

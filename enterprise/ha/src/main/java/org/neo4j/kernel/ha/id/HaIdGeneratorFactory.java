@@ -27,14 +27,16 @@ import org.neo4j.com.ComException;
 import org.neo4j.com.Response;
 import org.neo4j.graphdb.TransientTransactionFailureException;
 import org.neo4j.io.fs.FileSystemAbstraction;
-import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
-import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
-import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.ha.DelegateInvocationHandler;
 import org.neo4j.kernel.ha.com.RequestContextFactory;
 import org.neo4j.kernel.ha.com.master.Master;
+import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdGenerator;
+import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdRange;
+import org.neo4j.kernel.impl.store.id.IdType;
+import org.neo4j.kernel.impl.store.id.configuration.IdTypeConfiguration;
+import org.neo4j.kernel.impl.store.id.configuration.IdTypeConfigurationProvider;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 
@@ -44,6 +46,7 @@ public class HaIdGeneratorFactory implements IdGeneratorFactory
 {
     private final Map<IdType, HaIdGenerator> generators = new EnumMap<>( IdType.class );
     private final FileSystemAbstraction fs;
+    private final IdTypeConfigurationProvider idTypeConfigurationProvider;
     private final IdGeneratorFactory localFactory;
     private final DelegateInvocationHandler<Master> master;
     private final Log log;
@@ -51,13 +54,21 @@ public class HaIdGeneratorFactory implements IdGeneratorFactory
     private IdGeneratorState globalState = IdGeneratorState.PENDING;
 
     public HaIdGeneratorFactory( DelegateInvocationHandler<Master> master, LogProvider logProvider,
-            RequestContextFactory requestContextFactory, FileSystemAbstraction fs )
+            RequestContextFactory requestContextFactory, FileSystemAbstraction fs, IdTypeConfigurationProvider idTypeConfigurationProvider )
     {
         this.fs = fs;
-        this.localFactory = new DefaultIdGeneratorFactory( fs );
+        this.idTypeConfigurationProvider = idTypeConfigurationProvider;
+        this.localFactory = new DefaultIdGeneratorFactory( fs, idTypeConfigurationProvider );
         this.master = master;
         this.log = logProvider.getLog( getClass() );
         this.requestContextFactory = requestContextFactory;
+    }
+
+    @Override
+    public IdGenerator open( File filename, IdType idType, long highId, long maxId )
+    {
+        IdTypeConfiguration idTypeConfiguration = idTypeConfigurationProvider.getIdTypeConfiguration( idType );
+        return open( filename, idTypeConfiguration.getGrabSize(), idType, highId, maxId );
     }
 
     @Override
@@ -109,19 +120,6 @@ public class HaIdGeneratorFactory implements IdGeneratorFactory
         {
             generator.switchToMaster();
         }
-    }
-
-    public void enableCompatibilityMode()
-    {
-        /*
-         * When a slave is running in compatibility mode (i.e. with a master which is of the previous version), it may
-         * so be that it requires access to some id generator that the master is unaware of. Prominent example is
-         * Relationship Group id generator existing in 2.1 but not in 2.0. When this happens, the slave must rely
-         * on the local id generator and not expect delegations from the master. SwitchToSlave should detect when
-         * this is necessary and properly flip the appropriate generators to "local mode", i.e. master mode.
-         */
-
-        generators.get( IdType.RELATIONSHIP_GROUP ).switchToMaster();
     }
 
     public void switchToSlave()

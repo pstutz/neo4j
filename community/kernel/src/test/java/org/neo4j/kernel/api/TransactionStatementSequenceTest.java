@@ -22,12 +22,12 @@ package org.neo4j.kernel.api;
 import org.junit.Test;
 
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.AnonymousContext;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-
-import static org.neo4j.kernel.api.KernelTransactionFactory.*;
+import static org.neo4j.kernel.api.KernelTransactionFactory.kernelTransaction;
+import static org.neo4j.kernel.api.security.SecurityContext.AUTH_DISABLED;
 
 public class TransactionStatementSequenceTest
 {
@@ -35,7 +35,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowReadStatementAfterReadStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.READ );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.read() );
         tx.acquireStatement().readOperations();
 
         // when / then
@@ -46,7 +46,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowDataStatementAfterReadStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.WRITE );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.write() );
         tx.acquireStatement().readOperations();
 
         // when / then
@@ -57,7 +57,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowSchemaStatementAfterReadStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         tx.acquireStatement().readOperations();
 
         // when / then
@@ -68,7 +68,7 @@ public class TransactionStatementSequenceTest
     public void shouldRejectSchemaStatementAfterDataStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         tx.acquireStatement().dataWriteOperations();
 
         // when
@@ -90,7 +90,7 @@ public class TransactionStatementSequenceTest
     public void shouldRejectDataStatementAfterSchemaStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         tx.acquireStatement().schemaWriteOperations();
 
         // when
@@ -112,7 +112,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowDataStatementAfterDataStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.WRITE );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.write() );
         tx.acquireStatement().dataWriteOperations();
 
         // when / then
@@ -123,7 +123,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowSchemaStatementAfterSchemaStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         tx.acquireStatement().schemaWriteOperations();
 
         // when / then
@@ -134,7 +134,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowReadStatementAfterDataStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.WRITE );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.write() );
         tx.acquireStatement().dataWriteOperations();
 
         // when / then
@@ -145,7 +145,7 @@ public class TransactionStatementSequenceTest
     public void shouldAllowReadStatementAfterSchemaStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         tx.acquireStatement().schemaWriteOperations();
 
         // when / then

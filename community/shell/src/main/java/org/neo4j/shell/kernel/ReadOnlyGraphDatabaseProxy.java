@@ -19,6 +19,7 @@
  */
 package org.neo4j.shell.kernel;
 
+import org.apache.commons.lang3.NotImplementedException;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.event.KernelEventHandler;
 import org.neo4j.graphdb.event.TransactionEventHandler;
@@ -30,7 +31,7 @@ import org.neo4j.graphdb.traversal.TraversalDescription;
 import org.neo4j.helpers.collection.IterableWrapper;
 import org.neo4j.helpers.collection.PrefetchingResourceIterator;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.store.StoreId;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
@@ -71,9 +72,16 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
     }
 
     @Override
-    public InternalTransaction beginTransaction( KernelTransaction.Type type, AccessMode accessMode )
+    public InternalTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext )
     {
-        return actual.beginTransaction( type, accessMode );
+        return actual.beginTransaction( type, securityContext );
+    }
+
+    @Override
+    public InternalTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext, long timeout,
+            TimeUnit unit )
+    {
+        return actual.beginTransaction( type, securityContext, timeout, unit );
     }
 
     @Override
@@ -83,9 +91,21 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
     }
 
     @Override
+    public Transaction beginTx( long timeout, TimeUnit unit )
+    {
+        return actual.beginTx( timeout, unit );
+    }
+
+    @Override
     public Result execute( String query )
     {
-        return execute( query, Collections.<String, Object>emptyMap() );
+        return execute( query, Collections.emptyMap() );
+    }
+
+    @Override
+    public Result execute( String query, long timeout, TimeUnit unit ) throws QueryExecutionException
+    {
+        return execute( query, Collections.emptyMap(), timeout, unit );
     }
 
     @Override
@@ -95,19 +115,26 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
     }
 
     @Override
+    public Result execute( String query, Map<String,Object> parameters, long timeout, TimeUnit unit ) throws
+            QueryExecutionException
+    {
+        return readOnly();
+    }
+
+    @Override
     public Node createVirtualNode() throws Exception {
-        return actual.createVirtualNode();
+        throw new NotImplementedException("");
+    }
+
+    @Override
+    public Node createVirtualNode(Label... labels) throws Exception {
+        throw new NotImplementedException("");
     }
 
     @Override
     public Node createNode()
     {
         return readOnly();
-    }
-
-    @Override
-    public Node createVirtualNode(Label... labels) throws Exception {
-        return actual.createVirtualNode(labels);
     }
 
     @Override
@@ -143,7 +170,6 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
     {
         return new ReadOnlyRelationshipProxy( actual.getRelationshipById( id ) );
     }
-
 
     @Override
     public ResourceIterable<Relationship> getAllRelationships()
@@ -287,7 +313,7 @@ public class ReadOnlyGraphDatabaseProxy implements GraphDatabaseService, GraphDa
 
         @Override
         public Relationship createVirtualRelationshipTo(Node otherNode, RelationshipType type) {
-            return actual.createVirtualRelationshipTo(otherNode,type);
+            throw new NotImplementedException("");
         }
 
         @Override

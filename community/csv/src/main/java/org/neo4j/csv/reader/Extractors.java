@@ -85,7 +85,12 @@ public class Extractors
 
     public Extractors( char arrayDelimiter )
     {
-        this( arrayDelimiter, Configuration.DEFAULT.emptyQuotedStringsAsNull() );
+        this( arrayDelimiter, Configuration.DEFAULT.emptyQuotedStringsAsNull(), Configuration.DEFAULT.trimStrings() );
+    }
+
+    public Extractors( char arrayDelimiter, boolean emptyStringsAsNull )
+    {
+        this( arrayDelimiter, emptyStringsAsNull, Configuration.DEFAULT.trimStrings() );
     }
 
     /**
@@ -94,7 +99,7 @@ public class Extractors
      * something that would be impossible otherwise. There's an equivalent {@link #valueOf(String)}
      * method to keep the feel of an enum.
      */
-    public Extractors( char arrayDelimiter, boolean emptyStringsAsNull )
+    public Extractors( char arrayDelimiter, boolean emptyStringsAsNull, boolean trimStrings )
     {
         try
         {
@@ -110,7 +115,7 @@ public class Extractors
                 }
             }
 
-            add( string = new StringExtractor( emptyStringsAsNull ) );
+            add( string = new StringExtractor( emptyStringsAsNull, trimStrings ) );
             add( long_ = new LongExtractor() );
             add( int_ = new IntExtractor() );
             add( char_ = new CharExtractor() );
@@ -119,7 +124,7 @@ public class Extractors
             add( boolean_ = new BooleanExtractor() );
             add( float_ = new FloatExtractor() );
             add( double_ = new DoubleExtractor() );
-            add( stringArray = new StringArrayExtractor( arrayDelimiter ) );
+            add( stringArray = new StringArrayExtractor( arrayDelimiter, trimStrings ) );
             add( booleanArray = new BooleanArrayExtractor( arrayDelimiter ) );
             add( byteArray = new ByteArrayExtractor( arrayDelimiter ) );
             add( shortArray = new ShortArrayExtractor( arrayDelimiter ) );
@@ -234,7 +239,7 @@ public class Extractors
         return doubleArray;
     }
 
-    private static abstract class AbstractExtractor<T> implements Extractor<T>
+    private abstract static class AbstractExtractor<T> implements Extractor<T>
     {
         private final String toString;
 
@@ -248,9 +253,23 @@ public class Extractors
         {
             return toString;
         }
+
+        @Override
+        public Extractor<T> clone()
+        {
+            try
+            {
+                return (Extractor<T>) super.clone();
+            }
+            catch ( CloneNotSupportedException e )
+            {
+                throw new AssertionError( Extractor.class.getName() + " implements " + Cloneable.class.getSimpleName() +
+                        ", at least this implementation assumes that. This doesn't seem to be the case anymore", e );
+            }
+        }
     }
 
-    private static abstract class AbstractSingleValueExtractor<T> extends AbstractExtractor<T>
+    private abstract static class AbstractSingleValueExtractor<T> extends AbstractExtractor<T>
     {
         AbstractSingleValueExtractor( String toString )
         {
@@ -282,11 +301,13 @@ public class Extractors
     {
         private String value;
         private final boolean emptyStringsAsNull;
+        private final boolean trimStrings;
 
-        public StringExtractor( boolean emptyStringsAsNull )
+        public StringExtractor( boolean emptyStringsAsNull, boolean trimStrings )
         {
             super( String.class.getSimpleName() );
             this.emptyStringsAsNull = emptyStringsAsNull;
+            this.trimStrings = trimStrings;
         }
 
         @Override
@@ -305,6 +326,10 @@ public class Extractors
         protected boolean extract0( char[] data, int offset, int length )
         {
             value = new String( data, offset, length );
+            if (trimStrings)
+            {
+                value = value.trim();
+            }
             return true;
         }
 
@@ -632,7 +657,7 @@ public class Extractors
         }
     }
 
-    private static abstract class ArrayExtractor<T> extends AbstractExtractor<T>
+    private abstract static class ArrayExtractor<T> extends AbstractExtractor<T>
     {
         protected final char arrayDelimiter;
         protected T value;
@@ -699,10 +724,12 @@ public class Extractors
     private static class StringArrayExtractor extends ArrayExtractor<String[]>
     {
         private static final String[] EMPTY = new String[0];
+        private final boolean trimStrings;
 
-        StringArrayExtractor( char arrayDelimiter )
+        StringArrayExtractor( char arrayDelimiter, boolean trimStrings )
         {
             super( arrayDelimiter, String.class );
+            this.trimStrings = trimStrings;
         }
 
         @Override
@@ -714,6 +741,10 @@ public class Extractors
             {
                 int numberOfChars = charsToNextDelimiter( data, offset+charIndex, length-charIndex );
                 value[arrayIndex] = new String( data, offset+charIndex, numberOfChars );
+                if (trimStrings)
+                {
+                    value[arrayIndex] = value[arrayIndex].trim();
+                }
                 charIndex += numberOfChars;
             }
         }

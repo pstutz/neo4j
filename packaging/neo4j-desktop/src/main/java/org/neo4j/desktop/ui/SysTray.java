@@ -36,7 +36,7 @@ public class SysTray
     private SysTrayListener listener;
     private final String iconResourceBaseName = Graphics.SYSTEM_TRAY_ICON;
 
-    public SysTray ( SysTrayListener listener )
+    public SysTray( SysTrayListener listener )
     {
         this.listener = listener;
 
@@ -46,14 +46,14 @@ public class SysTray
             {
                 init();
             }
-            catch( AWTException ex )
+            catch ( AWTException ex )
             {
                 System.err.println( ex );
             }
         }
     }
 
-    private void init( ) throws AWTException
+    private void init() throws AWTException
     {
         trayIcon = new TrayIcon( loadImage( iconResourceBaseName ), formatTitle( STOPPED ) );
 
@@ -125,6 +125,6 @@ public class SysTray
         String title = "Neo4j Community Edition";
         String formattedStatus = status.name().substring( 0, 1 ) + status.name().substring( 1 ).toLowerCase();
 
-        return title + " - " + formattedStatus ;
+        return title + " - " + formattedStatus;
     }
 }

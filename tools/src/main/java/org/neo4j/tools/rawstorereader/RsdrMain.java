@@ -41,7 +41,6 @@ import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
@@ -108,8 +107,7 @@ public class RsdrMain
     {
         IdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( files );
         NullLogProvider logProvider = NullLogProvider.getInstance();
-        return new StoreFactory( storeDir, config, idGeneratorFactory, pageCache, files, RecordFormatSelector.autoSelectFormat(),
-                logProvider );
+        return new StoreFactory( storeDir, config, idGeneratorFactory, pageCache, files, logProvider );
     }
 
     private static void interact( NeoStores neoStores ) throws IOException
@@ -256,23 +254,32 @@ public class RsdrMain
     {
         switch ( fname )
         {
-            case "neostore.nodestore.db": return neoStores.getNodeStore();
-            case "neostore.labeltokenstore.db": return neoStores.getLabelTokenStore();
-            case "neostore.propertystore.db.index": return neoStores.getPropertyKeyTokenStore();
-            case "neostore.propertystore.db": return neoStores.getPropertyStore();
-            case "neostore.relationshipgroupstore.db": return neoStores.getRelationshipGroupStore();
-            case "neostore.relationshipstore.db": return neoStores.getRelationshipStore();
-            case "neostore.relationshiptypestore.db": return neoStores.getRelationshipTypeTokenStore();
-            case "neostore.schemastore.db": return neoStores.getSchemaStore();
+        case "neostore.nodestore.db":
+            return neoStores.getNodeStore();
+        case "neostore.labeltokenstore.db":
+            return neoStores.getLabelTokenStore();
+        case "neostore.propertystore.db.index":
+            return neoStores.getPropertyKeyTokenStore();
+        case "neostore.propertystore.db":
+            return neoStores.getPropertyStore();
+        case "neostore.relationshipgroupstore.db":
+            return neoStores.getRelationshipGroupStore();
+        case "neostore.relationshipstore.db":
+            return neoStores.getRelationshipStore();
+        case "neostore.relationshiptypestore.db":
+            return neoStores.getRelationshipTypeTokenStore();
+        case "neostore.schemastore.db":
+            return neoStores.getSchemaStore();
+        default:
+            return null;
         }
-        return null;
     }
 
     private static IOCursor<LogEntry> getLogCursor( String fname, NeoStores neoStores ) throws IOException
     {
         File file = new File( neoStores.getStoreDir(), fname );
         StoreChannel fileChannel = files.open( file, "r" );
-        LogHeader logHeader = readLogHeader( ByteBuffer.allocateDirect( LOG_HEADER_SIZE ), fileChannel, false );
+        LogHeader logHeader = readLogHeader( ByteBuffer.allocateDirect( LOG_HEADER_SIZE ), fileChannel, false, file );
         console.printf( "Logical log version: %s with prev committed tx[%s]%n",
                 logHeader.logVersion, logHeader.lastCommittedTxId );
 

@@ -19,74 +19,90 @@
  */
 package org.neo4j.bolt.v1.transport.integration;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import java.util.Collection;
+import java.util.HashMap;
 
-import org.neo4j.bolt.v1.transport.socket.client.Connection;
 import org.neo4j.bolt.v1.transport.socket.client.SecureSocketConnection;
 import org.neo4j.bolt.v1.transport.socket.client.SecureWebSocketConnection;
 import org.neo4j.bolt.v1.transport.socket.client.SocketConnection;
+import org.neo4j.bolt.v1.transport.socket.client.TransportConnection;
 import org.neo4j.bolt.v1.transport.socket.client.WebSocketConnection;
 import org.neo4j.function.Factory;
+import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.InputPosition;
+import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.SeverityLevel;
+import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.HostnamePort;
+import org.neo4j.kernel.api.exceptions.Status;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonList;
+import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.neo4j.bolt.v1.messaging.message.Messages.init;
-import static org.neo4j.bolt.v1.messaging.message.Messages.pullAll;
-import static org.neo4j.bolt.v1.messaging.message.Messages.run;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasKey;
+import static org.neo4j.bolt.v1.messaging.message.AckFailureMessage.ackFailure;
+import static org.neo4j.bolt.v1.messaging.message.DiscardAllMessage.discardAll;
+import static org.neo4j.bolt.v1.messaging.message.InitMessage.init;
+import static org.neo4j.bolt.v1.messaging.message.PullAllMessage.pullAll;
+import static org.neo4j.bolt.v1.messaging.message.RunMessage.run;
 import static org.neo4j.bolt.v1.messaging.util.MessageMatchers.hasNotification;
+import static org.neo4j.bolt.v1.messaging.util.MessageMatchers.msgFailure;
+import static org.neo4j.bolt.v1.messaging.util.MessageMatchers.msgIgnored;
 import static org.neo4j.bolt.v1.messaging.util.MessageMatchers.msgRecord;
 import static org.neo4j.bolt.v1.messaging.util.MessageMatchers.msgSuccess;
 import static org.neo4j.bolt.v1.runtime.spi.StreamMatchers.eqRecord;
-import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.eventuallyRecieves;
-import static org.neo4j.helpers.collection.MapUtil.map;
+import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.eventuallyReceives;
 
-@RunWith(Parameterized.class)
+@SuppressWarnings( "unchecked" )
+@RunWith( Parameterized.class )
 public class TransportSessionIT
 {
     @Rule
-    public Neo4jWithSocket server = new Neo4jWithSocket(settings ->
-            settings.put( GraphDatabaseSettings.auth_enabled, "false"  ));
+    public Neo4jWithSocket server = new Neo4jWithSocket( getClass(), settings ->
+            settings.put( GraphDatabaseSettings.auth_enabled.name(), "false" ) );
 
-    @Parameterized.Parameter(0)
-    public Factory<Connection> cf;
+    @Parameterized.Parameter( 0 )
+    public Factory<TransportConnection> cf;
 
-    @Parameterized.Parameter(1)
+    @Parameterized.Parameter( 1 )
     public HostnamePort address;
 
-    private Connection client;
+    private TransportConnection client;
 
     @Parameterized.Parameters
     public static Collection<Object[]> transports()
     {
         return asList(
                 new Object[]{
-                        (Factory<Connection>) SocketConnection::new,
+                        (Factory<TransportConnection>) SocketConnection::new,
                         new HostnamePort( "localhost:7687" )
                 },
                 new Object[]{
-                        (Factory<Connection>) WebSocketConnection::new,
+                        (Factory<TransportConnection>) WebSocketConnection::new,
                         new HostnamePort( "localhost:7687" )
                 },
                 new Object[]{
-                        (Factory<Connection>) SecureSocketConnection::new,
+                        (Factory<TransportConnection>) SecureSocketConnection::new,
                         new HostnamePort( "localhost:7687" )
                 },
                 new Object[]{
-                        (Factory<Connection>) SecureWebSocketConnection::new,
+                        (Factory<TransportConnection>) SecureWebSocketConnection::new,
                         new HostnamePort( "localhost:7687" )
                 } );
     }
@@ -99,7 +115,7 @@ public class TransportSessionIT
                 .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) );
 
         // Then
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
     }
 
     @Test
@@ -110,7 +126,7 @@ public class TransportSessionIT
                 .send( TransportTestUtil.acceptedVersions( 1337, 0, 0, 0 ) );
 
         // Then
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 0} ) );
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 0} ) );
     }
 
     @Test
@@ -125,14 +141,102 @@ public class TransportSessionIT
                         pullAll() ) );
 
         // Then
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
-        assertThat( client, eventuallyRecieves(
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
                 msgSuccess(),
-                msgSuccess( map( "fields", asList( "a", "a_squared" ) ) ),
+                msgSuccess(
+                        allOf( hasEntry( is( "fields" ), equalTo( asList( "a", "a_squared" ) ) ),
+                                hasKey( "result_available_after" ) ) ),
                 msgRecord( eqRecord( equalTo( 1L ), equalTo( 1L ) ) ),
                 msgRecord( eqRecord( equalTo( 2L ), equalTo( 4L ) ) ),
                 msgRecord( eqRecord( equalTo( 3L ), equalTo( 9L ) ) ),
+                msgSuccess( allOf( hasEntry( is( "type" ), equalTo( "r" ) ),
+                        hasKey( "result_consumed_after" ) ) ) ) );
+    }
+
+    @Test
+    public void shouldRespondWithMetadataToDiscardAll() throws Throwable
+    {
+        // When
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "UNWIND [1,2,3] AS a RETURN a, a * a AS a_squared" ),
+                        discardAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgSuccess(
+                        allOf( hasEntry( is( "fields" ), equalTo( asList( "a", "a_squared" ) ) ),
+                                hasKey( "result_available_after" ) ) ),
+                msgSuccess( allOf( hasEntry( is( "type" ), equalTo( "r" ) ),
+                        hasKey( "result_consumed_after" ) ) ) ) );
+    }
+
+    @Test
+    public void shouldBeAbleToRunQueryAfterAckFailure() throws Throwable
+    {
+        // Given
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "INVALID" ),
+                        pullAll() ) );
+
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgFailure( Status.Statement.SyntaxError,
+                        String.format( "Invalid input 'I': expected <init> (line 1, column 1 (offset: 0))%n" +
+                                       "\"INVALID\"%n" +
+                                       " ^" ) ), msgIgnored() ) );
+
+        // When
+        client.send( TransportTestUtil.chunk( ackFailure(), run( "RETURN 1" ), pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgSuccess(),
+                msgRecord( eqRecord( equalTo( 1L ) ) ),
                 msgSuccess() ) );
+    }
+
+    @Test
+    public void shouldRunProcedure() throws Throwable
+    {
+        // Given
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "CREATE (n:Test {age: 2}) RETURN n.age AS age" ),
+                        pullAll() ) );
+
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( singletonList( "age" ) ) ),
+                        hasKey( "result_available_after" ) ) ),
+                msgRecord( eqRecord( equalTo( 2L ) ) ),
+                msgSuccess() ) );
+
+        // When
+        client.send( TransportTestUtil.chunk(
+                run( "CALL db.labels() YIELD label" ),
+                pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives(
+                msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( singletonList( "label" ) ) ),
+                        hasKey( "result_available_after" ) ) ),
+                msgRecord( eqRecord( Matchers.equalTo( "Test" ) ) ),
+                msgSuccess()
+        ) );
     }
 
     @Test
@@ -147,10 +251,11 @@ public class TransportSessionIT
                         pullAll() ) );
 
         // Then
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
-        assertThat( client, eventuallyRecieves(
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
                 msgSuccess(),
-                msgSuccess( map("fields", singletonList( "n" )))));
+                msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( singletonList( "n" ) ) ),
+                        hasKey( "result_available_after" ) ) ) ) );
 
         //
         //Record(0x71) {
@@ -160,9 +265,9 @@ public class TransportSessionIT
         //                  props: {} (A)]
         //}
         assertThat( client,
-                eventuallyRecieves(bytes(0x00, 0x08, 0xB1, 0x71,  0x91,
-                        0xB3, 0x4E,  0x00, 0x90, 0xA0, 0x00, 0x00) ));
-        assertThat(client, eventuallyRecieves( msgSuccess()));
+                eventuallyReceives( bytes( 0x00, 0x08, 0xB1, 0x71, 0x91,
+                        0xB3, 0x4E, 0x00, 0x90, 0xA0, 0x00, 0x00 ) ) );
+        assertThat( client, eventuallyReceives( msgSuccess() ) );
     }
 
     @Test
@@ -177,10 +282,11 @@ public class TransportSessionIT
                         pullAll() ) );
 
         // Then
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
-        assertThat( client, eventuallyRecieves(
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
                 msgSuccess(),
-                msgSuccess( map( "fields", singletonList( "r" ) ) ) ) );
+                msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( singletonList( "r" ) ) ),
+                        hasKey( "result_available_after" ) ) ) ) );
 
         //
         //Record(0x71) {
@@ -192,21 +298,10 @@ public class TransportSessionIT
         //                 props: {} (A0)]
         //}
         assertThat( client,
-                eventuallyRecieves( bytes( 0x00, 0x0B, 0xB1, 0x71, 0x91,
-                        0xB5, 0x52, 0x00, 0x00, 0x01, 0x81, 0x54, 0xA0, 0x00,0x00  ) ) );
-        assertThat( client, eventuallyRecieves( msgSuccess() ) );
+                eventuallyReceives( bytes( 0x00, 0x0B, 0xB1, 0x71, 0x91,
+                        0xB5, 0x52, 0x00, 0x00, 0x01, 0x81, 0x54, 0xA0, 0x00, 0x00 ) ) );
+        assertThat( client, eventuallyReceives( msgSuccess() ) );
     }
-
-    private byte[] bytes( int...ints )
-    {
-        byte[] bytes = new byte[ints.length];
-        for ( int i = 0; i < ints.length; i++ )
-        {
-            bytes[i] = (byte) ints[i];
-        }
-        return bytes;
-    }
-
 
     @Test
     public void shouldNotLeakStatsToNextStatement() throws Throwable
@@ -218,8 +313,8 @@ public class TransportSessionIT
                         init( "TestClient/1.1", emptyMap() ),
                         run( "CREATE (n)" ),
                         pullAll() ) );
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
-        assertThat( client, eventuallyRecieves(
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
                 msgSuccess(),
                 msgSuccess(),
                 msgSuccess() ) );
@@ -231,10 +326,11 @@ public class TransportSessionIT
                         pullAll() ) );
 
         // Then
-        assertThat( client, eventuallyRecieves(
+        assertThat( client, eventuallyReceives(
                 msgSuccess(),
-                msgRecord( eqRecord( equalTo( 1l ) ) ),
-                msgSuccess( map( "type", "r" ) ) ) );
+                msgRecord( eqRecord( equalTo( 1L ) ) ),
+                msgSuccess( allOf( hasEntry( is( "type" ), equalTo( "r" ) ),
+                        hasKey( "result_consumed_after" ) ) ) ) );
     }
 
     @Test
@@ -248,10 +344,9 @@ public class TransportSessionIT
                         run( "EXPLAIN MATCH (a:THIS_IS_NOT_A_LABEL) RETURN count(*)" ),
                         pullAll() ) );
 
-
         // Then
-        assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
-        assertThat( client, eventuallyRecieves(
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
                 msgSuccess(),
                 msgSuccess(),
                 hasNotification(
@@ -263,6 +358,122 @@ public class TransportSessionIT
                                 "THIS_IS_NOT_A_LABEL)",
                                 SeverityLevel.WARNING, new InputPosition( 9, 1, 10 ) ) ) ) );
 
+    }
+
+    @Test
+    public void shouldFailNicelyOnPoints() throws Throwable
+    {
+        // When
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "RETURN point({x:13, y:37, crs:'cartesian'}) as p" ),
+                        pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( singletonList( "p" ) ) ),
+                        hasKey( "result_available_after" ) ) ),
+                msgRecord( eqRecord( nullValue() ) ),
+                msgFailure( Status.Request.Invalid, "Point is not yet supported as a return type in Bolt" ) ) );
+    }
+
+    @Test
+    public void shouldFailNicelyOnBinary() throws Throwable
+    {
+        //Given
+        GraphDatabaseService db = server.graphDatabaseService();
+        try ( Transaction tx = db.beginTx() )
+        {
+            Node node = db.createNode();
+            node.setProperty( "binary", new byte[]{(byte) 0xB0, 0x17} );
+            tx.success();
+        }
+
+        // When
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "MATCH (n) RETURN n.binary" ),
+                        pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( singletonList( "n.binary" ) ) ),
+                        hasKey( "result_available_after" ) ) ),
+                msgRecord( eqRecord( nullValue() ) ),
+                msgFailure( Status.Request.Invalid, "Byte array is not yet supported in Bolt" ) ) );
+    }
+
+    private byte[] bytes( int... ints )
+    {
+        byte[] bytes = new byte[ints.length];
+        for ( int i = 0; i < ints.length; i++ )
+        {
+            bytes[i] = (byte) ints[i];
+        }
+        return bytes;
+    }
+
+    @Test
+    public void shouldFailNicelyOnNullKeysInMap() throws Throwable
+    {
+        //Given
+        GraphDatabaseService db = server.graphDatabaseService();
+        HashMap<String,Object> params = new HashMap<>();
+        HashMap<String,Object> inner = new HashMap<>();
+        inner.put(null, 42L);
+        inner.put("foo", 1337L);
+        params.put( "p", inner );
+
+        // When
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "RETURN {p}", params ),
+                        pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgFailure( Status.Request.Invalid, "Value `null` is not supported as key in maps, must be a non-nullable string."),
+                msgIgnored()));
+
+        client.send( TransportTestUtil.chunk( ackFailure(), run( "RETURN 1" ), pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgSuccess(),
+                msgRecord( eqRecord( equalTo( 1L ) ) ),
+                msgSuccess() ) );
+    }
+
+    @Test
+    public void shouldFailNicelyWhenDroppingUnknownIndex() throws Throwable
+    {
+        // When
+        client.connect( address )
+                .send( TransportTestUtil.acceptedVersions( 1, 0, 0, 0 ) )
+                .send( TransportTestUtil.chunk(
+                        init( "TestClient/1.1", emptyMap() ),
+                        run( "DROP INDEX on :Movie12345(id)" ),
+                        pullAll() ) );
+
+        // Then
+        assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
+        assertThat( client, eventuallyReceives(
+                msgSuccess(),
+                msgFailure( Status.Schema.IndexDropFailed, "Unable to drop index on :Movie12345(id): No such INDEX ON :Movie12345(id)."),
+                msgIgnored()) );
     }
 
     @Before

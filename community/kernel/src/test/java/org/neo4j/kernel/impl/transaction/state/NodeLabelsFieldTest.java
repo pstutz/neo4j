@@ -37,7 +37,6 @@ import java.util.Set;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.CloneableInPublic;
 import org.neo4j.helpers.collection.Iterables;
-import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.DynamicNodeLabels;
@@ -46,15 +45,14 @@ import org.neo4j.kernel.impl.store.NodeLabels;
 import org.neo4j.kernel.impl.store.NodeLabelsField;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.util.Bits;
 import org.neo4j.logging.NullLogProvider;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.RandomRule;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.RandomRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -189,7 +187,6 @@ public class NodeLabelsFieldTest
         Collection<DynamicRecord> initialRecords = node.getDynamicLabelRecords();
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
-
         // WHEN
         Set<DynamicRecord> changedDynamicRecords = Iterables.asSet( nodeLabels.add( 1, nodeStore, nodeStore.getDynamicLabelStore() ) );
 
@@ -203,7 +200,7 @@ public class NodeLabelsFieldTest
     {
         // GIVEN
         // will occupy 60B of data, i.e. one dynamic record
-        Long nodeId = 24l;
+        Long nodeId = 24L;
         NodeRecord node = nodeRecordWithDynamicLabels( nodeId, nodeStore, oneByteLongs(56) );
         Collection<DynamicRecord> initialRecords = node.getDynamicLabelRecords();
 
@@ -240,7 +237,7 @@ public class NodeLabelsFieldTest
     {
         // GIVEN
         // will occupy 61B of data, i.e. just two dynamic records
-        Long nodeId = 42l;
+        Long nodeId = 42L;
         NodeRecord node = nodeRecordWithDynamicLabels( nodeId, nodeStore, oneByteLongs( 57 ) );
         NodeLabels nodeLabels = NodeLabelsField.parseLabelsField( node );
 
@@ -291,7 +288,7 @@ public class NodeLabelsFieldTest
     public void shouldReadNullDynamicRecordFromInlineLabelsField() throws Exception
     {
         // GIVEN
-        NodeRecord node = nodeRecordWithInlinedLabels( 23l );
+        NodeRecord node = nodeRecordWithInlinedLabels( 23L );
 
         // WHEN
         boolean isDynamicReference = NodeLabelsField.fieldPointsToDynamicRecordOfLabels( node.getLabelField() );
@@ -498,7 +495,8 @@ public class NodeLabelsFieldTest
 
     @ClassRule
     public static PageCacheRule pageCacheRule = new PageCacheRule();
-    @Rule public EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
+    @Rule
+    public EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
     private NodeStore nodeStore;
 
     @Before
@@ -508,8 +506,7 @@ public class NodeLabelsFieldTest
         fs.get().mkdirs( storeDir );
         Config config = new Config( stringMap( GraphDatabaseSettings.label_block_size.name(), "60" ) );
         StoreFactory storeFactory = new StoreFactory( storeDir, config, new DefaultIdGeneratorFactory( fs.get() ),
-                pageCacheRule.getPageCache( fs.get() ), fs.get(), StandardV3_0.RECORD_FORMATS,
-                NullLogProvider.getInstance() );
+                pageCacheRule.getPageCache( fs.get() ), fs.get(), NullLogProvider.getInstance() );
         neoStores = storeFactory.openAllNeoStores( true );
         nodeStore = neoStores.getNodeStore();
     }
@@ -546,7 +543,7 @@ public class NodeLabelsFieldTest
     private Collection<DynamicRecord> allocateAndApply( NodeStore nodeStore, long nodeId, long[] longs )
     {
         Collection<DynamicRecord> records = DynamicNodeLabels.allocateRecordsForDynamicLabels( nodeId, longs,
-                Iterators.<DynamicRecord>emptyIterator(), nodeStore.getDynamicLabelStore() );
+                nodeStore.getDynamicLabelStore() );
         nodeStore.updateDynamicLabelRecords( records );
         return records;
     }

@@ -21,13 +21,13 @@ package org.neo4j.kernel.api;
 
 import org.junit.Test;
 
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.AnonymousContext;
 
 import static org.junit.Assert.assertSame;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
-
 import static org.neo4j.kernel.api.KernelTransactionFactory.kernelTransaction;
+import static org.neo4j.kernel.api.security.SecurityContext.AUTH_DISABLED;
 
 public class TransactionStatementSharingTest
 {
@@ -35,7 +35,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentReadStatementAndReadStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.READ );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.read() );
         ReadOperations stmt1 = tx.acquireStatement().readOperations();
 
         // when
@@ -49,7 +49,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentReadStatementAndDataStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.WRITE );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.write() );
         ReadOperations stmt1 = tx.acquireStatement().readOperations();
 
         // when
@@ -63,7 +63,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentReadStatementAndSchemaStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         ReadOperations stmt1 = tx.acquireStatement().readOperations();
 
         // when
@@ -77,7 +77,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentDataStatementAndReadStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.WRITE );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.write() );
         DataWriteOperations stmt1 = tx.acquireStatement().dataWriteOperations();
 
         // when
@@ -91,7 +91,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentDataStatementAndDataStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.WRITE );
+        KernelTransaction tx = kernelTransaction( AnonymousContext.write() );
         DataWriteOperations stmt1 = tx.acquireStatement().dataWriteOperations();
 
         // when
@@ -105,7 +105,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentSchemaStatementAndReadStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         SchemaWriteOperations stmt1 = tx.acquireStatement().schemaWriteOperations();
 
         // when
@@ -119,7 +119,7 @@ public class TransactionStatementSharingTest
     public void shouldShareStatementStateForConcurrentSchemaStatementAndSchemaStatement() throws Exception
     {
         // given
-        KernelTransaction tx = kernelTransaction( AccessMode.Static.FULL );
+        KernelTransaction tx = kernelTransaction( AUTH_DISABLED );
         SchemaWriteOperations stmt1 = tx.acquireStatement().schemaWriteOperations();
 
         // when
@@ -134,7 +134,7 @@ public class TransactionStatementSharingTest
     {
         // given
         KernelTransactionFactory.Instances instances =
-                KernelTransactionFactory.kernelTransactionWithInternals( AccessMode.Static.READ );
+                KernelTransactionFactory.kernelTransactionWithInternals( AnonymousContext.read() );
         KernelTransaction tx = instances.transaction;
         Statement statement = tx.acquireStatement();
         ReadOperations ops1 = statement.readOperations();
@@ -142,7 +142,7 @@ public class TransactionStatementSharingTest
         statement.close();
 
         // when
-        verify( instances.storageStatement ).close();
+        verify( instances.storageStatement ).release();
         reset( instances.storageStatement );
         ReadOperations ops2 = tx.acquireStatement().readOperations();
 

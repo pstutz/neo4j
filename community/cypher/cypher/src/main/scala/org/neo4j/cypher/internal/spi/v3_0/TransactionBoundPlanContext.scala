@@ -26,18 +26,19 @@ import org.neo4j.cypher.internal.compiler.v3_0.pipes.matching.ExpanderStep
 import org.neo4j.cypher.internal.compiler.v3_0.spi._
 import org.neo4j.cypher.internal.frontend.v3_0.symbols.CypherType
 import org.neo4j.cypher.internal.frontend.v3_0.{CypherExecutionException, symbols}
-import org.neo4j.cypher.internal.spi.TransactionalContextWrapper
+import org.neo4j.cypher.internal.spi.TransactionalContextWrapperv3_1
 import org.neo4j.graphdb.Node
 import org.neo4j.kernel.api.constraints.UniquenessConstraint
 import org.neo4j.kernel.api.exceptions.KernelException
 import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException
 import org.neo4j.kernel.api.index.{IndexDescriptor, InternalIndexState}
+import org.neo4j.kernel.api.proc
 import org.neo4j.kernel.api.proc.Neo4jTypes.AnyType
-import org.neo4j.kernel.api.proc.{Neo4jTypes, ProcedureSignature => KernelProcedureSignature}
+import org.neo4j.kernel.api.proc.{ProcedureSignature => KernelProcedureSignature, Mode, QualifiedName, Neo4jTypes}
 
 import scala.collection.JavaConverters._
 
-class TransactionBoundPlanContext(tc: TransactionalContextWrapper)
+class TransactionBoundPlanContext(tc: TransactionalContextWrapperv3_1)
   extends TransactionBoundTokenContext(tc.statement) with PlanContext {
 
   @Deprecated
@@ -123,12 +124,12 @@ class TransactionBoundPlanContext(tc: TransactionalContextWrapper)
     new BidirectionalTraversalMatcher(steps, start, end)
 
   val statistics: GraphStatistics =
-    InstrumentedGraphStatistics(TransactionBoundGraphStatistics(tc.readOperations), MutableGraphStatisticsSnapshot())
+    InstrumentedGraphStatistics(TransactionBoundGraphStatistics(tc.readOperations), new MutableGraphStatisticsSnapshot())
 
   val txIdProvider = LastCommittedTxIdProvider(tc.graph)
 
   override def procedureSignature(name: QualifiedProcedureName) = {
-    val kn = new KernelProcedureSignature.ProcedureName(name.namespace.asJava, name.name)
+    val kn = new QualifiedName(name.namespace.asJava, name.name)
     val ks = tc.statement.readOperations().procedureGet(kn)
     val input = ks.inputSignature().asScala.map(s => FieldSignature(s.name(), asCypherType(s.neo4jType())))
     val output = if (ks.isVoid) None else Some(ks.outputSignature().asScala.map(s => FieldSignature(s.name(), asCypherType(s.neo4jType()))))
@@ -137,10 +138,10 @@ class TransactionBoundPlanContext(tc: TransactionalContextWrapper)
     ProcedureSignature(name, input, output, mode)
   }
 
-  private def asCypherProcMode(mode: KernelProcedureSignature.Mode): ProcedureAccessMode = mode match {
-    case KernelProcedureSignature.Mode.READ_ONLY => ProcedureReadOnlyAccess
-    case KernelProcedureSignature.Mode.READ_WRITE => ProcedureReadWriteAccess
-    case KernelProcedureSignature.Mode.DBMS => ProcedureDbmsAccess
+  private def asCypherProcMode(mode: Mode): ProcedureAccessMode = mode match {
+    case proc.Mode.READ_ONLY => ProcedureReadOnlyAccess
+    case proc.Mode.READ_WRITE => ProcedureReadWriteAccess
+    case proc.Mode.DBMS => ProcedureDbmsAccess
     case _ => throw new CypherExecutionException(
       "Unable to execute procedure, because it requires an unrecognized execution mode: " + mode.name(), null )
   }
@@ -156,6 +157,7 @@ class TransactionBoundPlanContext(tc: TransactionalContextWrapper)
     case Neo4jTypes.NTNode => symbols.CTNode
     case Neo4jTypes.NTRelationship => symbols.CTRelationship
     case Neo4jTypes.NTPath => symbols.CTPath
+    case Neo4jTypes.NTPoint => symbols.CTPoint
     case Neo4jTypes.NTAny => symbols.CTAny
   }
 }

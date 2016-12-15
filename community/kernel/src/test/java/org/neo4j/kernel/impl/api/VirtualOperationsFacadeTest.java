@@ -9,9 +9,7 @@ import org.neo4j.test.TestGraphDatabaseFactory;
 import java.util.Iterator;
 
 import static junit.framework.TestCase.assertFalse;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * Created by Sascha Peukert on 18.08.2016.
@@ -119,7 +117,7 @@ public class VirtualOperationsFacadeTest {
         {
             Node n = graphDb.createVirtualNode();
             Node m = graphDb.createVirtualNode();
-            Relationship r = n.createVirtualRelationshipTo(m,RelationshipType.withName("TESTS"));
+            Relationship r = n.createVirtualRelationshipTo(m, RelationshipType.withName("TESTS"));
             assertTrue("Id of an virtual relationship should be negative",r.getId()<0);
             r.setProperty("Test",true);
 

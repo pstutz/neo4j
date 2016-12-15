@@ -19,29 +19,30 @@
  */
 package org.neo4j.desktop.runtime;
 
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.Properties;
 
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-
+import org.neo4j.desktop.Parameters;
 import org.neo4j.desktop.config.Installation;
 import org.neo4j.desktop.model.DesktopModel;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.server.configuration.ClientConnectorSettings;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
-import static org.neo4j.server.configuration.ServerSettings.httpConnector;
+import static org.neo4j.server.configuration.ClientConnectorSettings.httpConnector;
 
 public class DatabaseActionsTest
 {
     @Rule
-    public TargetDirectory.TestDirectory baseDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDirectory = TestDirectory.testDirectory();
 
     private File storeDir;
     private File configFile;
@@ -54,7 +55,7 @@ public class DatabaseActionsTest
         when( installation.getDatabaseDirectory() ).thenReturn( storeDir );
         when( installation.getConfigurationsFile() ).thenReturn( configFile );
 
-        DesktopModel model = new DesktopModel( installation );
+        DesktopModel model = new DesktopModel( installation, new Parameters( new String[] {} ) );
         DatabaseActions databaseActions = new DatabaseActions( model );
 
         try
@@ -76,13 +77,14 @@ public class DatabaseActionsTest
     @Before
     public void createFiles() throws IOException
     {
-        storeDir = new File( baseDir.directory(), "store_dir" );
+        storeDir = new File( testDirectory.directory(), "store_dir" );
         storeDir.mkdirs();
 
-        configFile = new File( baseDir.directory(), "neo4j.conf" );
+        configFile = new File( testDirectory.directory(), "neo4j.conf" );
         Properties props = new Properties();
-        props.setProperty( httpConnector( "1" ).type.name(), "HTTP" );
-        props.setProperty( httpConnector( "1" ).enabled.name(), "true" );
+        props.setProperty( ClientConnectorSettings.httpConnector( "1" ).type.name(), "HTTP" );
+        props.setProperty( ClientConnectorSettings.httpConnector( "1" ).encryption.name(), "NONE" );
+        props.setProperty( ClientConnectorSettings.httpConnector( "1" ).enabled.name(), "true" );
         try ( FileWriter writer = new FileWriter( configFile ) )
         {
             props.store( writer, "" );

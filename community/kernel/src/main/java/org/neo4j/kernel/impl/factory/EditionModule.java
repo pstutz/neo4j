@@ -19,12 +19,14 @@
  */
 package org.neo4j.kernel.impl.factory;
 
-import java.io.File;
-
 import org.neo4j.graphdb.DependencyResolver;
-import org.neo4j.graphdb.factory.GraphDatabaseSettings;
+import org.neo4j.helpers.Service;
+import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.kernel.NeoStoreDataSource;
+import org.neo4j.kernel.api.bolt.BoltConnectionTracker;
+import org.neo4j.kernel.api.exceptions.KernelException;
+import org.neo4j.kernel.api.security.SecurityModule;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.api.CommitProcessFactory;
 import org.neo4j.kernel.impl.api.SchemaWriteGuard;
@@ -35,20 +37,22 @@ import org.neo4j.kernel.impl.core.RelationshipTypeTokenHolder;
 import org.neo4j.kernel.impl.coreapi.CoreAPIAvailabilityGuard;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory.Configuration;
 import org.neo4j.kernel.impl.locking.Locks;
-import org.neo4j.kernel.impl.store.format.RecordFormats;
+import org.neo4j.kernel.impl.locking.StatementLocksFactory;
+import org.neo4j.kernel.impl.logging.LogService;
+import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
+import org.neo4j.kernel.impl.store.id.IdReuseEligibility;
+import org.neo4j.kernel.impl.store.id.configuration.IdTypeConfigurationProvider;
 import org.neo4j.kernel.impl.transaction.TransactionHeaderInformationFactory;
+import org.neo4j.kernel.impl.util.DependencySatisfier;
+import org.neo4j.kernel.impl.util.JobScheduler;
 import org.neo4j.kernel.info.DiagnosticsManager;
 import org.neo4j.kernel.internal.KernelDiagnostics;
 import org.neo4j.kernel.lifecycle.LifeSupport;
-import org.neo4j.logging.LogProvider;
-import org.neo4j.server.security.auth.AuthManager;
-import org.neo4j.server.security.auth.BasicAuthManager;
-import org.neo4j.server.security.auth.FileUserRepository;
+import org.neo4j.logging.Log;
 import org.neo4j.udc.UsageData;
 import org.neo4j.udc.UsageDataKeys;
 
-import static java.time.Clock.systemUTC;
 import static java.util.Collections.singletonMap;
 
 /**
@@ -57,13 +61,26 @@ import static java.util.Collections.singletonMap;
  */
 public abstract class EditionModule
 {
+    void registerProcedures( Procedures procedures ) throws KernelException
+    {
+        procedures.registerProcedure( org.neo4j.kernel.builtinprocs.BuiltInProcedures.class );
+        procedures.registerProcedure( org.neo4j.kernel.builtinprocs.BuiltInDbmsProcedures.class );
+
+        registerEditionSpecificProcedures( procedures );
+    }
+
+    protected abstract void registerEditionSpecificProcedures( Procedures procedures ) throws KernelException;
+
     public IdGeneratorFactory idGeneratorFactory;
+    public IdTypeConfigurationProvider idTypeConfigurationProvider;
 
     public LabelTokenHolder labelTokenHolder;
 
     public PropertyKeyTokenHolder propertyKeyTokenHolder;
 
     public Locks lockManager;
+
+    public StatementLocksFactory statementLocksFactory;
 
     public CommitProcessFactory commitProcessFactory;
 
@@ -79,9 +96,11 @@ public abstract class EditionModule
 
     public CoreAPIAvailabilityGuard coreAPIAvailabilityGuard;
 
+    public AccessCapability accessCapability;
+
     public IOLimiter ioLimiter;
 
-    public RecordFormats formats;
+    public IdReuseEligibility eligibleForIdReuse;
 
     protected void doAfterRecoveryAndStartup( DatabaseInfo databaseInfo, DependencyResolver dependencyResolver )
     {
@@ -101,25 +120,78 @@ public abstract class EditionModule
         config.augment( singletonMap( Configuration.editionName.name(), databaseInfo.edition.toString() ) );
     }
 
-    protected AuthManager createAuthManager( Config config, LifeSupport life, LogProvider logProvider )
-    {
-        boolean authEnabled = config.get( GraphDatabaseSettings.auth_enabled );
-        if ( authEnabled )
-        {
-            File storePath = config.get( GraphDatabaseSettings.auth_store );
-            if ( storePath == null )
-            {
-                logProvider.getLog( EditionModule.class ).warn( "Authentication not enabled because %s is not set.",
-                        GraphDatabaseSettings.auth_store.name() );
-                return AuthManager.NO_AUTH;
-            }
-            FileUserRepository users = life.add( new FileUserRepository( storePath.toPath(), logProvider ) );
-            return life.add( new BasicAuthManager( users, systemUTC(), true ) );
-        }
-        else
-        {
-            return AuthManager.NO_AUTH;
-        }
+    public abstract void setupSecurityModule( PlatformModule platformModule, Procedures procedures );
 
+    protected static void setupSecurityModule( PlatformModule platformModule, Log log, Procedures procedures,
+            String key )
+    {
+        for ( SecurityModule candidate : Service.load( SecurityModule.class ) )
+        {
+            if ( candidate.matches( key ) )
+            {
+                try
+                {
+                    candidate.setup( new SecurityModule.Dependencies()
+                    {
+                        @Override
+                        public LogService logService()
+                        {
+                            return platformModule.logging;
+                        }
+
+                        @Override
+                        public Config config()
+                        {
+                            return platformModule.config;
+                        }
+
+                        @Override
+                        public Procedures procedures()
+                        {
+                            return procedures;
+                        }
+
+                        @Override
+                        public JobScheduler scheduler()
+                        {
+                            return platformModule.jobScheduler;
+                        }
+
+                        @Override
+                        public FileSystemAbstraction fileSystem()
+                        {
+                            return platformModule.fileSystem;
+                        }
+
+                        @Override
+                        public LifeSupport lifeSupport()
+                        {
+                            return platformModule.life;
+                        }
+
+                        @Override
+                        public DependencySatisfier dependencySatisfier()
+                        {
+                            return platformModule.dependencies;
+                        }
+                    } );
+                    return;
+                }
+                catch ( Exception e )
+                {
+                    String errorMessage = "Failed to load security module.";
+                    log.error( errorMessage );
+                    throw new RuntimeException( errorMessage, e );
+                }
+            }
+        }
+        String errorMessage = "Failed to load security module with key '" + key + "'.";
+        log.error( errorMessage );
+        throw new IllegalArgumentException( errorMessage );
+    }
+
+    protected BoltConnectionTracker createSessionTracker()
+    {
+        return BoltConnectionTracker.NOOP;
     }
 }

@@ -29,7 +29,6 @@ import org.neo4j.storageengine.api.StorageStatement;
 
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.TestCase.assertTrue;
-
 import static org.neo4j.graphdb.RelationshipType.withName;
 import static org.neo4j.helpers.collection.MapUtil.map;
 
@@ -88,7 +87,7 @@ public class DiskLayerNodeAndRelTest extends DiskLayerTest
 
     private boolean nodeExists( long id )
     {
-        try (StorageStatement statement = disk.newStatement())
+        try ( StorageStatement statement = disk.newStatement() )
         {
             try ( Cursor<NodeItem> node = statement.acquireSingleNodeCursor( id ) )
             {
@@ -99,7 +98,7 @@ public class DiskLayerNodeAndRelTest extends DiskLayerTest
 
     private boolean relationshipExists( long id )
     {
-        try (StorageStatement statement = disk.newStatement())
+        try ( StorageStatement statement = disk.newStatement() )
         {
             try ( Cursor<RelationshipItem> relationship = statement.acquireSingleRelationshipCursor( id ) )
             {

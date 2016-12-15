@@ -42,6 +42,7 @@ import java.nio.channels.FileChannel;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.CopyOption;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -120,7 +121,7 @@ public class FileUtils
      * Utility method that moves a file from its current location to the
      * new target location. If rename fails (for example if the target is
      * another disk) a copy/delete will be performed instead. This is not a rename,
-     * use {@link #renameFile(File, File)} instead.
+     * use {@link #renameFile(File, File, CopyOption...)} instead.
      *
      * @param toMove The File object to move.
      * @param target Target file to move to.
@@ -161,7 +162,7 @@ public class FileUtils
      * Utility method that moves a file from its current location to the
      * provided target directory. If rename fails (for example if the target is
      * another disk) a copy/delete will be performed instead. This is not a rename,
-     * use {@link #renameFile(File, File)} instead.
+     * use {@link #renameFile(File, File, CopyOption...)} instead.
      *
      * @param toMove The File object to move.
      * @param targetDirectory the destination directory
@@ -181,33 +182,9 @@ public class FileUtils
         return target;
     }
 
-    public static boolean renameFile( File srcFile, File renameToFile ) throws IOException
+    public static void renameFile( File srcFile, File renameToFile, CopyOption... copyOptions ) throws IOException
     {
-        if ( !srcFile.exists() )
-        {
-            throw new FileNotFoundException( "Source file[" + srcFile.getName() + "] not found" );
-        }
-        if ( renameToFile.exists() )
-        {
-            throw new FileNotFoundException( "Target file[" + renameToFile.getName() + "] already exists" );
-        }
-        if ( !renameToFile.getParentFile().isDirectory() )
-        {
-            throw new FileNotFoundException( "Target directory[" + renameToFile.getParent() + "] does not exists" );
-        }
-        int count = 0;
-        boolean renamed;
-        do
-        {
-            renamed = srcFile.renameTo( renameToFile );
-            if ( !renamed )
-            {
-                count++;
-                waitAndThenTriggerGC();
-            }
-        }
-        while ( !renamed && count <= WINDOWS_RETRY_COUNT );
-        return renamed;
+        Files.move( srcFile.toPath(), renameToFile.toPath(), copyOptions );
     }
 
     public static void truncateFile( SeekableByteChannel fileChannel, long position )
@@ -356,6 +333,62 @@ public class FileUtils
             root = new File( root, part );
         }
         return root;
+    }
+
+    /**
+     * Useful when you want to move a file from one directory to another by renaming the file
+     * and keep eventual sub directories. Example:
+     * <p>
+     * You want to move file /a/b1/c/d/file from /a/b1 to /a/b2 and keep the sub path /c/d/file.
+     * <pre>
+     * <code>fileToMove = new File( "/a/b1/c/d/file" );
+     * fromDir = new File( "/a/b1" );
+     * toDir = new File( "/a/b2" );
+     * fileToMove.rename( pathToFileAfterMove( fromDir, toDir, fileToMove ) );
+     * // fileToMove.getAbsolutePath() -> /a/b2/c/d/file</code>
+     * </pre>
+     * Calls {@link #pathToFileAfterMove(Path, Path, Path)} after
+     * transforming given files to paths by calling {@link File#toPath()}.
+     * <p>
+     * NOTE: This that this does not perform the move, it only calculates the new file name.
+     * <p>
+     * Throws {@link IllegalArgumentException} is fileToMove is not a sub path to fromDir.
+     *
+     * @param fromDir Current parent directory for fileToMove
+     * @param toDir Directory denoting new parent directory for fileToMove after move
+     * @param fileToMove File denoting current location for fileToMove
+     * @return {@link File} denoting new abstract path for file after move.
+     */
+    public static File pathToFileAfterMove( File fromDir, File toDir, File fileToMove )
+    {
+        final Path fromDirPath = fromDir.toPath();
+        final Path toDirPath = toDir.toPath();
+        final Path fileToMovePath = fileToMove.toPath();
+        return pathToFileAfterMove( fromDirPath, toDirPath, fileToMovePath ).toFile();
+    }
+
+    /**
+     * Resolve toDir against fileToMove relativized against fromDir, resulting in a path denoting the location of
+     * fileToMove after being moved fromDir toDir.
+     * <p>
+     * NOTE: This that this does not perform the move, it only calculates the new file name.
+     * <p>
+     * Throws {@link IllegalArgumentException} is fileToMove is not a sub path to fromDir.
+     *
+     * @param fromDir Path denoting current parent directory for fileToMove
+     * @param toDir Path denoting location for fileToMove after move
+     * @param fileToMove Path denoting current location for fileToMove
+     * @return {@link Path} denoting new abstract path for file after move.
+     */
+    public static Path pathToFileAfterMove( Path fromDir, Path toDir, Path fileToMove )
+    {
+        // File to move must be true sub path to from dir
+        if ( !fileToMove.startsWith( fromDir ) || fileToMove.equals( fromDir ) )
+        {
+            throw new IllegalArgumentException( "File " + fileToMove + " is not a sub path to dir " + fromDir );
+        }
+
+        return toDir.resolve( fromDir.relativize( fileToMove ) );
     }
 
     public interface FileOperation

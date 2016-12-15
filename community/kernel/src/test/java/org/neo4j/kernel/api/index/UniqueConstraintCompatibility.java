@@ -43,16 +43,16 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.locking.Lock;
 import org.neo4j.kernel.impl.locking.LockService;
 import org.neo4j.kernel.impl.spi.KernelContext;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifecycle;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
@@ -176,9 +176,8 @@ public class UniqueConstraintCompatibility extends IndexProviderCompatibilityTes
                 assertLookupNode( "m", is( m ) ) );
     }
 
-    @Ignore("Until constraint violation has been updated to double check with property store")
     @Test
-    public void onlineConstrainthouldNotFalselyCollideOnFindNodesByLabelAndProperty() throws Exception
+    public void onlineConstraintShouldNotFalselyCollideOnFindNodesByLabelAndProperty() throws Exception
     {
         // Given
         givenOnlineConstraint();
@@ -998,7 +997,7 @@ public class UniqueConstraintCompatibility extends IndexProviderCompatibilityTes
     // -- Set Up: Environment parts
 
     @Rule
-    public TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDirectory = TestDirectory.testDirectory( getClass() );
 
     @Before
     public void setUp() {

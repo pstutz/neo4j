@@ -28,13 +28,14 @@ import org.junit.Test;
 import java.io.File;
 import java.io.FileFilter;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import org.neo4j.com.storecopy.StoreCopyClient;
 import org.neo4j.com.storecopy.StoreCopyServer;
+import org.neo4j.com.storecopy.StoreUtil;
 import org.neo4j.cursor.IOCursor;
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -46,7 +47,6 @@ import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.index.Index;
 import org.neo4j.helpers.collection.Iterables;
-import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.FileUtils;
@@ -54,12 +54,12 @@ import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.factory.DatabaseInfo;
+import org.neo4j.kernel.impl.logging.LogService;
 import org.neo4j.kernel.impl.spi.SimpleKernelContext;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.MetaDataStore.Position;
 import org.neo4j.kernel.impl.store.MismatchingStoreIdException;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.storemigration.LogFiles;
 import org.neo4j.kernel.impl.storemigration.StoreFile;
 import org.neo4j.kernel.impl.transaction.CommittedTransactionRepresentation;
@@ -79,16 +79,20 @@ import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.FormattedLogProvider;
+import org.neo4j.logging.Log;
+import org.neo4j.logging.LogProvider;
+import org.neo4j.logging.Logger;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.test.Barrier;
 import org.neo4j.test.DbRepresentation;
-import org.neo4j.test.EmbeddedDatabaseRule;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.SuppressOutput;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.EmbeddedDatabaseRule;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.hamcrest.CoreMatchers.anyOf;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.instanceOf;
@@ -98,7 +102,12 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.neo4j.backup.BackupServiceStressTestingBuilder.untilTimeExpired;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.neo4j.function.Suppliers.untilTimeExpired;
+import static org.neo4j.kernel.impl.storemigration.StoreFile.COUNTS_STORE_LEFT;
+import static org.neo4j.kernel.impl.storemigration.StoreFile.COUNTS_STORE_RIGHT;
 
 public class BackupServiceIT
 {
@@ -123,7 +132,7 @@ public class BackupServiceIT
     }
 
     @Rule
-    public final TargetDirectory.TestDirectory target = TargetDirectory.testDirForTest( BackupServiceIT.class );
+    public final TestDirectory target = TestDirectory.testDirectory();
     private static final String NODE_STORE = StoreFactory.NODE_STORE_NAME;
     private static final String RELATIONSHIP_STORE = StoreFactory.RELATIONSHIP_STORE_NAME;
     private static final String BACKUP_HOST = "localhost";
@@ -136,8 +145,7 @@ public class BackupServiceIT
     public int backupPort = 8200;
 
     @Rule
-    public EmbeddedDatabaseRule dbRule = new EmbeddedDatabaseRule( getClass() )
-            .startLazily().withConfig( getConfig() );
+    public EmbeddedDatabaseRule dbRule = new EmbeddedDatabaseRule( getClass() ).startLazily();
 
     @Rule
     public SuppressOutput suppressOutput = SuppressOutput.suppressAll();
@@ -155,6 +163,126 @@ public class BackupServiceIT
     private BackupService backupService()
     {
         return new BackupService( fileSystem, FormattedLogProvider.toOutputStream( System.out ), new Monitors() );
+    }
+
+    private BackupService backupService( LogProvider logProvider )
+    {
+        return new BackupService( fileSystem, logProvider, new Monitors() );
+    }
+
+    @Test
+    public void shouldPrintThatFullBackupIsPerformed() throws Exception
+    {
+        defaultBackupPortHostParams();
+        GraphDatabaseService db = dbRule.getGraphDatabaseAPI();
+
+        final Log log = mock( Log.class );
+        LogProvider logProvider = new LogProvider()
+        {
+            @Override
+            public Log getLog( Class loggingClass )
+            {
+                return log;
+            }
+
+            @Override
+            public Log getLog( String name )
+            {
+                return log;
+            }
+        };
+
+        backupService( logProvider ).doIncrementalBackupOrFallbackToFull( BACKUP_HOST, backupPort,
+                backupDir, ConsistencyCheck.NONE, dbRule.getConfigCopy(), BackupClient.BIG_READ_TIMEOUT, false );
+
+        verify( log ).info( "Previous backup not found, a new full backup will be performed." );
+    }
+
+    @Test
+    public void shouldPrintThatIncrementalBackupIsPerformedAndFallingBackToFull() throws Exception
+    {
+        defaultBackupPortHostParams();
+        Config defaultConfig = dbRule.getConfigCopy();
+        dbRule.setConfig( GraphDatabaseSettings.keep_logical_logs, "false" );
+        // have logs rotated on every transaction
+        GraphDatabaseAPI db = dbRule.getGraphDatabaseAPI();
+
+        createAndIndexNode( db, 1 );
+
+        // A full backup
+        backupService().doFullBackup( BACKUP_HOST, backupPort, backupDir, ConsistencyCheck.NONE, defaultConfig,
+                BackupClient.BIG_READ_TIMEOUT, false );
+
+        // And the log the backup uses is rotated out
+        createAndIndexNode( db, 2 );
+        rotateAndCheckPoint( db );
+        createAndIndexNode( db, 3 );
+        rotateAndCheckPoint( db );
+        createAndIndexNode( db, 4 );
+        rotateAndCheckPoint( db );
+
+        final Log log = mock( Log.class );
+        LogProvider logProvider = new LogProvider()
+        {
+            @Override
+            public Log getLog( Class loggingClass )
+            {
+                return log;
+            }
+
+            @Override
+            public Log getLog( String name )
+            {
+                return log;
+            }
+        };
+
+        backupService( logProvider ).doIncrementalBackupOrFallbackToFull( BACKUP_HOST, backupPort,
+                backupDir, ConsistencyCheck.NONE, dbRule.getConfigCopy(), BackupClient.BIG_READ_TIMEOUT, false );
+
+        verify( log ).info( "Previous backup found, trying incremental backup." );
+        verify( log ).info( "Existing backup is too far out of date, a new full backup will be performed." );
+    }
+
+    @Test
+    public void shouldThrowUsefulMessageWhenCannotConnectDuringFullBackup() throws Exception
+    {
+        try
+        {
+            backupService().doIncrementalBackupOrFallbackToFull( BACKUP_HOST, 56789, backupDir, ConsistencyCheck.NONE,
+                    dbRule.getConfigCopy(), BackupClient.BIG_READ_TIMEOUT, false );
+            fail( "No exception thrown" );
+        }
+        catch ( RuntimeException e )
+        {
+            assertThat( e.getMessage(), containsString( "BackupClient could not connect" ) );
+            assertThat( e.getCause(), instanceOf( ConnectException.class ) );
+        }
+    }
+
+    @Test
+    public void shouldThrowUsefulMessageWhenCannotConnectDuringIncrementalBackup() throws Exception
+    {
+        defaultBackupPortHostParams();
+        GraphDatabaseAPI db = dbRule.getGraphDatabaseAPI();
+        BackupService backupService = backupService();
+
+        createAndIndexNode( db, 1 );
+
+        // A full backup
+        backupService.doFullBackup( BACKUP_HOST, backupPort, backupDir,
+                ConsistencyCheck.NONE, dbRule.getConfigCopy(), BackupClient.BIG_READ_TIMEOUT, false );
+        try
+        {
+            backupService().doIncrementalBackupOrFallbackToFull( BACKUP_HOST, 56789, backupDir, ConsistencyCheck.NONE,
+                    dbRule.getConfigCopy(), BackupClient.BIG_READ_TIMEOUT, false );
+            fail( "No exception thrown" );
+        }
+        catch ( RuntimeException e )
+        {
+            assertThat( e.getMessage(), containsString( "BackupClient could not connect" ) );
+            assertThat( e.getCause(), instanceOf( ConnectException.class ) );
+        }
     }
 
     @Test
@@ -231,7 +359,7 @@ public class BackupServiceIT
 
         // then
         assertFalse( "Temp directory was not removed as expected",
-                fileSystem.fileExists( new File( backupDir, StoreCopyClient.TEMP_COPY_DIRECTORY_NAME ) ) );
+                fileSystem.fileExists( new File( backupDir, StoreUtil.TEMP_COPY_DIRECTORY_NAME ) ) );
     }
 
     @Test
@@ -255,7 +383,16 @@ public class BackupServiceIT
 
         for ( final StoreFile storeFile : StoreFile.values() )
         {
-            assertThat( files, hasFile( storeFile.storeFileName() ) );
+            if ( storeFile == COUNTS_STORE_LEFT ||
+                 storeFile == COUNTS_STORE_RIGHT )
+            {
+                assertThat( files, anyOf( hasFile( COUNTS_STORE_LEFT.storeFileName() ),
+                                          hasFile( COUNTS_STORE_RIGHT.storeFileName() ) ) );
+            }
+            else
+            {
+                assertThat( files, hasFile( storeFile.storeFileName() ) );
+            }
         }
 
         assertEquals( getDbRepresentation(), getBackupDbRepresentation() );
@@ -327,10 +464,8 @@ public class BackupServiceIT
 
         // it should be possible to at this point to start db based on our backup and create couple of properties
         // their ids should not clash with already existing
-        GraphDatabaseService backupBasedDatabase =
-                new GraphDatabaseFactory().newEmbeddedDatabaseBuilder( backupDir.getAbsoluteFile() )
-                .setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME )
-                        .newGraphDatabase();
+        GraphDatabaseService backupBasedDatabase = new GraphDatabaseFactory()
+                .newEmbeddedDatabase( backupDir.getAbsoluteFile() );
         try
         {
             try ( Transaction transaction = backupBasedDatabase.beginTx() )
@@ -653,7 +788,7 @@ public class BackupServiceIT
         defaultBackupPortHostParams();
         Config defaultConfig = dbRule.getConfigCopy();
         dbRule.setConfig( OnlineBackupSettings.online_backup_enabled, "false" );
-        Config withOnlineBackupEnabled = dbRule.getConfigCopy();
+        Config withOnlineBackupDisabled = dbRule.getConfigCopy();
 
         final Barrier.Control barrier = new Barrier.Control();
         final GraphDatabaseAPI db = dbRule.getGraphDatabaseAPI();
@@ -689,7 +824,7 @@ public class BackupServiceIT
         } );
 
         BackupService.BackupOutcome backupOutcome = backupService.doFullBackup( BACKUP_HOST, backupPort,
-                backupDir.getAbsoluteFile(), ConsistencyCheck.FULL, withOnlineBackupEnabled,
+                backupDir.getAbsoluteFile(), ConsistencyCheck.FULL, withOnlineBackupDisabled,
                 BackupClient.BIG_READ_TIMEOUT, false );
 
         backup.stop();
@@ -704,6 +839,68 @@ public class BackupServiceIT
         checkLastCommittedTxIdInLogAndNeoStore( expectedLastTxId+1, txIdFromOrigin );
         assertEquals( DbRepresentation.of( db ), getBackupDbRepresentation() );
         assertTrue( backupOutcome.isConsistent() );
+    }
+
+    @Test
+    public void backupsShouldBeMentionedInServerConsoleLog() throws Throwable
+    {
+        // given
+        defaultBackupPortHostParams();
+        Config config = dbRule.getConfigCopy();
+        dbRule.setConfig( OnlineBackupSettings.online_backup_enabled, "false" );
+        Config withOnlineBackupDisabled = dbRule.getConfigCopy();
+        createAndIndexNode( dbRule, 1 );
+
+        final Log log = mock( Log.class );
+        LogProvider logProvider = new LogProvider()
+        {
+            @Override
+            public Log getLog( Class loggingClass )
+            {
+                return log;
+            }
+
+            @Override
+            public Log getLog( String name )
+            {
+                return log;
+            }
+        };
+        Logger logger = mock( Logger.class );
+        when( log.infoLogger() ).thenReturn( logger );
+        LogService logService = mock( LogService.class );
+        when( logService.getInternalLogProvider() ).thenReturn( logProvider );
+
+        Dependencies dependencies = new Dependencies( dbRule.getDependencyResolver() );
+        dependencies.satisfyDependencies( config, monitors, logService );
+
+        OnlineBackupKernelExtension backup = (OnlineBackupKernelExtension)
+                new OnlineBackupExtensionFactory().newInstance(
+                        new SimpleKernelContext( fileSystem, storeDir, DatabaseInfo.UNKNOWN, dependencies ),
+                        DependenciesProxy.dependencies( dependencies, OnlineBackupExtensionFactory.Dependencies.class )
+                );
+
+        backup.start();
+
+        // when
+        backupService().doFullBackup( BACKUP_HOST, backupPort, backupDir, ConsistencyCheck.NONE,
+                withOnlineBackupDisabled, BackupClient.BIG_READ_TIMEOUT, false );
+
+        // then
+        verify( logger ).log( "Full backup started..." );
+        verify( logger ).log( "Full backup finished." );
+
+        // when
+        createAndIndexNode( dbRule, 2 );
+
+        backupService().doIncrementalBackupOrFallbackToFull( BACKUP_HOST, backupPort, backupDir,
+                ConsistencyCheck.NONE, withOnlineBackupDisabled, BackupClient.BIG_READ_TIMEOUT, false );
+
+        backup.stop();
+
+        // then
+        verify( logger ).log( "Incremental backup started..." );
+        verify( logger ).log( "Incremental backup finished." );
     }
 
     @Test
@@ -865,20 +1062,14 @@ public class BackupServiceIT
         }
     }
 
-    private Config getConfig()
-    {
-        return new Config( MapUtil.stringMap( GraphDatabaseSettings.record_format.name(),
-                StandardV3_0.NAME ) );
-    }
-
     private DbRepresentation getBackupDbRepresentation()
     {
-        return DbRepresentation.of( backupDir, getConfig() );
+        return DbRepresentation.of( backupDir );
     }
 
     private DbRepresentation getDbRepresentation()
     {
-        return DbRepresentation.of( storeDir, getConfig() );
+        return DbRepresentation.of( storeDir );
     }
 
 }

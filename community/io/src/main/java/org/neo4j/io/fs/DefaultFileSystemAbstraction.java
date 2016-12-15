@@ -33,6 +33,8 @@ import java.io.Reader;
 import java.io.Writer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
+import java.nio.file.CopyOption;
+import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
@@ -44,6 +46,9 @@ import static java.lang.String.format;
  */
 public class DefaultFileSystemAbstraction implements FileSystemAbstraction
 {
+    // Named this way for better readability when statically importing
+    public static final FileSystemAbstraction REAL_FS = new DefaultFileSystemAbstraction();
+
     static final String UNABLE_TO_CREATE_DIRECTORY_FORMAT = "Unable to create directory path [%s] for Neo4j store.";
 
     @Override
@@ -133,9 +138,9 @@ public class DefaultFileSystemAbstraction implements FileSystemAbstraction
     }
 
     @Override
-    public boolean renameFile( File from, File to ) throws IOException
+    public void renameFile( File from, File to, CopyOption... copyOptions ) throws IOException
     {
-        return FileUtils.renameFile( from, to );
+        Files.move( from.toPath(), to.toPath(), copyOptions );
     }
 
     @Override
@@ -193,6 +198,18 @@ public class DefaultFileSystemAbstraction implements FileSystemAbstraction
     public void truncate( File path, long size ) throws IOException
     {
         FileUtils.truncateFile( path, size );
+    }
+
+    @Override
+    public long lastModifiedTime( File file )
+    {
+        return file.lastModified();
+    }
+
+    @Override
+    public void deleteFileOrThrow( File file ) throws IOException
+    {
+        Files.delete( file.toPath() );
     }
 
     protected StoreFileChannel getStoreFileChannel( FileChannel channel )

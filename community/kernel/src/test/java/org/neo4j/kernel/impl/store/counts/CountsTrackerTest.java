@@ -35,11 +35,11 @@ import org.neo4j.kernel.impl.store.CountsOracle;
 import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 import org.neo4j.kernel.impl.store.kvstore.DataInitializer;
 import org.neo4j.kernel.impl.store.kvstore.ReadableBuffer;
-import org.neo4j.kernel.impl.store.kvstore.Resources;
 import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.register.Registers;
 import org.neo4j.test.Barrier;
-import org.neo4j.test.ThreadingRule;
+import org.neo4j.test.rule.Resources;
+import org.neo4j.test.rule.concurrent.ThreadingRule;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.junit.Assert.assertEquals;
@@ -49,8 +49,8 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.neo4j.kernel.impl.store.kvstore.Resources.InitialLifecycle.STARTED;
-import static org.neo4j.kernel.impl.store.kvstore.Resources.TestPath.FILE_IN_EXISTING_DIRECTORY;
+import static org.neo4j.test.rule.Resources.InitialLifecycle.STARTED;
+import static org.neo4j.test.rule.Resources.TestPath.FILE_IN_EXISTING_DIRECTORY;
 
 public class CountsTrackerTest
 {
@@ -364,8 +364,8 @@ public class CountsTrackerTest
         oracle.relationship( n1, 1, n3 );
         oracle.relationship( n1, 1, n2 );
         oracle.relationship( n0, 1, n3 );
-        oracle.indexUpdatesAndSize( 1, 2, 0l, 50l );
-        oracle.indexSampling( 1, 2, 25l, 50l );
+        oracle.indexUpdatesAndSize( 1, 2, 0L, 50L );
+        oracle.indexSampling( 1, 2, 25L, 50L );
         return oracle;
     }
 

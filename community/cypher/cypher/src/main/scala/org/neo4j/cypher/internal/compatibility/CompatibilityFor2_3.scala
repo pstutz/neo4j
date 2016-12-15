@@ -23,20 +23,20 @@ import java.io.PrintWriter
 import java.util
 
 import org.neo4j.cypher._
-import org.neo4j.cypher.internal.compiler.v2_3.executionplan.{EntityAccessor, ExecutionPlan => ExecutionPlan_v2_3, InternalExecutionResult}
+import org.neo4j.cypher.internal.compiler.v2_3.executionplan.{EntityAccessor, InternalExecutionResult, ExecutionPlan => ExecutionPlan_v2_3}
 import org.neo4j.cypher.internal.compiler.v2_3.planDescription.InternalPlanDescription.Arguments._
 import org.neo4j.cypher.internal.compiler.v2_3.planDescription.{Argument, InternalPlanDescription, PlanDescriptionArgumentSerializer}
 import org.neo4j.cypher.internal.compiler.v2_3.spi.{PlanContext, QueryContext}
 import org.neo4j.cypher.internal.compiler.v2_3.tracing.rewriters.RewriterStepSequencer
-import org.neo4j.cypher.internal.compiler.v2_3.{CypherCompilerFactory, DPPlannerName, ExplainMode => ExplainModev2_3, GreedyPlannerName, IDPPlannerName, InfoLogger, Monitors, NormalMode => NormalModev2_3, PlannerName, ProfileMode => ProfileModev2_3, _}
-import org.neo4j.cypher.internal.compiler.{v2_3, v3_0}
+import org.neo4j.cypher.internal.compiler.v2_3.{CypherCompilerFactory, DPPlannerName, GreedyPlannerName, IDPPlannerName, InfoLogger, Monitors, PlannerName, ExplainMode => ExplainModev2_3, NormalMode => NormalModev2_3, ProfileMode => ProfileModev2_3, _}
+import org.neo4j.cypher.internal.compiler.{v2_3, v3_1}
 import org.neo4j.cypher.internal.frontend.v2_3.notification.{InternalNotification, LegacyPlannerNotification, PlannerUnsupportedNotification, RuntimeUnsupportedNotification, _}
 import org.neo4j.cypher.internal.frontend.v2_3.spi.MapToPublicExceptions
 import org.neo4j.cypher.internal.frontend.v2_3.{CypherException => InternalCypherException, InputPosition => InternalInputPosition}
 import org.neo4j.cypher.internal.javacompat.{PlanDescription, ProfilerStatistics}
-import org.neo4j.cypher.internal.spi.TransactionalContextWrapper
-import org.neo4j.cypher.internal.spi.v2_3.{GeneratedQueryStructure, TransactionBoundGraphStatistics, TransactionBoundPlanContext, TransactionBoundQueryContext}
-import org.neo4j.cypher.internal.{CypherExecutionMode, ExtendedExecutionResult, ExtendedPlanDescription, LastCommittedTxIdProvider, ParsedQuery, PreParsedQuery, QueryStatistics}
+import org.neo4j.cypher.internal.spi.TransactionalContextWrapperv3_1
+import org.neo4j.cypher.internal.spi.v2_3.{TransactionBoundGraphStatistics, TransactionBoundPlanContext, TransactionBoundQueryContext}
+import org.neo4j.cypher.internal.{CypherExecutionMode, ExecutionResult, LastCommittedTxIdProvider, ParsedQuery, PreParsedQuery, QueryStatistics}
 import org.neo4j.cypher.javacompat.internal.GraphDatabaseCypherService
 import org.neo4j.graphdb.Result.ResultVisitor
 import org.neo4j.graphdb._
@@ -45,7 +45,7 @@ import org.neo4j.helpers.Clock
 import org.neo4j.kernel.GraphDatabaseQueryService
 import org.neo4j.kernel.api.KernelAPI
 import org.neo4j.kernel.impl.core.NodeManager
-import org.neo4j.kernel.impl.query.{QueryExecutionMonitor, QuerySession}
+import org.neo4j.kernel.impl.query.{QueryExecutionMonitor, TransactionalContext}
 import org.neo4j.kernel.monitoring.{Monitors => KernelMonitors}
 import org.neo4j.logging.Log
 
@@ -54,8 +54,8 @@ import scala.reflect.ClassTag
 import scala.util.Try
 
 object helpersv2_3 {
-  implicit def monitorFailure(t: Throwable)(implicit monitor: QueryExecutionMonitor, session: QuerySession): Unit = {
-    monitor.endFailure(session, t)
+  implicit def monitorFailure(t: Throwable)(implicit monitor: QueryExecutionMonitor, tc: TransactionalContext): Unit = {
+    monitor.endFailure(tc.executingQuery(), t)
   }
 }
 
@@ -113,17 +113,19 @@ object exceptionHandlerFor2_3 extends MapToPublicExceptions[CypherException] {
 
   def failedIndexException(indexName: String, cause: Throwable): CypherException = throw new FailedIndexException(indexName, cause)
 
-  def runSafely[T](body: => T)(implicit f: Throwable => Unit = (_) => ()) = {
-    try {
-      body
-    }
-    catch {
-      case e: InternalCypherException =>
-        f(e)
-        throw e.mapToPublic(exceptionHandlerFor2_3)
-      case e: Throwable =>
-        f(e)
-        throw e
+  object runSafely extends RunSafely {
+    def apply[T](body: => T)(implicit f: Throwable => Unit = (_) => ()) = {
+      try {
+        body
+      }
+      catch {
+        case e: InternalCypherException =>
+          f(e)
+          throw e.mapToPublic(exceptionHandlerFor2_3)
+        case e: Throwable =>
+          f(e)
+          throw e
+      }
     }
   }
 }
@@ -140,7 +142,6 @@ case class WrappedMonitors2_3(kernelMonitors: KernelMonitors) extends Monitors {
 }
 
 trait CompatibilityFor2_3 {
-  import org.neo4j.cypher.internal.compatibility.helpersv2_3._
 
   val graph: GraphDatabaseQueryService
   val queryCacheSize: Int
@@ -170,7 +171,7 @@ trait CompatibilityFor2_3 {
     new ParsedQuery {
       def isPeriodicCommit = preparedQueryForV_2_3.map(_.isPeriodicCommit).getOrElse(false)
 
-      def plan(transactionalContext: TransactionalContextWrapper, tracer: v3_0.CompilationPhaseTracer): (org.neo4j.cypher.internal.ExecutionPlan, Map[String, Any]) = exceptionHandlerFor2_3.runSafely {
+      def plan(transactionalContext: TransactionalContextWrapperv3_1, tracer: v3_1.CompilationPhaseTracer): (org.neo4j.cypher.internal.ExecutionPlan, Map[String, Any]) = exceptionHandlerFor2_3.runSafely {
         val planContext: PlanContext = new TransactionBoundPlanContext(transactionalContext)
         val (planImpl, extractedParameters) = compiler.planPreparedQuery(preparedQueryForV_2_3.get, planContext, as2_3(tracer))
 
@@ -186,72 +187,54 @@ trait CompatibilityFor2_3 {
 
   class ExecutionPlanWrapper(inner: ExecutionPlan_v2_3) extends org.neo4j.cypher.internal.ExecutionPlan {
 
-    private def queryContext(transactionalContext: TransactionalContextWrapper): QueryContext =
+    private def queryContext(transactionalContext: TransactionalContextWrapperv3_1): QueryContext =
       new ExceptionTranslatingQueryContextFor2_3(new TransactionBoundQueryContext(transactionalContext))
 
-    def run(transactionalContext: TransactionalContextWrapper, executionMode: CypherExecutionMode, params: Map[String, Any], session: QuerySession): ExtendedExecutionResult = {
-      implicit val s = session
+    def run(transactionalContext: TransactionalContextWrapperv3_1, executionMode: CypherExecutionMode, params: Map[String, Any]): ExecutionResult = {
       val innerExecutionMode = executionMode match {
         case CypherExecutionMode.explain => ExplainModev2_3
         case CypherExecutionMode.profile => ProfileModev2_3
         case CypherExecutionMode.normal => NormalModev2_3
       }
+
+      val query = transactionalContext.tc.executingQuery()
+
       exceptionHandlerFor2_3.runSafely {
-        ExecutionResultWrapperFor2_3(inner.run(queryContext(transactionalContext), transactionalContext.statement, innerExecutionMode, params), inner.plannerUsed, inner.runtimeUsed)
+        val innerResult = inner.run(queryContext(transactionalContext), transactionalContext.statement, innerExecutionMode, params)
+        new ClosingExecutionResult(
+          query,
+          new ExecutionResultWrapperFor2_3(innerResult, inner.plannerUsed, inner.runtimeUsed),
+          exceptionHandlerFor2_3.runSafely
+        )
       }
     }
 
     def isPeriodicCommit = inner.isPeriodicCommit
 
 
-    def isStale(lastCommittedTxId: LastCommittedTxIdProvider, ctx: TransactionalContextWrapper): Boolean =
+    def isStale(lastCommittedTxId: LastCommittedTxIdProvider, ctx: TransactionalContextWrapperv3_1): Boolean =
       inner.isStale(lastCommittedTxId, TransactionBoundGraphStatistics(ctx.readOperations))
   }
 }
 
-case class ExecutionResultWrapperFor2_3(inner: InternalExecutionResult, planner: PlannerName, runtime: RuntimeName)
-                                       (implicit monitor: QueryExecutionMonitor, session: QuerySession)
-  extends ExtendedExecutionResult {
-
-  import org.neo4j.cypher.internal.compatibility.helpersv2_3._
-
-  def planDescriptionRequested = exceptionHandlerFor2_3.runSafely {inner.planDescriptionRequested}
-
-  private def endQueryExecution() = {
-    monitor.endSuccess(session) // this method is expected to be idempotent
+object ExecutionResultWrapperFor2_3 {
+  def unapply(v: Any): Option[(InternalExecutionResult, PlannerName, RuntimeName)] = v match {
+    case closing: ClosingExecutionResult => unapply(closing.inner)
+    case wrapper: ExecutionResultWrapperFor2_3 => Some((wrapper.inner, wrapper.planner, wrapper.runtime))
+    case _ => None
   }
+}
 
-  def javaIterator: ResourceIterator[util.Map[String, Any]] = {
-    val innerJavaIterator = inner.javaIterator
-    exceptionHandlerFor2_3.runSafely {
-      if ( !innerJavaIterator.hasNext ) {
-        endQueryExecution()
-      }
-    }
-    new ResourceIterator[util.Map[String, Any]] {
-      def close() = exceptionHandlerFor2_3.runSafely {
-        endQueryExecution()
-        innerJavaIterator.close()
-      }
-      def next() = exceptionHandlerFor2_3.runSafely {innerJavaIterator.next}
-      def hasNext = exceptionHandlerFor2_3.runSafely{
-        val next = innerJavaIterator.hasNext
-        if (!next) {
-          endQueryExecution()
-        }
-        next
-      }
-      def remove() =  exceptionHandlerFor2_3.runSafely{innerJavaIterator.remove()}
-    }
-  }
+class ExecutionResultWrapperFor2_3(val inner: InternalExecutionResult, val planner: PlannerName, val runtime: RuntimeName)
+  extends ExecutionResult {
 
-  def columnAs[T](column: String) = exceptionHandlerFor2_3.runSafely{inner.columnAs[T](column)}
+  override def planDescriptionRequested = inner.planDescriptionRequested
+  override def javaIterator = inner.javaIterator
+  override def columnAs[T](column: String) = inner.columnAs(column)
+  override def columns = inner.columns
+  override def javaColumns = inner.javaColumns
 
-  def columns = exceptionHandlerFor2_3.runSafely{inner.columns.toList}
-
-  def javaColumns = exceptionHandlerFor2_3.runSafely{inner.javaColumns}
-
-  def queryStatistics() = exceptionHandlerFor2_3.runSafely {
+  def queryStatistics() = {
     val i = inner.queryStatistics()
     QueryStatistics(nodesCreated = i.nodesCreated,
       relationshipsCreated = i.relationshipsCreated,
@@ -267,44 +250,30 @@ case class ExecutionResultWrapperFor2_3(inner: InternalExecutionResult, planner:
     )
   }
 
-  def dumpToString(writer: PrintWriter) = exceptionHandlerFor2_3.runSafely{inner.dumpToString(writer)}
+  override def dumpToString(writer: PrintWriter) = inner.dumpToString(writer)
+  override def dumpToString() = inner.dumpToString()
 
-  def dumpToString() = exceptionHandlerFor2_3.runSafely{inner.dumpToString()}
+  override def javaColumnAs[T](column: String) = inner.javaColumnAs(column)
 
-  def javaColumnAs[T](column: String) = exceptionHandlerFor2_3.runSafely{inner.javaColumnAs[T](column)}
-
-  def executionPlanDescription(): ExtendedPlanDescription =
-    exceptionHandlerFor2_3.runSafely {
-      convert(
-        inner.executionPlanDescription().
-          addArgument(Version("CYPHER 2.3")).
-          addArgument(Planner(planner.toTextOutput)).
-          addArgument(PlannerImpl(planner.name)).
-          addArgument(Runtime(runtime.toTextOutput)).
-          addArgument(RuntimeImpl(runtime.name))
+  def executionPlanDescription(): org.neo4j.cypher.internal.PlanDescription =
+    convert(
+      inner.executionPlanDescription().
+        addArgument(Version("CYPHER 2.3")).
+        addArgument(Planner(planner.toTextOutput)).
+        addArgument(PlannerImpl(planner.name)).
+        addArgument(Runtime(runtime.toTextOutput)).
+        addArgument(RuntimeImpl(runtime.name))
     )
-  }
 
-  def close() = exceptionHandlerFor2_3.runSafely {
-    endQueryExecution()
-    inner.close()
-  }
-
-  def next() = exceptionHandlerFor2_3.runSafely{ inner.next() }
-
-  def hasNext = exceptionHandlerFor2_3.runSafely {
-    val next = inner.hasNext
-    if (!next) {
-      endQueryExecution()
-    }
-    next
-  }
-
-  def convert(i: InternalPlanDescription): ExtendedPlanDescription = exceptionHandlerFor2_3.runSafely {
+  private def convert(i: InternalPlanDescription): org.neo4j.cypher.internal.PlanDescription = exceptionHandlerFor2_3.runSafely {
     CompatibilityPlanDescriptionFor2_3(i, CypherVersion.v2_3, planner, runtime)
   }
 
-  def executionType: QueryExecutionType = exceptionHandlerFor2_3.runSafely {inner.executionType}
+  override def hasNext = inner.hasNext
+  override def next() = inner.next()
+  override def close() = inner.close()
+
+  def executionType: QueryExecutionType = inner.executionType
 
   def notifications = inner.notifications.map(asKernelNotification)
 
@@ -343,14 +312,7 @@ case class ExecutionResultWrapperFor2_3(inner: InternalExecutionResult, planner:
       NotificationCode.UNBOUNDED_SHORTEST_PATH.notification(pos.asInputPosition)
   }
 
-  override def accept[EX <: Exception](visitor: ResultVisitor[EX]) = exceptionHandlerFor2_3.runSafely {
-    inner.accept(visitor)
-    endQueryExecution()
-  }
-
-  override def toString() = {
-    getClass.getName + "@" + Integer.toHexString(hashCode())
-  }
+  override def accept[EX <: Exception](visitor: ResultVisitor[EX]) = inner.accept(visitor)
 
   private implicit class ConvertibleCompilerInputPosition(pos: InternalInputPosition) {
     def asInputPosition = new InputPosition(pos.offset, pos.line, pos.column)
@@ -359,13 +321,11 @@ case class ExecutionResultWrapperFor2_3(inner: InternalExecutionResult, planner:
 
 case class CompatibilityPlanDescriptionFor2_3(inner: InternalPlanDescription, version: CypherVersion,
                                               planner: PlannerName, runtime: RuntimeName)
-  extends ExtendedPlanDescription {
+  extends org.neo4j.cypher.internal.PlanDescription {
 
   self =>
 
-  override def children = extendedChildren
-
-  def extendedChildren = exceptionHandlerFor2_3.runSafely {
+  def children = exceptionHandlerFor2_3.runSafely {
     inner.children.toSeq.map(CompatibilityPlanDescriptionFor2_3.apply(_, version, planner, runtime))
   }
 
@@ -388,7 +348,7 @@ case class CompatibilityPlanDescriptionFor2_3(inner: InternalPlanDescription, ve
     }
   }
 
-  def asJava(in: ExtendedPlanDescription): PlanDescription = new PlanDescription {
+  def asJava(in: org.neo4j.cypher.internal.PlanDescription): PlanDescription = new PlanDescription {
     def getProfilerStatistics: ProfilerStatistics = new ProfilerStatistics {
       def getDbHits: Long = extract { case DbHits(count) => count}
 
@@ -406,7 +366,7 @@ case class CompatibilityPlanDescriptionFor2_3(inner: InternalPlanDescription, ve
 
     def getIdentifiers: util.Set[String] = identifiers.asJava
 
-    def getChildren: util.List[PlanDescription] = in.extendedChildren.toList.map(_.asJava).asJava
+    def getChildren: util.List[PlanDescription] = in.children.toList.map(_.asJava).asJava
 
     override def toString: String = self.toString
   }
@@ -441,15 +401,15 @@ case class CompatibilityFor2_3Cost(graph: GraphDatabaseQueryService,
       case _ => throw new IllegalArgumentException(s"unknown cost based planner: ${planner.name}")
     }
 
-    val runtimeName = runtime match {
+    val runtimeName: Option[RuntimeName] = runtime match {
       case CypherRuntime.default => None
       case CypherRuntime.interpreted => Some(InterpretedRuntimeName)
-      case CypherRuntime.compiled => Some(CompiledRuntimeName)
+      case CypherRuntime.compiled => throw new IllegalArgumentException("Compiled runtime is not supported in Cypher 2.3")
     }
 
     val nodeManager = graph.getDependencyResolver.resolveDependency(classOf[NodeManager])
     CypherCompilerFactory.costBasedCompiler(
-      graph.asInstanceOf[GraphDatabaseCypherService].getGraphDatabaseService, new EntityAccessorWrapper2_3(nodeManager), config, clock, GeneratedQueryStructure, new WrappedMonitors2_3( kernelMonitors ),
+      graph.asInstanceOf[GraphDatabaseCypherService].getGraphDatabaseService, new EntityAccessorWrapper2_3(nodeManager), config, clock, new WrappedMonitors2_3( kernelMonitors ),
       new StringInfoLogger2_3( log ), rewriterSequencer, plannerName, runtimeName)
   }
 

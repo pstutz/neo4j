@@ -40,9 +40,6 @@ abstract class RotationState<Key> extends ProgressiveState<Key>
         return "rotating";
     }
 
-    @Override
-    abstract void close() throws IOException;
-
     abstract long rotationVersion();
 
     static final class Rotation<Key> extends RotationState<Key>
@@ -50,6 +47,7 @@ abstract class RotationState<Key> extends ProgressiveState<Key>
         private final ActiveState<Key> preState;
         private final PrototypeState<Key> postState;
         private final long threshold;
+        private boolean failed = false;
 
         Rotation( ActiveState<Key> preState, PrototypeState<Key> postState, long version )
         {
@@ -69,6 +67,7 @@ abstract class RotationState<Key> extends ProgressiveState<Key>
                 {
                     if ( rotationTimer.isTimedOut() )
                     {
+                        failed = true;
                         throw new RotationTimeoutException( threshold, preState.store.version(),
                                 rotationTimer.getElapsedTimeMillis());
                     }
@@ -88,9 +87,20 @@ abstract class RotationState<Key> extends ProgressiveState<Key>
         }
 
         @Override
-        void close() throws IOException
+        public void close() throws IOException
         {
             preState.close();
+        }
+
+        @Override
+        ProgressiveState<Key> stop() throws IOException
+        {
+            if ( failed )
+            {
+                // failed to rotate allow for stopping no matter what
+                return preState;
+            }
+            return super.stop();
         }
 
         @Override

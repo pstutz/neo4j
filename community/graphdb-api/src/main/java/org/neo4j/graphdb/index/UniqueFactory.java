@@ -64,7 +64,7 @@ public abstract class UniqueFactory<T extends PropertyContainer>
     /**
      * Implementation of {@link UniqueFactory} for {@link Node}.
      */
-    public static abstract class UniqueNodeFactory extends UniqueFactory<Node>
+    public abstract static class UniqueNodeFactory extends UniqueFactory<Node>
     {
         /**
          * Create a new {@link UniqueFactory} for nodes.
@@ -117,7 +117,7 @@ public abstract class UniqueFactory<T extends PropertyContainer>
     /**
      * Implementation of {@link UniqueFactory} for {@link Relationship}.
      */
-    public static abstract class UniqueRelationshipFactory extends UniqueFactory<Relationship>
+    public abstract static class UniqueRelationshipFactory extends UniqueFactory<Relationship>
     {
         /**
          * Create a new {@link UniqueFactory} for relationships.
@@ -216,7 +216,7 @@ public abstract class UniqueFactory<T extends PropertyContainer>
     {
         return getOrCreateWithOutcome( key, value ).entity();
     }
-    
+
     /**
      * Get the indexed entity, creating it (exactly once) if no indexed entity exists.
      * Includes the outcome, i.e. whether the entity was created or not.

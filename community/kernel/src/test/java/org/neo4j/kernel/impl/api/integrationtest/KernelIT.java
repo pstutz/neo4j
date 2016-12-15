@@ -30,19 +30,25 @@ import org.neo4j.collection.primitive.PrimitiveIntCollections;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
+import org.neo4j.cursor.Cursor;
+import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.TransactionFailureException;
 import org.neo4j.graphdb.TransactionTerminatedException;
-import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.SchemaWriteOperations;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
+import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
+import org.neo4j.kernel.api.security.AnonymousContext;
 import org.neo4j.kernel.impl.api.Kernel;
+import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.storageengine.api.NodeItem;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.hamcrest.Matchers.equalTo;
@@ -56,46 +62,12 @@ import static org.junit.Assume.assumeThat;
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.helpers.collection.Iterators.asSet;
 import static org.neo4j.helpers.collection.Iterators.emptySetOf;
+import static org.neo4j.kernel.api.security.SecurityContext.AUTH_DISABLED;
 
 public class KernelIT extends KernelIntegrationTest
 {
     // TODO: Split this into area-specific tests, see PropertyIT.
 
-    /**
-     * While we transition ownership from the Beans API to the Kernel API for core database
-     * interactions, there will be a bit of a mess. Our first goal is an architecture like this:
-     * <p>
-     * Users
-     * /    \
-     * Beans API   Cypher
-     * \    /
-     * Kernel API
-     * |
-     * Kernel Implementation
-     * <p>
-     * But our current intermediate architecture looks like this:
-     * <p>
-     * Users
-     * /        \
-     * Beans API <--- Cypher
-     * |    \    /
-     * |  Kernel API
-     * |      |
-     * Kernel Implementation
-     * <p>
-     * Meaning Kernel API and Beans API both manipulate the underlying kernel, causing lots of corner cases. Most
-     * notably, those corner cases are related to Transactions, and the interplay between three transaction APIs:
-     * - The Beans API
-     * - The JTA Transaction Manager API
-     * - The Kernel TransactionContext API
-     * <p>
-     * In the long term, the goal is for JTA compliant stuff to live outside of the kernel, as an addon. The Kernel
-     * API will rule supreme over the land of transactions. We are a long way away from there, however, so as a first
-     * intermediary step, the JTA transaction manager rules supreme, and the Kernel API piggybacks on it.
-     * <p>
-     * This test shows us how to use both the Kernel API and the Beans API together in the same transaction,
-     * during the transition phase.
-     */
     @Test
     public void mixingBeansApiWithKernelAPI() throws Exception
     {
@@ -118,15 +90,6 @@ public class KernelIT extends KernelIntegrationTest
         // 5: Commit through the beans API
         transaction.success();
         transaction.close();
-
-
-        // NOTE: Transactions are still thread-bound right now, because we use JTA to "own" transactions,
-        // meaning if you use
-        // both the Kernel API to create transactions while a Beans API transaction is running in the same
-        // thread, the results are undefined.
-
-        // When the Kernel API implementation is done, the Kernel API transaction implementation is not meant
-        // to be bound to threads.
     }
 
     @Test
@@ -313,7 +276,6 @@ public class KernelIT extends KernelIntegrationTest
         statement.close();
         tx.success();
         tx.close();
-
 
         // WHEN
         tx = db.beginTx();
@@ -551,16 +513,119 @@ public class KernelIT extends KernelIntegrationTest
         assumeThat(kernel, instanceOf( Kernel.class ));
 
         // Then
-        try ( KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.READ ) )
+        try ( KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.read() ) )
         {
             ((Kernel)kernel).stop();
             tx.acquireStatement().readOperations().nodeExists( 0L );
             fail("Should have been terminated.");
         }
-        catch(TransactionTerminatedException e)
+        catch( TransactionTerminatedException e )
         {
             // Success
         }
+    }
+
+    @Test
+    public void txReturnsCorrectIdWhenCommitted() throws Exception
+    {
+        executeDummyTxs( db, 42 );
+
+        KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
+        try ( Statement statement = tx.acquireStatement() )
+        {
+            statement.dataWriteOperations().nodeCreate();
+        }
+        tx.success();
+
+        long previousCommittedTxId = lastCommittedTxId( db );
+
+        assertEquals( previousCommittedTxId + 1, tx.closeTransaction() );
+        assertFalse( tx.isOpen() );
+    }
+
+    @Test
+    public void txReturnsCorrectIdWhenRolledBack() throws Exception
+    {
+        executeDummyTxs( db, 42 );
+
+        KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
+        try ( Statement statement = tx.acquireStatement() )
+        {
+            statement.dataWriteOperations().nodeCreate();
+        }
+        tx.failure();
+
+        assertEquals( KernelTransaction.ROLLBACK, tx.closeTransaction() );
+        assertFalse( tx.isOpen() );
+    }
+
+    @Test
+    public void txReturnsCorrectIdWhenMarkedForTermination() throws Exception
+    {
+        executeDummyTxs( db, 42 );
+
+        KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
+        try ( Statement statement = tx.acquireStatement() )
+        {
+            statement.dataWriteOperations().nodeCreate();
+        }
+        tx.markForTermination( Status.Transaction.Terminated );
+
+        assertEquals( KernelTransaction.ROLLBACK, tx.closeTransaction() );
+        assertFalse( tx.isOpen() );
+    }
+
+    @Test
+    public void txReturnsCorrectIdWhenFailedlAndMarkedForTermination() throws Exception
+    {
+        executeDummyTxs( db, 42 );
+
+        KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
+        try ( Statement statement = tx.acquireStatement() )
+        {
+            statement.dataWriteOperations().nodeCreate();
+        }
+        tx.failure();
+        tx.markForTermination( Status.Transaction.Terminated );
+
+        assertEquals( KernelTransaction.ROLLBACK, tx.closeTransaction() );
+        assertFalse( tx.isOpen() );
+    }
+
+    @Test
+    public void txReturnsCorrectIdWhenReadOnly() throws Exception
+    {
+        executeDummyTxs( db, 42 );
+
+        KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
+        try ( Statement statement = tx.acquireStatement();
+              Cursor<NodeItem> cursor = statement.readOperations().nodeCursor( 1 ) )
+        {
+            assertTrue( cursor.next() );
+            cursor.close();
+        }
+        tx.success();
+
+        assertEquals( KernelTransaction.READ_ONLY, tx.closeTransaction() );
+        assertFalse( tx.isOpen() );
+    }
+
+    private static void executeDummyTxs( GraphDatabaseService db, int count )
+    {
+        for ( int i = 0; i < count; i++ )
+        {
+            try ( Transaction tx = db.beginTx() )
+            {
+                db.createNode();
+                tx.success();
+            }
+        }
+    }
+
+    private static long lastCommittedTxId( GraphDatabaseAPI db )
+    {
+        TransactionIdStore txIdStore = db.getDependencyResolver().resolveDependency( TransactionIdStore.class );
+        return txIdStore.getLastCommittedTransactionId();
     }
 
     private IndexDescriptor createIndex( SchemaWriteOperations schemaWriteOperations ) throws SchemaKernelException

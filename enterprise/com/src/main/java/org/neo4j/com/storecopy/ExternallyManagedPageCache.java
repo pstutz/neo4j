@@ -23,18 +23,22 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.OpenOption;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
+import org.neo4j.io.pagecache.FileHandle;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
-import org.neo4j.kernel.impl.enterprise.EnterpriseFacadeFactory;
+import org.neo4j.kernel.impl.enterprise.EnterpriseEditionModule;
+import org.neo4j.kernel.impl.factory.DatabaseInfo;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory;
-import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.factory.PlatformModule;
 import org.neo4j.kernel.impl.logging.LogService;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
@@ -49,13 +53,13 @@ public class ExternallyManagedPageCache implements PageCache
 {
     private final PageCache delegate;
 
-    public ExternallyManagedPageCache( PageCache delegate )
+    private ExternallyManagedPageCache( PageCache delegate )
     {
         this.delegate = delegate;
     }
 
     @Override
-    public void close() throws IOException
+    public void close()
     {
         // Don't close the delegate, because we are not in charge of its life cycle.
     }
@@ -64,6 +68,12 @@ public class ExternallyManagedPageCache implements PageCache
     public PagedFile map( File file, int pageSize, OpenOption... openOptions ) throws IOException
     {
         return delegate.map( file, pageSize, openOptions );
+    }
+
+    @Override
+    public Optional<PagedFile> getExistingMapping( File file ) throws IOException
+    {
+        return delegate.getExistingMapping( file );
     }
 
     @Override
@@ -90,6 +100,12 @@ public class ExternallyManagedPageCache implements PageCache
         return delegate.maxCachedPages();
     }
 
+    @Override
+    public Stream<FileHandle> streamFilesRecursive( File directory ) throws IOException
+    {
+        return delegate.streamFilesRecursive( directory );
+    }
+
     /**
      * Create a GraphDatabaseFactory that will build EmbeddedGraphDatabase instances that all use the given page cache.
      */
@@ -102,7 +118,7 @@ public class ExternallyManagedPageCache implements PageCache
     {
         private final PageCache delegatePageCache;
 
-        public GraphDatabaseFactoryWithPageCacheFactory( PageCache delegatePageCache )
+        GraphDatabaseFactoryWithPageCacheFactory( PageCache delegatePageCache )
         {
             this.delegatePageCache = delegatePageCache;
         }
@@ -111,12 +127,12 @@ public class ExternallyManagedPageCache implements PageCache
         protected GraphDatabaseService newDatabase( File storeDir, Map<String,String> config,
                 GraphDatabaseFacadeFactory.Dependencies dependencies )
         {
-            return new EnterpriseFacadeFactory()
+            return new GraphDatabaseFacadeFactory( DatabaseInfo.ENTERPRISE, EnterpriseEditionModule::new )
             {
                 @Override
                 protected PlatformModule createPlatform( File storeDir, Map<String, String> params, Dependencies dependencies, GraphDatabaseFacade graphDatabaseFacade )
                 {
-                    return new PlatformModule( storeDir, params, databaseInfo(), dependencies, graphDatabaseFacade )
+                    return new PlatformModule( storeDir, params, databaseInfo, dependencies, graphDatabaseFacade )
                     {
 
                         @Override

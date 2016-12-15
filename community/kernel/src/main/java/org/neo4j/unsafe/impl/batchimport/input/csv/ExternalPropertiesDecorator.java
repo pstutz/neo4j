@@ -19,14 +19,15 @@
  */
 package org.neo4j.unsafe.impl.batchimport.input.csv;
 
-import java.util.function.Function;
-
 import org.neo4j.csv.reader.CharSeeker;
 import org.neo4j.kernel.impl.util.Validators;
 import org.neo4j.unsafe.impl.batchimport.input.Collector;
 import org.neo4j.unsafe.impl.batchimport.input.Groups;
 import org.neo4j.unsafe.impl.batchimport.input.InputNode;
 import org.neo4j.unsafe.impl.batchimport.input.UpdateBehaviour;
+
+import static org.neo4j.csv.reader.CharSeekers.charSeeker;
+import static org.neo4j.unsafe.impl.batchimport.input.InputEntityDecorators.NO_NODE_DECORATOR;
 
 /**
  * Pulls in properties from an external CSV source and amends them to the "main" input nodes.
@@ -47,12 +48,15 @@ import org.neo4j.unsafe.impl.batchimport.input.UpdateBehaviour;
  * <Pre>
  * Then properties {@code abc@somewhere} and {@code def@somewhere} will be amended to input node {@code 1}
  * and {@code ghi@someplace} to input node {@code 3}.
+ *
+ * NOTE that order the input data (where we key on ID) is assumed to be the same, there are no checks
+ * for trying to verify this constraint though.
  */
-public class ExternalPropertiesDecorator implements Function<InputNode,InputNode>
+public class ExternalPropertiesDecorator implements Decorator<InputNode>
 {
     private final InputEntityDeserializer<InputNode> deserializer;
-    private InputNode currentExternal;
     private final UpdateBehaviour updateBehaviour;
+    private InputNode currentExternal;
 
     /**
      * @param headerFactory creates a {@link Header} that will specify which field is the {@link Type#ID id field}
@@ -62,11 +66,11 @@ public class ExternalPropertiesDecorator implements Function<InputNode,InputNode
             Configuration config, IdType idType, UpdateBehaviour updateBehaviour, Collector badCollector )
     {
         this.updateBehaviour = updateBehaviour;
-        CharSeeker dataStream = data.create( config ).stream();
+        CharSeeker dataStream = charSeeker( data.create( config ).stream(), config, true );
         Header header = headerFactory.create( dataStream, config, idType );
         this.deserializer = new InputEntityDeserializer<>( header, dataStream, config.delimiter(),
-                new InputNodeDeserialization( dataStream, header, new Groups(), idType.idsAreExternal() ),
-                value -> value, Validators.<InputNode>emptyValidator(), badCollector );
+                new InputNodeDeserialization( header, dataStream, new Groups(), idType.idsAreExternal() ),
+                NO_NODE_DECORATOR, Validators.<InputNode>emptyValidator(), badCollector );
     }
 
     @Override
@@ -106,5 +110,17 @@ public class ExternalPropertiesDecorator implements Function<InputNode,InputNode
     private void decorate( InputNode from )
     {
         from.updateProperties( updateBehaviour, currentExternal.properties() );
+    }
+
+    @Override
+    public boolean isMutable()
+    {
+        return true;
+    }
+
+    @Override
+    public void close()
+    {
+        deserializer.close();
     }
 }

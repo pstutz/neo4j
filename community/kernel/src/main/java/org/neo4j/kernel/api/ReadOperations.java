@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.api;
 
-import org.neo4j.collection.RawIterator;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
@@ -35,6 +34,8 @@ import org.neo4j.kernel.api.exceptions.schema.*;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
+import org.neo4j.kernel.api.proc.QualifiedName;
+import org.neo4j.kernel.api.proc.UserFunctionSignature;
 import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.RelationshipVisitor;
@@ -48,6 +49,7 @@ import org.neo4j.storageengine.api.schema.PopulationProgress;
 
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 
@@ -92,7 +94,6 @@ public interface ReadOperations
 
     /** Returns the relationship types currently stored in the database */
     Iterator<Token> relationshipTypesGetAllTokens();
-
 
     int labelCount();
 
@@ -483,14 +484,6 @@ public interface ReadOperations
      * <td>{@link #ANY_LABEL}</td>      <td>{@code REL}</td>                     <td>{@code RHS}</td>
      * <td>{@code MATCH}</td>    <td>{@code ()-[r:REL]->(:RHS)}</td>    <td>{@code RETURN count(r)}</td>
      * </tr>
-     * <tr>
-     * <td>{@code LHS}</td>             <td>{@link #ANY_RELATIONSHIP_TYPE}</td>  <td>{@code RHS}</td>
-     * <td>{@code MATCH}</td>    <td>{@code (:LHS)-[r]->(:RHS)}</td>    <td>{@code RETURN count(r)}</td>
-     * </tr>
-     * <tr>
-     * <td>{@code LHS}</td>             <td>{@code REL}</td>                     <td>{@code RHS}</td>
-     * <td>{@code MATCH}</td>    <td>{@code (:LHS)-[r:REL]->(:RHS)}</td><td>{@code RETURN count(r)}</td>
-     * </tr>
      * </tdata>
      * </table>
      *
@@ -537,14 +530,6 @@ public interface ReadOperations
      * <td>{@link #ANY_LABEL}</td>      <td>{@code REL}</td>                     <td>{@code RHS}</td>
      * <td>{@code MATCH}</td>    <td>{@code ()-[r:REL]->(:RHS)}</td>    <td>{@code RETURN count(r)}</td>
      * </tr>
-     * <tr>
-     * <td>{@code LHS}</td>             <td>{@link #ANY_RELATIONSHIP_TYPE}</td>  <td>{@code RHS}</td>
-     * <td>{@code MATCH}</td>    <td>{@code (:LHS)-[r]->(:RHS)}</td>    <td>{@code RETURN count(r)}</td>
-     * </tr>
-     * <tr>
-     * <td>{@code LHS}</td>             <td>{@code REL}</td>                     <td>{@code RHS}</td>
-     * <td>{@code MATCH}</td>    <td>{@code (:LHS)-[r:REL]->(:RHS)}</td><td>{@code RETURN count(r)}</td>
-     * </tr>
      * </tdata>
      * </table>
      *
@@ -566,13 +551,17 @@ public interface ReadOperations
     //===========================================
 
     /** Fetch a procedure given its signature. */
-    ProcedureSignature procedureGet( ProcedureSignature.ProcedureName name ) throws ProcedureException;
+    ProcedureSignature procedureGet( QualifiedName name ) throws ProcedureException;
+
+    /** Fetch a function given its signature, or <code>empty</code> if no such function exists*/
+    Optional<UserFunctionSignature> functionGet( QualifiedName name );
+
+    /** Fetch all registered procedures */
+    Set<UserFunctionSignature> functionsGetAll();
 
     /** Fetch all registered procedures */
     Set<ProcedureSignature> proceduresGetAll();
 
-    /** Invoke a read-only procedure by name */
-    RawIterator<Object[], ProcedureException> procedureCallRead( ProcedureSignature.ProcedureName name, Object[] input ) throws ProcedureException;
 
     //===========================================
     //== VIRTUAL OPERATIONS ===================
@@ -580,31 +569,31 @@ public interface ReadOperations
 
     long virtualNodeCreate() throws NoSuchMethodException;
 
-    int virtualLabelGetOrCreateForName( String labelName ) throws IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
+    int virtualLabelGetOrCreateForName(String labelName) throws IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
 
-    int virtualPropertyKeyGetOrCreateForName( String propertyKeyName ) throws IllegalTokenNameException, NoSuchMethodException;
+    int virtualPropertyKeyGetOrCreateForName(String propertyKeyName) throws IllegalTokenNameException, NoSuchMethodException;
 
-    int virtualRelationshipTypeGetOrCreateForName( String relationshipTypeName ) throws IllegalTokenNameException, NoSuchMethodException;
+    int virtualRelationshipTypeGetOrCreateForName(String relationshipTypeName) throws IllegalTokenNameException, NoSuchMethodException;
 
-    void virtualLabelCreateForName( String labelName, int id ) throws
+    void virtualLabelCreateForName(String labelName, int id) throws
             IllegalTokenNameException, TooManyLabelsException, NoSuchMethodException;
 
-    void virtualPropertyKeyCreateForName( String propertyKeyName,
-                                                 int id ) throws IllegalTokenNameException, NoSuchMethodException;
+    void virtualPropertyKeyCreateForName(String propertyKeyName,
+                                         int id) throws IllegalTokenNameException, NoSuchMethodException;
 
-    void virtualRelationshipTypeCreateForName( String relationshipTypeName,int id ) throws
+    void virtualRelationshipTypeCreateForName(String relationshipTypeName, int id) throws
             IllegalTokenNameException, NoSuchMethodException;
 
-    long virtualRelationshipCreate( int relationshipTypeId, long startNodeId, long endNodeId )
+    long virtualRelationshipCreate(int relationshipTypeId, long startNodeId, long endNodeId)
             throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException, NoSuchMethodException;
 
     void virtualNodeDelete(long id) throws NoSuchMethodException, EntityNotFoundException;
 
-    Property nodeSetVirtualProperty(long nodeId, DefinedProperty property )
+    Property nodeSetVirtualProperty(long nodeId, DefinedProperty property)
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException,
             InvalidTransactionTypeKernelException, NoSuchMethodException;
 
-    Property relationshipSetVirtualProperty(long nodeId, DefinedProperty property )
+    Property relationshipSetVirtualProperty(long nodeId, DefinedProperty property)
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException,
             InvalidTransactionTypeKernelException, NoSuchMethodException;
 }

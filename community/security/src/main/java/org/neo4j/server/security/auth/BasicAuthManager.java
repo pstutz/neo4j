@@ -21,62 +21,104 @@ package org.neo4j.server.security.auth;
 
 import java.io.IOException;
 import java.time.Clock;
+import java.util.Map;
+import java.util.Set;
 
 import org.neo4j.graphdb.security.AuthorizationViolationException;
-import org.neo4j.kernel.lifecycle.LifecycleAdapter;
+import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
+import org.neo4j.kernel.api.security.AuthManager;
+import org.neo4j.kernel.api.security.AuthSubject;
+import org.neo4j.kernel.api.security.AuthToken;
+import org.neo4j.kernel.api.security.AuthenticationResult;
+import org.neo4j.kernel.api.security.SecurityContext;
+import org.neo4j.kernel.api.security.exception.InvalidAuthTokenException;
 import org.neo4j.server.security.auth.exception.ConcurrentModificationException;
-import org.neo4j.server.security.auth.exception.IllegalCredentialsException;
 
 /**
  * Manages server authentication and authorization.
  * <p>
- * Through the BasicAuthManager you can create, update and delete users, and authenticate using credentials.
+ * Through the BasicAuthManager you can create, update and delete userRepository, and authenticate using credentials.
+ * <p>>
+ * NOTE: AuthManager will manage the lifecycle of the given UserRepository,
+ *       so the given UserRepository should not be added to another LifeSupport.
+ * </p>
  */
-public class BasicAuthManager extends LifecycleAdapter implements AuthManager
+public class BasicAuthManager implements AuthManager, UserManager, UserManagerSupplier
 {
-    private final AuthenticationStrategy authStrategy;
-    private final UserRepository users;
-    private final boolean authEnabled;
+    protected final AuthenticationStrategy authStrategy;
+    protected final UserRepository userRepository;
+    protected final PasswordPolicy passwordPolicy;
+    private final UserRepository initialUserRepository;
 
-    public BasicAuthManager( UserRepository users, AuthenticationStrategy authStrategy, boolean authEnabled )
+    public BasicAuthManager( UserRepository userRepository, PasswordPolicy passwordPolicy,
+            AuthenticationStrategy authStrategy, UserRepository initialUserRepository )
     {
-        this.users = users;
+        this.userRepository = userRepository;
+        this.passwordPolicy = passwordPolicy;
         this.authStrategy = authStrategy;
-        this.authEnabled = authEnabled;
+        this.initialUserRepository = initialUserRepository;
     }
 
-    public BasicAuthManager( UserRepository users, AuthenticationStrategy authStrategy )
+    public BasicAuthManager( UserRepository userRepository, PasswordPolicy passwordPolicy, Clock clock,
+            UserRepository initialUserRepository )
     {
-        this( users, authStrategy, true );
+        this( userRepository, passwordPolicy, new RateLimitedAuthenticationStrategy( clock, 3 ), initialUserRepository );
     }
 
-    public BasicAuthManager( UserRepository users, Clock clock, boolean authEnabled )
+    @Override
+    public void init() throws Throwable
     {
-        this( users, new RateLimitedAuthenticationStrategy( clock, 3 ), authEnabled );
+        userRepository.init();
+        initialUserRepository.init();
     }
 
     @Override
     public void start() throws Throwable
     {
-        if ( authEnabled && users.numberOfUsers() == 0 )
+        userRepository.start();
+        initialUserRepository.start();
+
+        if ( userRepository.numberOfUsers() == 0 )
         {
-            newUser( "neo4j", "neo4j", true );
+            User neo4j = newUser( INITIAL_USER_NAME, "neo4j", true );
+            if ( initialUserRepository.numberOfUsers() > 0 )
+            {
+                User user = initialUserRepository.getUserByName( INITIAL_USER_NAME );
+                if ( user != null )
+                {
+                    userRepository.update( neo4j, user );
+                }
+            }
         }
     }
 
     @Override
-    public AuthenticationResult authenticate( String username, String password )
+    public void stop() throws Throwable
     {
-        AuthSubject subject = login( username, password );
-
-        return subject.getAuthenticationResult();
+        userRepository.stop();
+        initialUserRepository.stop();
     }
 
     @Override
-    public AuthSubject login( String username, String password )
+    public void shutdown() throws Throwable
     {
-        assertAuthEnabled();
-        User user = users.findByName( username );
+        userRepository.shutdown();
+        initialUserRepository.shutdown();
+    }
+
+    @Override
+    public BasicSecurityContext login( Map<String,Object> authToken ) throws InvalidAuthTokenException
+    {
+        String scheme = AuthToken.safeCast( AuthToken.SCHEME_KEY, authToken );
+        if ( !scheme.equals( AuthToken.BASIC_SCHEME ) )
+        {
+            throw new InvalidAuthTokenException( "Unsupported authentication scheme '" + scheme + "'." );
+        }
+
+        String username = AuthToken.safeCast( AuthToken.PRINCIPAL, authToken );
+        String password = AuthToken.safeCast( AuthToken.CREDENTIALS, authToken );
+
+        User user = userRepository.getUserByName( username );
         AuthenticationResult result = AuthenticationResult.FAILURE;
         if ( user != null )
         {
@@ -86,100 +128,104 @@ public class BasicAuthManager extends LifecycleAdapter implements AuthManager
                 result = AuthenticationResult.PASSWORD_CHANGE_REQUIRED;
             }
         }
-        return new BasicAuthSubject( this, user, result );
+        return new BasicSecurityContext( this, user, result );
     }
 
     @Override
-    public User newUser( String username, String initialPassword, boolean requirePasswordChange ) throws IOException,
-            IllegalCredentialsException
+    public User newUser( String username, String initialPassword, boolean requirePasswordChange )
+            throws IOException, InvalidArgumentsException
     {
-        assertAuthEnabled();
-        assertValidName( username );
+        userRepository.assertValidUsername( username );
+
+        passwordPolicy.validatePassword( initialPassword );
+
         User user = new User.Builder()
                 .withName( username )
                 .withCredentials( Credential.forPassword( initialPassword ) )
                 .withRequiredPasswordChange( requirePasswordChange )
                 .build();
-        users.create( user );
+        userRepository.create( user );
+
         return user;
     }
 
     @Override
-    public boolean deleteUser( String username ) throws IOException
+    public boolean deleteUser( String username ) throws IOException, InvalidArgumentsException
     {
-        assertAuthEnabled();
-        User user = users.findByName( username );
-        return user != null && users.delete( user );
+        User user = getUser( username );
+        return user != null && userRepository.delete( user );
     }
 
     @Override
-    public User getUser( String username )
+    public User getUser( String username ) throws InvalidArgumentsException
     {
-        assertAuthEnabled();
-        return users.findByName( username );
+        User user = userRepository.getUserByName( username );
+        if ( user == null )
+        {
+            throw new InvalidArgumentsException( "User '" + username + "' does not exist." );
+        }
+        return user;
     }
 
-    public void setPassword( AuthSubject authSubject, String username, String password ) throws IOException
+    @Override
+    public User silentlyGetUser( String username )
     {
-        if ( !(authSubject instanceof BasicAuthSubject) )
-        {
-            throw new IllegalArgumentException( "Incorrect AuthSubject type " + authSubject.getClass().getTypeName() );
-        }
-        BasicAuthSubject basicAuthSubject = (BasicAuthSubject) authSubject;
+        return userRepository.getUserByName( username );
+    }
 
-        if ( !basicAuthSubject.doesUsernameMatch( username ) )
+    void setPassword( AuthSubject authSubject, String username, String password, boolean requirePasswordChange )
+            throws IOException, InvalidArgumentsException
+    {
+        if ( !authSubject.hasUsername( username ) )
         {
             throw new AuthorizationViolationException( "Invalid attempt to change the password for user " + username );
         }
-        if ( setPassword( username, password ) == null )
-        {
-            throw new IllegalArgumentException( "User " + username + " does not exist" );
-        }
+
+        setUserPassword( username, password, requirePasswordChange );
     }
 
     @Override
-    public User setPassword( String username, String password ) throws IOException
+    public void setUserPassword( String username, String password, boolean requirePasswordChange )
+            throws IOException, InvalidArgumentsException
     {
-        assertAuthEnabled();
-        User existingUser = users.findByName( username );
-        if ( existingUser == null )
-        {
-            return null;
-        }
+        User existingUser = getUser( username );
+
+        passwordPolicy.validatePassword( password );
 
         if ( existingUser.credentials().matchesPassword( password ) )
         {
-            return existingUser;
+            throw new InvalidArgumentsException( "Old password and new password cannot be the same." );
         }
 
         try
         {
             User updatedUser = existingUser.augment()
                     .withCredentials( Credential.forPassword( password ) )
-                    .withRequiredPasswordChange( false )
+                    .withRequiredPasswordChange( requirePasswordChange )
                     .build();
-            users.update( existingUser, updatedUser );
-            return updatedUser;
+            userRepository.update( existingUser, updatedUser );
         } catch ( ConcurrentModificationException e )
         {
             // try again
-            return setPassword( username, password );
+            setUserPassword( username, password, requirePasswordChange );
         }
     }
 
-    private void assertAuthEnabled()
+    @Override
+    public Set<String> getAllUsernames()
     {
-        if ( !authEnabled )
-        {
-            throw new IllegalStateException( "Auth not enabled" );
-        }
+        return userRepository.getAllUsernames();
     }
 
-    private void assertValidName( String name )
+    @Override
+    public UserManager getUserManager( SecurityContext securityContext )
     {
-        if ( !users.isValidName( name ) )
-        {
-            throw new IllegalArgumentException( "User name contains illegal characters. Please use simple ascii characters and numbers." );
-        }
+        return this;
+    }
+
+    @Override
+    public UserManager getUserManager()
+    {
+        return this;
     }
 }

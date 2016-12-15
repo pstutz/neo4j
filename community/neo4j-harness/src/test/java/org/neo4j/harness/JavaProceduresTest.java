@@ -25,26 +25,27 @@ import org.junit.Test;
 
 import java.util.stream.Stream;
 
-import org.neo4j.kernel.extension.KernelExtensionFactory;
-import org.neo4j.kernel.impl.proc.Procedures;
-import org.neo4j.kernel.impl.spi.KernelContext;
-import org.neo4j.kernel.lifecycle.Lifecycle;
-import org.neo4j.kernel.lifecycle.LifecycleAdapter;
+import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.procedure.Context;
+import org.neo4j.procedure.Mode;
+import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
-import org.neo4j.test.SuppressOutput;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.server.HTTP;
 
-import static junit.framework.TestCase.assertEquals;
+import static org.hamcrest.CoreMatchers.containsString;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
 import static org.neo4j.test.server.HTTP.RawPayload.quotedJson;
 
 public class JavaProceduresTest
 {
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( InProcessBuilderTest.class );
+    public TestDirectory testDir = TestDirectory.testDirectory();
 
-    @Rule public SuppressOutput suppressOutput = SuppressOutput.suppressAll();
+    @Rule
+    public SuppressOutput suppressOutput = SuppressOutput.suppressAll();
 
     public static class MyProcedures
     {
@@ -85,38 +86,38 @@ public class JavaProceduresTest
         }
     }
 
-    public static class SomeService
+    public static class MyProceduresUsingMyCoreAPI
     {
-        public String hello()
+        public static class LongResult
         {
-            return "world";
-        }
-    }
-
-    // This ensures a non-public mechanism for adding new context components
-    // to Procedures is testable via Harness. While this is not public API,
-    // this is a vital mechanism to cover use cases Procedures need to cover,
-    // and is in place as an approach that should either eventually be made
-    // public, or the relevant use cases addressed in other ways.
-    public static class MyExtensionThatAddsInjectable
-            extends KernelExtensionFactory<MyExtensionThatAddsInjectable.Dependencies>
-    {
-        public MyExtensionThatAddsInjectable()
-        {
-            super( "my-ext" );
+            public Long value;
         }
 
-        @Override
-        public Lifecycle newInstance( KernelContext context,
-                Dependencies dependencies ) throws Throwable
+        @Context
+        public MyCoreAPI myCoreAPI;
+
+        @Procedure( value = "makeNode", mode = Mode.WRITE )
+        public Stream<LongResult> makeNode( @Name( "label" ) String label ) throws ProcedureException
         {
-            dependencies.procedures().registerComponent( SomeService.class, (ctx) -> new SomeService() );
-            return new LifecycleAdapter();
+            LongResult t = new LongResult();
+            t.value = myCoreAPI.makeNode( label );
+            return Stream.of( t );
         }
 
-        public interface Dependencies
+        @Procedure( value = "willFail", mode = Mode.READ )
+        public Stream<LongResult> willFail() throws ProcedureException
         {
-            Procedures procedures();
+            LongResult t = new LongResult();
+            t.value = myCoreAPI.makeNode( "Test" );
+            return Stream.of( t );
+        }
+
+        @Procedure( "countNodes" )
+        public Stream<LongResult> countNodes()
+        {
+            LongResult t = new LongResult();
+            t.value = myCoreAPI.countNodes();
+            return Stream.of( t );
         }
     }
 
@@ -162,10 +163,45 @@ public class JavaProceduresTest
             HTTP.Response response = HTTP.POST( server.httpURI().resolve( "db/data/transaction/commit" ).toString(),
                     quotedJson( "{ 'statements': [ { 'statement': 'CALL hello' } ] }" ) );
 
+            assertEquals( "[]", response.get( "errors" ).toString() );
             JsonNode result = response.get( "results" ).get( 0 );
             assertEquals( "result", result.get( "columns" ).get( 0 ).asText() );
             assertEquals( "world", result.get( "data" ).get( 0 ).get( "row" ).get( 0 ).asText() );
-            assertEquals( "[]", response.get( "errors" ).toString() );
         }
+    }
+
+    @Test
+    public void shouldWorkWithInjectableFromKernelExtensionWithMorePower() throws Throwable
+    {
+        // When
+        try ( ServerControls server = TestServerBuilders.newInProcessBuilder()
+                .withProcedure( MyProceduresUsingMyCoreAPI.class ).newServer() )
+        {
+            // Then
+            assertQueryGetsValue( server, "CALL makeNode(\\'Test\\')", 0L );
+            assertQueryGetsValue( server, "CALL makeNode(\\'Test\\')", 1L );
+            assertQueryGetsValue( server, "CALL makeNode(\\'Test\\')", 2L );
+            assertQueryGetsValue( server, "CALL countNodes", 3L );
+            assertQueryGetsError( server, "CALL willFail", "Write operations are not allowed" );
+        }
+    }
+
+    private void assertQueryGetsValue( ServerControls server, String query, long value ) throws Throwable
+    {
+        HTTP.Response response = HTTP.POST( server.httpURI().resolve( "db/data/transaction/commit" ).toString(),
+                quotedJson( "{ 'statements': [ { 'statement': '" + query + "' } ] }" ) );
+
+        assertEquals( "[]", response.get( "errors" ).toString() );
+        JsonNode result = response.get( "results" ).get( 0 );
+        assertEquals( "value", result.get( "columns" ).get( 0 ).asText() );
+        assertEquals( value, result.get( "data" ).get( 0 ).get( "row" ).get( 0 ).asLong() );
+    }
+
+    private void assertQueryGetsError( ServerControls server, String query, String error ) throws Throwable
+    {
+        HTTP.Response response = HTTP.POST( server.httpURI().resolve( "db/data/transaction/commit" ).toString(),
+                quotedJson( "{ 'statements': [ { 'statement': '" + query + "' } ] }" ) );
+
+        assertThat( response.get( "errors" ).toString(), containsString( error ) );
     }
 }

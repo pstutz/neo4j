@@ -19,8 +19,6 @@
  */
 package org.neo4j.tools.txlog.checktypes;
 
-import java.util.Objects;
-
 import org.neo4j.kernel.impl.store.record.NeoStoreRecord;
 import org.neo4j.kernel.impl.transaction.command.Command;
 
@@ -44,11 +42,8 @@ public class NeoStoreCheckType extends CheckType<Command.NeoStoreCommand,NeoStor
     }
 
     @Override
-    public boolean equal( NeoStoreRecord record1, NeoStoreRecord record2 )
+    protected boolean inUseRecordsEqual( NeoStoreRecord record1, NeoStoreRecord record2 )
     {
-        Objects.requireNonNull( record1 );
-        Objects.requireNonNull( record2 );
-
         return record1.getNextProp() == record2.getNextProp();
     }
 

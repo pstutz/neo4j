@@ -23,33 +23,34 @@ import java.util.function.Supplier;
 
 import org.neo4j.graphdb.Lock;
 import org.neo4j.graphdb.PropertyContainer;
-import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.exceptions.Status;
+import org.neo4j.kernel.api.security.SecurityContext;
 
 public class PlaceboTransaction implements InternalTransaction
 {
-    private final static PropertyContainerLocker locker = new PropertyContainerLocker();
+    private static final PropertyContainerLocker locker = new PropertyContainerLocker();
     private final Supplier<Statement> stmt;
-    private final Supplier<KernelTransaction> currentTransaction;
+    private final KernelTransaction currentTransaction;
     private boolean success;
 
     public PlaceboTransaction( Supplier<KernelTransaction> currentTransaction, Supplier<Statement> stmt )
     {
         this.stmt = stmt;
-        this.currentTransaction = currentTransaction;
+        this.currentTransaction = currentTransaction.get();
     }
 
     @Override
     public void terminate()
     {
-        currentTransaction.get().markForTermination();
+        currentTransaction.markForTermination( Status.Transaction.Terminated );
     }
 
     @Override
     public void failure()
     {
-    	currentTransaction.get().failure();
+        currentTransaction.failure();
     }
 
     @Override
@@ -63,37 +64,37 @@ public class PlaceboTransaction implements InternalTransaction
     {
         if ( !success )
         {
-            currentTransaction.get().failure();
+            currentTransaction.failure();
         }
     }
 
-	@Override
-	public Lock acquireWriteLock( PropertyContainer entity )
-	{
-		return locker.exclusiveLock( stmt, entity );
-	}
+    @Override
+    public Lock acquireWriteLock( PropertyContainer entity )
+    {
+        return locker.exclusiveLock( stmt, entity );
+    }
 
-	@Override
-	public Lock acquireReadLock( PropertyContainer entity )
-	{
-		return locker.sharedLock( stmt, entity );
-	}
+    @Override
+    public Lock acquireReadLock( PropertyContainer entity )
+    {
+        return locker.sharedLock( stmt, entity );
+    }
 
     @Override
     public KernelTransaction.Type transactionType()
     {
-        return currentTransaction.get().transactionType();
+        return currentTransaction.transactionType();
     }
 
     @Override
-    public AccessMode mode()
+    public SecurityContext securityContext()
     {
-        return currentTransaction.get().mode();
+        return currentTransaction.securityContext();
     }
 
     @Override
-    public KernelTransaction.Revertable restrict( AccessMode mode )
+    public KernelTransaction.Revertable overrideWith( SecurityContext context )
     {
-        return currentTransaction.get().restrict( mode );
+        return currentTransaction.overrideWith( context );
     }
 }

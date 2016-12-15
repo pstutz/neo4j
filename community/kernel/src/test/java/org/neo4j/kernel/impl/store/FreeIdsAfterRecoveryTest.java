@@ -28,14 +28,13 @@ import java.nio.ByteBuffer;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.IdGeneratorImpl;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.storemigration.StoreFile;
 import org.neo4j.kernel.impl.storemigration.StoreFileType;
 import org.neo4j.logging.NullLogProvider;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -45,7 +44,7 @@ import static org.neo4j.kernel.impl.store.id.IdGeneratorImpl.markAsSticky;
 public class FreeIdsAfterRecoveryTest
 {
     @Rule
-    public final TargetDirectory.TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory directory = TestDirectory.testDirectory();
     @Rule
     public final PageCacheRule pageCacheRule = new PageCacheRule();
     private final FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
@@ -54,8 +53,8 @@ public class FreeIdsAfterRecoveryTest
     public void shouldCompletelyRebuildIdGeneratorsAfterCrash() throws Exception
     {
         // GIVEN
-        StoreFactory storeFactory = new StoreFactory( fs, directory.directory(), pageCacheRule.getPageCache( fs ),
-                StandardV3_0.RECORD_FORMATS, NullLogProvider.getInstance() );
+        StoreFactory storeFactory = new StoreFactory( directory.directory(), pageCacheRule.getPageCache( fs ), fs,
+                NullLogProvider.getInstance() );
         long highId;
         try ( NeoStores stores = storeFactory.openAllNeoStores( true ) )
         {

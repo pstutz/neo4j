@@ -20,7 +20,6 @@
 package upgrade;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -35,19 +34,19 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.AnonymousContext;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.NodeItem;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import org.neo4j.test.Unzip;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -116,42 +115,13 @@ public class TestMigrateToDenseNodeSupport
     }
 
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
     private File dir;
 
     @Before
     public void before() throws Exception
     {
         dir = Unzip.unzip( getClass(), "0.A.1-db.zip", testDir.graphDbDir() );
-    }
-
-    @Test
-    @Ignore( "Used for creating the dataset, using the previous store version" )
-    public void createDb()
-    {
-        GraphDatabaseService db = new GraphDatabaseFactory().newEmbeddedDatabase( testDir.graphDbDir() );
-        try
-        {
-            try ( Transaction tx = db.beginTx() )
-            {
-                Node refNode = db.createNode( referenceNode );
-                // Create 10 dense nodes
-                for ( int i = 0; i < 10; i++ )
-                {
-                    createDenseNode( db, refNode );
-                }
-                // And 10 sparse nodes
-                for ( int i = 0; i < 10; i++ )
-                {
-                    createSparseNode( db, refNode );
-                }
-                tx.success();
-            }
-        }
-        finally
-        {
-            db.shutdown();
-        }
     }
 
     @Test
@@ -222,7 +192,7 @@ public class TestMigrateToDenseNodeSupport
     private void verifyDenseRepresentation( GraphDatabaseService db, Node node, boolean dense )
     {
         KernelAPI kernelAPI = ((GraphDatabaseAPI) db).getDependencyResolver().resolveDependency( KernelAPI.class );
-        try ( KernelTransaction tx = kernelAPI.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.READ );
+        try ( KernelTransaction tx = kernelAPI.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.read() );
               Statement statement = tx.acquireStatement() )
         {
             Cursor<NodeItem> nodeCursor = statement.readOperations().nodeCursor( node.getId() );
@@ -235,36 +205,4 @@ public class TestMigrateToDenseNodeSupport
         }
     }
 
-    private void createSparseNode( GraphDatabaseService db, Node refNode )
-    {
-        Node node = db.createNode();
-        refNode.createRelationshipTo( node, Types.SPARSE );
-        createRelationships( db, node, 3, Types.OTHER );
-        setProperties( node );
-    }
-
-    private void createDenseNode( GraphDatabaseService db, Node refNode )
-    {
-        Node node = db.createNode();
-        refNode.createRelationshipTo( node, Types.DENSE );
-        createRelationships( db, node, 100, Types.OTHER );
-        createRelationships( db, node, 2, Types.FOURTH );
-        setProperties( node );
-    }
-
-    private void createRelationships( GraphDatabaseService db, Node node, int count, RelationshipType type )
-    {
-        for ( int i = 0; i < count; i++ )
-        {
-            node.createRelationshipTo( db.createNode(), type );
-        }
-    }
-
-    private void setProperties( Node node )
-    {
-        for ( Properties properties : Properties.values() )
-        {
-            node.setProperty( properties.name(), properties.getValue() );
-        }
-    }
 }

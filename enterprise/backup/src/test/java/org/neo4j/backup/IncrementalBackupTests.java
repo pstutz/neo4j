@@ -19,13 +19,13 @@
  */
 package org.neo4j.backup;
 
+import java.io.File;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-
-import java.io.File;
 
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.DynamicRelationshipType;
@@ -35,14 +35,11 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.helpers.collection.MapUtil;
-import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.configuration.Settings;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.test.DbRepresentation;
-import org.neo4j.test.SuppressOutput;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 
@@ -51,7 +48,7 @@ public class IncrementalBackupTests
     @Rule
     public TestName testName = new TestName();
     @Rule
-    public TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDirectory = TestDirectory.testDirectory();
     @Rule
     public SuppressOutput suppressOutput = SuppressOutput.suppressAll();
 
@@ -89,20 +86,16 @@ public class IncrementalBackupTests
         DbRepresentation initialDataSetRepresentation = createInitialDataSet( serverPath );
         server = startServer( serverPath, "127.0.0.1:6362" );
 
-        // START SNIPPET: onlineBackup
         OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
 
         backup.full( backupPath.getPath() );
 
-        // END SNIPPET: onlineBackup
         assertEquals( initialDataSetRepresentation, getBackupDbRepresentation() );
         shutdownServer( server );
 
         DbRepresentation furtherRepresentation = addMoreData2( serverPath );
         server = startServer( serverPath, null );
-        // START SNIPPET: onlineBackup
         backup.incremental( backupPath.getPath() );
-        // END SNIPPET: onlineBackup
         assertEquals( furtherRepresentation, getBackupDbRepresentation() );
         shutdownServer( server );
     }
@@ -132,20 +125,16 @@ public class IncrementalBackupTests
         DbRepresentation initialDataSetRepresentation = createInitialDataSet( serverPath );
         server = startServer( serverPath, "127.0.0.1:6362" );
 
-        // START SNIPPET: onlineBackup
         OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
 
         backup.full( backupPath.getPath() );
 
-        // END SNIPPET: onlineBackup
         assertEquals( initialDataSetRepresentation, getBackupDbRepresentation() );
         shutdownServer( server );
 
         DbRepresentation furtherRepresentation = createTransactiongWithWeirdRelationshipGroupRecord( serverPath );
         server = startServer( serverPath, null );
-        // START SNIPPET: onlineBackup
         backup.incremental( backupPath.getPath() );
-        // END SNIPPET: onlineBackup
         assertEquals( furtherRepresentation, getBackupDbRepresentation() );
         shutdownServer( server );
     }
@@ -228,7 +217,6 @@ public class IncrementalBackupTests
                 newEmbeddedDatabaseBuilder( path ).
                 setConfig( OnlineBackupSettings.online_backup_enabled, Settings.FALSE ).
                 setConfig( GraphDatabaseSettings.keep_logical_logs, Settings.TRUE ).
-                setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME ).
                 newGraphDatabase();
     }
 
@@ -247,12 +235,6 @@ public class IncrementalBackupTests
 
     private DbRepresentation getBackupDbRepresentation()
     {
-        return DbRepresentation.of( backupPath, getFormatConfig() );
-    }
-
-    private Config getFormatConfig()
-    {
-        return new Config(
-                MapUtil.stringMap( GraphDatabaseSettings.record_format.name(), StandardV3_0.NAME ) );
+        return DbRepresentation.of( backupPath );
     }
 }

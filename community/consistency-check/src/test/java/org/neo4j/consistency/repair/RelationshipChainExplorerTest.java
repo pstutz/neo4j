@@ -39,12 +39,11 @@ import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.StoreAccess;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
-import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
 
 public class RelationshipChainExplorerTest
@@ -54,7 +53,7 @@ public class RelationshipChainExplorerTest
     @ClassRule
     public static PageCacheRule pageCacheRule = new PageCacheRule();
     @Rule
-    public TargetDirectory.TestDirectory storeLocation = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory storeLocation = TestDirectory.testDirectory();
     private StoreAccess store;
 
     @Before
@@ -143,8 +142,9 @@ public class RelationshipChainExplorerTest
         }
         database.shutdown();
         PageCache pageCache = pageCacheRule.getPageCache( new DefaultFileSystemAbstraction() );
-        Config config = new Config( stringMap( GraphDatabaseSettings.record_format.name(), getRecordFormatName() ) );
-        return new StoreAccess( new DefaultFileSystemAbstraction(), pageCache, storeDirectory, config ).initialize();
+        StoreAccess storeAccess = new StoreAccess( new DefaultFileSystemAbstraction(), pageCache, storeDirectory,
+                Config.empty() );
+        return storeAccess.initialize();
     }
 
     protected String getRecordFormatName()

@@ -22,6 +22,7 @@ package org.neo4j.server.enterprise;
 import java.util.Map;
 
 import org.neo4j.cluster.ClusterSettings;
+import org.neo4j.causalclustering.core.CausalClusteringSettings;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.GraphDatabaseDependencies;
 import org.neo4j.kernel.configuration.Config;
@@ -29,6 +30,7 @@ import org.neo4j.kernel.ha.HaSettings;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.server.CommunityBootstrapper;
 import org.neo4j.server.NeoServer;
+import org.neo4j.server.security.enterprise.configuration.SecuritySettings;
 
 import static java.util.Arrays.asList;
 
@@ -37,20 +39,24 @@ import static org.neo4j.server.enterprise.EnterpriseServerSettings.mode;
 public class EnterpriseBootstrapper extends CommunityBootstrapper
 {
     @Override
-    protected NeoServer createNeoServer( Config configurator, GraphDatabaseDependencies dependencies, LogProvider
-            userLogProvider )
+    protected NeoServer createNeoServer( Config configurator, GraphDatabaseDependencies dependencies,
+            LogProvider userLogProvider )
     {
         return new EnterpriseNeoServer( configurator, dependencies, userLogProvider );
     }
 
     @Override
-    protected Iterable<Class<?>> settingsClasses( Map<String, String> settings )
+    protected Iterable<Class<?>> settingsClasses( Map<String,String> settings )
     {
         if ( isHAMode( settings ) )
         {
-            return Iterables.concat(
-                    super.settingsClasses( settings ),
-                    asList( HaSettings.class, ClusterSettings.class ) );
+            return Iterables.concat( super.settingsClasses( settings ),
+                    asList( HaSettings.class, ClusterSettings.class, SecuritySettings.class ) );
+        }
+        if ( isCCMode( settings ) )
+        {
+            return Iterables.concat( super.settingsClasses( settings ),
+                    asList( CausalClusteringSettings.class, SecuritySettings.class ) );
         }
         else
         {
@@ -58,8 +64,14 @@ public class EnterpriseBootstrapper extends CommunityBootstrapper
         }
     }
 
-    private boolean isHAMode( Map<String, String> settings )
+    private boolean isHAMode( Map<String,String> settings )
     {
         return new Config( settings, EnterpriseServerSettings.class ).get( mode ).equals( "HA" );
+    }
+
+    private boolean isCCMode( Map<String,String> settings )
+    {
+        String mode = new Config( settings, EnterpriseServerSettings.class ).get( EnterpriseServerSettings.mode );
+        return mode.equals( "CORE" ) || mode.equals( "READ_REPLICA" );
     }
 }

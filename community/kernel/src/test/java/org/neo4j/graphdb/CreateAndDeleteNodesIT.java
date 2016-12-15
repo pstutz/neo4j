@@ -22,12 +22,12 @@ package org.neo4j.graphdb;
 import org.junit.Rule;
 import org.junit.Test;
 
-import org.neo4j.test.ImpermanentDatabaseRule;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
 
 public class CreateAndDeleteNodesIT
 {
-
-    public @Rule ImpermanentDatabaseRule dbRule = new ImpermanentDatabaseRule();
+    @Rule
+    public ImpermanentDatabaseRule dbRule = new ImpermanentDatabaseRule();
 
     enum RelTypes implements RelationshipType
     {
@@ -50,7 +50,6 @@ public class CreateAndDeleteNodesIT
             myNode.createRelationshipTo( dataBase.createNode(), RelTypes.ASD );
             bobTransaction.success();
         }
-
 
         // When
         try ( Transaction tx2 = dataBase.beginTx() )

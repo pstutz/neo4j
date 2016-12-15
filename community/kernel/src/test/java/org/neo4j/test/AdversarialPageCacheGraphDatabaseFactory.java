@@ -29,8 +29,10 @@ import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
-import org.neo4j.kernel.impl.factory.CommunityFacadeFactory;
+import org.neo4j.kernel.impl.factory.CommunityEditionModule;
+import org.neo4j.kernel.impl.factory.DatabaseInfo;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
+import org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory;
 import org.neo4j.kernel.impl.factory.PlatformModule;
 import org.neo4j.kernel.impl.logging.LogService;
 import org.neo4j.kernel.monitoring.tracing.Tracers;
@@ -46,18 +48,18 @@ public class AdversarialPageCacheGraphDatabaseFactory
 
     public static GraphDatabaseFactory create( FileSystemAbstraction fs, Adversary adversary )
     {
-        return new GraphDatabaseFactory()
+        return new TestGraphDatabaseFactory()
         {
             @Override
             protected GraphDatabaseService newDatabase( File dir, Map<String,String> config, Dependencies dependencies )
             {
-                return new CommunityFacadeFactory()
+                return new GraphDatabaseFacadeFactory( DatabaseInfo.COMMUNITY, CommunityEditionModule::new )
                 {
                     @Override
                     protected PlatformModule createPlatform( File storeDir, Map<String,String> params,
                             Dependencies dependencies, GraphDatabaseFacade facade )
                     {
-                        return new PlatformModule( storeDir, params, databaseInfo(), dependencies, facade )
+                        return new PlatformModule( storeDir, params, databaseInfo, dependencies, facade )
                         {
                             @Override
                             protected FileSystemAbstraction createFileSystemAbstraction()

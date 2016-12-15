@@ -19,15 +19,15 @@
  */
 package org.neo4j.kernel.impl.transaction.log.entry;
 
+import org.junit.Test;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
-
-import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
@@ -35,10 +35,10 @@ import org.neo4j.kernel.impl.transaction.log.InMemoryClosableChannel;
 import org.neo4j.kernel.impl.util.IoPrimitiveUtils;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeader.LOG_HEADER_SIZE;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeaderReader.readLogHeader;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeaderWriter.encodeLogVersion;
@@ -48,22 +48,6 @@ public class LogHeaderReaderTest
 {
     private final long expectedLogVersion = CURRENT_LOG_VERSION;
     private final long expectedTxId = 42;
-
-    @Test
-    public void shouldReadALogHeaderFromALogChannel() throws IOException
-    {
-        // given
-        final InMemoryClosableChannel channel = new InMemoryClosableChannel();
-
-        channel.putLong( encodeLogVersion( expectedLogVersion ) );
-        channel.putLong( expectedTxId );
-
-        // when
-        final LogHeader result = readLogHeader( channel );
-
-        // then
-        assertEquals( new LogHeader( CURRENT_LOG_VERSION, expectedLogVersion, expectedTxId ), result );
-    }
 
     @Test
     public void shouldReadALogHeaderFromAByteChannel() throws IOException
@@ -84,7 +68,7 @@ public class LogHeaderReaderTest
         } );
 
         // when
-        final LogHeader result = readLogHeader( buffer, channel, true );
+        final LogHeader result = readLogHeader( buffer, channel, true, null );
 
         // then
         assertEquals( new LogHeader( CURRENT_LOG_VERSION, expectedLogVersion, expectedTxId ), result );
@@ -102,13 +86,12 @@ public class LogHeaderReaderTest
         try
         {
             // when
-            readLogHeader( buffer, channel, true );
+            readLogHeader( buffer, channel, true, null );
             fail( "should have thrown" );
         }
-        catch ( IOException ex )
+        catch ( IncompleteLogHeaderException ex )
         {
-            // then
-            assertEquals( "Unable to read log version and last committed tx", ex.getMessage() );
+            // then good
         }
     }
 
@@ -148,10 +131,10 @@ public class LogHeaderReaderTest
             readLogHeader( fs, file );
             fail( "should have thrown" );
         }
-        catch ( IOException ex )
+        catch ( IncompleteLogHeaderException ex )
         {
             // then
-            assertEquals( "Unable to read log version and last committed tx", ex.getMessage() );
+            assertTrue( ex.getMessage(), ex.getMessage().contains( file.getName() ) );
         }
     }
 

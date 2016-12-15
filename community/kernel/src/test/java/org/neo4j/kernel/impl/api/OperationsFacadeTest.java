@@ -19,6 +19,7 @@
  */
 package org.neo4j.kernel.impl.api;
 
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -35,7 +36,7 @@ import org.neo4j.kernel.api.exceptions.schema.IndexSchemaRuleNotFoundException;
 import org.neo4j.kernel.api.exceptions.schema.SchemaRuleNotFoundException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
-import org.neo4j.test.KernelExceptionUserMessageMatcher;
+import org.neo4j.test.mockito.matcher.KernelExceptionUserMessageMatcher;
 
 @RunWith( MockitoJUnitRunner.class )
 public class OperationsFacadeTest
@@ -56,6 +57,12 @@ public class OperationsFacadeTest
 
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
+
+    @Before
+    public void setUp() throws Exception
+    {
+        operationsFacade.initialize( statementOperationParts );
+    }
 
     @Test
     public void testThrowExceptionWhenIndexNotFoundByLabelAndProperty() throws SchemaRuleNotFoundException

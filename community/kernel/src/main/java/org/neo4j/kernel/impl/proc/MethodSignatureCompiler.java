@@ -24,10 +24,13 @@ import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.exceptions.Status;
-import org.neo4j.kernel.api.proc.ProcedureSignature.FieldSignature;
+import org.neo4j.kernel.api.proc.FieldSignature;
+import org.neo4j.kernel.api.proc.Neo4jTypes;
+import org.neo4j.kernel.impl.proc.TypeMappers.NeoValueConverter;
 import org.neo4j.procedure.Name;
 
 /**
@@ -43,11 +46,25 @@ public class MethodSignatureCompiler
         this.typeMappers = typeMappers;
     }
 
+    public List<Neo4jTypes.AnyType> inputTypesFor( Method method ) throws ProcedureException
+    {
+        Type[] types = method.getGenericParameterTypes();
+        List<Neo4jTypes.AnyType> neoTypes = new ArrayList<>(types.length);
+        for ( Type type : types )
+        {
+            NeoValueConverter valueConverter = typeMappers.converterFor( type );
+            neoTypes.add( valueConverter.type() );
+        }
+
+        return neoTypes;
+    }
+
     public List<FieldSignature> signatureFor( Method method ) throws ProcedureException
     {
         Parameter[] params = method.getParameters();
         Type[] types = method.getGenericParameterTypes();
         List<FieldSignature> signature = new ArrayList<>(params.length);
+        boolean seenDefault = false;
         for ( int i = 0; i < params.length; i++ )
         {
             Parameter param = params[i];
@@ -60,7 +77,8 @@ public class MethodSignatureCompiler
                         "Please add the annotation, recompile the class and try again.",
                         i, method.getName(), Name.class.getSimpleName() );
             }
-            String name = param.getAnnotation( Name.class ).value();
+            Name parameter = param.getAnnotation( Name.class );
+            String name = parameter.value();
 
             if( name.trim().length() == 0 )
             {
@@ -72,7 +90,20 @@ public class MethodSignatureCompiler
 
             try
             {
-                signature.add(new FieldSignature( name, typeMappers.neoTypeFor( type ) ));
+                NeoValueConverter valueConverter = typeMappers.converterFor( type );
+                Optional<Neo4jValue> defaultValue = valueConverter.defaultValue( parameter );
+                //it is not allowed to have holes in default values
+                if (seenDefault && !defaultValue.isPresent())
+                {
+                    throw new ProcedureException( Status.Procedure.ProcedureRegistrationFailed,
+                            "Non-default argument at position %d with name %s in method %s follows default argument. " +
+                            "Add a default value or rearrange arguments so that the non-default values comes first.",
+                            i, parameter.value(), method.getName() );
+                }
+
+                seenDefault = defaultValue.isPresent();
+                signature.add( new FieldSignature( name, valueConverter.type(),
+                        defaultValue ) );
             }
             catch ( ProcedureException e )
             {

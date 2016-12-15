@@ -29,23 +29,23 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
-import static org.neo4j.test.Assert.assertEventually;
+import static org.neo4j.test.assertion.Assert.assertEventually;
 
 public class MetricsTestHelper
 {
     public static final int TIME_STAMP = 0;
     public static final int METRICS_VALUE = 1;
 
-    public static long readLongValue( File metricFile ) throws IOException
+    public static long readLongValue( File metricFile ) throws IOException, InterruptedException
     {
         return readLongValueAndAssert( metricFile, (one, two) -> true );
     }
 
     public static long readLongValueAndAssert( File metricFile, BiPredicate<Integer,Integer> assumption )
-            throws IOException
+            throws IOException, InterruptedException
     {
         // let's wait until the file is in place (since the reporting is async that might take a while)
-        assertEventually( "Metrics file should exist", metricFile::exists, is( true ), 20, SECONDS );
+        assertEventually( "Metrics file should exist", metricFile::exists, is( true ), 40, SECONDS );
 
         try ( BufferedReader reader = new BufferedReader( new FileReader( metricFile ) ) )
         {
@@ -69,10 +69,10 @@ public class MetricsTestHelper
         }
     }
 
-    public static File metricsCsv( File dbDir, String metric )
+    public static File metricsCsv( File dbDir, String metric ) throws InterruptedException
     {
         File csvFile = new File( dbDir, metric + ".csv" );
-        assertEventually( "Metrics file should exist", csvFile::exists, is( true ), 20, SECONDS );
+        assertEventually( "Metrics file should exist", csvFile::exists, is( true ), 40, SECONDS );
         return csvFile;
     }
 }

@@ -40,10 +40,13 @@ import java.nio.channels.OverlappingFileLockException;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.Charset;
+import java.nio.file.CopyOption;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.NoSuchFileException;
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -67,10 +70,13 @@ import org.neo4j.test.impl.ChannelOutputStream;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
 import static java.util.Arrays.asList;
 
 public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
 {
+    private final Clock clock;
+
     interface Positionable
     {
         long pos();
@@ -85,13 +91,36 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
 
     public EphemeralFileSystemAbstraction()
     {
-        this.files = new ConcurrentHashMap<>();
+        this( Clock.systemUTC() );
     }
 
-    private EphemeralFileSystemAbstraction( Set<File> directories, Map<File,EphemeralFileData> files )
+    public EphemeralFileSystemAbstraction( Clock clock )
     {
+        this.clock = clock;
+        this.files = new ConcurrentHashMap<>();
+        initCurrentWorkingDirectory();
+    }
+
+    private void initCurrentWorkingDirectory()
+    {
+        try
+        {
+            mkdirs( new File( "." ).getCanonicalFile() );
+        }
+        catch ( IOException e )
+        {
+            System.err.println(
+                    "WARNING: EphemeralFileSystemAbstraction could not initialise current working directory" );
+            e.printStackTrace();
+        }
+    }
+
+    private EphemeralFileSystemAbstraction( Set<File> directories, Map<File,EphemeralFileData> files, Clock clock )
+    {
+        this.clock = clock;
         this.files = new ConcurrentHashMap<>( files );
         this.directories.addAll( directories );
+        initCurrentWorkingDirectory();
     }
 
     /**
@@ -222,7 +251,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public synchronized StoreChannel open( File fileName, String mode ) throws IOException
     {
-        EphemeralFileData data = files.get( fileName );
+        EphemeralFileData data = files.get( canonicalFile( fileName ) );
         if ( data != null )
         {
             return new StoreFileChannel( new EphemeralFileChannel(
@@ -265,8 +294,8 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
                                              + "' (The system cannot find the path specified)" );
         }
 
-        EphemeralFileData data = new EphemeralFileData();
-        free( files.put( fileName, data ) );
+        EphemeralFileData data = new EphemeralFileData( clock );
+        free( files.put( canonicalFile( fileName ), data ) );
         return new StoreFileChannel(
                 new EphemeralFileChannel( data, new FileStillOpenException( fileName.getPath() ) ) );
     }
@@ -274,20 +303,36 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public long getFileSize( File fileName )
     {
-        EphemeralFileData file = files.get( fileName );
+        EphemeralFileData file = files.get( canonicalFile( fileName ) );
         return file == null ? 0 : file.size();
     }
 
     @Override
     public boolean fileExists( File file )
     {
-        return directories.contains( file.getAbsoluteFile() ) || files.containsKey( file );
+        file = canonicalFile( file );
+        return directories.contains( file ) || files.containsKey( file );
+    }
+
+    private File canonicalFile( File file )
+    {
+        try
+        {
+            return file.getCanonicalFile();
+        }
+        catch ( IOException e )
+        {
+            System.err.println( "WARNING: EphemeralFileSystemAbstraction could not canonicalise file: " + file );
+            e.printStackTrace();
+        }
+        // Ugly fallback
+        return file.getAbsoluteFile();
     }
 
     @Override
     public boolean isDirectory( File file )
     {
-        return directories.contains( file.getAbsoluteFile() );
+        return directories.contains( canonicalFile( file ) );
     }
 
     @Override
@@ -298,14 +343,14 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
             return false;
         }
 
-        directories.add( directory.getAbsoluteFile() );
+        directories.add( canonicalFile( directory ) );
         return true;
     }
 
     @Override
     public void mkdirs( File directory )
     {
-        File currentDirectory = directory.getAbsoluteFile();
+        File currentDirectory = canonicalFile( directory );
 
         while ( currentDirectory != null )
         {
@@ -317,15 +362,24 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public boolean deleteFile( File fileName )
     {
+        fileName = canonicalFile( fileName );
         EphemeralFileData removed = files.remove( fileName );
         free( removed );
-        return removed != null;
+        if ( removed != null )
+        {
+            return true;
+        }
+        else
+        {
+            File[] files = listFiles( fileName );
+            return files != null && files.length == 0 && directories.remove( fileName );
+        }
     }
 
     @Override
     public void deleteRecursively( File directory ) throws IOException
     {
-        List<String> directoryPathItems = splitPath( directory );
+        List<String> directoryPathItems = splitPath( canonicalFile( directory ) );
         for ( Map.Entry<File,EphemeralFileData> file : files.entrySet() )
         {
             File fileName = file.getKey();
@@ -338,24 +392,37 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     }
 
     @Override
-    public boolean renameFile( File from, File to ) throws IOException
+    public void renameFile( File from, File to, CopyOption... copyOptions ) throws IOException
     {
+        from = canonicalFile( from );
+        to = canonicalFile( to );
+
         if ( !files.containsKey( from ) )
         {
-            throw new IOException( "'" + from + "' doesn't exist" );
+            throw new NoSuchFileException( "'" + from + "' doesn't exist" );
         }
-        if ( files.containsKey( to ) )
+
+        boolean replaceExisting = false;
+        for ( CopyOption copyOption : copyOptions )
         {
-            throw new IOException( "'" + to + "' already exists" );
+            replaceExisting |= copyOption == REPLACE_EXISTING;
+        }
+        if ( files.containsKey( to ) && !replaceExisting )
+        {
+            throw new FileAlreadyExistsException( "'" + to + "' already exists" );
+        }
+        if ( !isDirectory( to.getParentFile() ) )
+        {
+            throw new NoSuchFileException( "Target directory[" + to.getParent() + "] does not exists" );
         }
         files.put( to, files.remove( from ) );
-        return true;
     }
 
     @Override
     public File[] listFiles( File directory )
     {
-        if ( files.containsKey( directory ) )
+        directory = canonicalFile( directory );
+        if ( files.containsKey( directory ) || !directories.contains( directory ) )
         {
             // This means that you're trying to list files on a file, not a directory.
             return null;
@@ -380,6 +447,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public File[] listFiles( File directory, FilenameFilter filter )
     {
+        directory = canonicalFile( directory );
         if ( files.containsKey( directory ) )
         // This means that you're trying to list files on a file, not a directory.
         {
@@ -429,18 +497,18 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public void moveToDirectory( File file, File toDirectory ) throws IOException
     {
-        EphemeralFileData fileToMove = files.remove( file );
+        EphemeralFileData fileToMove = files.remove( canonicalFile( file ) );
         if ( fileToMove == null )
         {
             throw new FileNotFoundException( file.getPath() );
         }
-        files.put( new File( toDirectory, file.getName() ), fileToMove );
+        files.put( canonicalFile( new File( toDirectory, file.getName() ) ), fileToMove );
     }
 
     @Override
     public void copyFile( File from, File to ) throws IOException
     {
-        EphemeralFileData data = files.get( from );
+        EphemeralFileData data = files.get( canonicalFile( from ) );
         if ( data == null )
         {
             throw new FileNotFoundException( "File " + from + " not found" );
@@ -461,7 +529,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
         {
             copiedFiles.put( file.getKey(), file.getValue().copy() );
         }
-        return new EphemeralFileSystemAbstraction( directories, copiedFiles );
+        return new EphemeralFileSystemAbstraction( directories, copiedFiles, clock );
     }
 
     public void copyRecursivelyFromOtherFs( File from, FileSystemAbstraction fromFs, File to ) throws IOException
@@ -478,19 +546,12 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
         List<File> names = new ArrayList<>( files.size() );
         names.addAll( files.keySet() );
 
-        Collections.sort( names, new Comparator<File>()
-        {
-            @Override
-            public int compare( File o1, File o2 )
-            {
-                return o1.getAbsolutePath().compareTo( o2.getAbsolutePath() );
-            }
-        } );
+        Collections.sort( names, ( o1, o2 ) -> o1.getAbsolutePath().compareTo( o2.getAbsolutePath() ) );
 
         for ( File name : names )
         {
             EphemeralFileData file = files.get( name );
-            ByteBuffer buf = file.fileAsBuffer.buf;
+            ByteBuffer buf = file.fileAsBuffer.buf();
             buf.position( 0 );
             while ( buf.position() < buf.limit() )
             {
@@ -556,12 +617,37 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     @Override
     public void truncate( File file, long size ) throws IOException
     {
-        EphemeralFileData data = files.get( file );
+        EphemeralFileData data = files.get( canonicalFile( file ) );
         if ( data == null )
         {
             throw new FileNotFoundException( "File " + file + " not found" );
         }
         data.truncate( size );
+    }
+
+    @Override
+    public long lastModifiedTime( File file ) throws IOException
+    {
+        EphemeralFileData data = files.get( canonicalFile( file ) );
+        if ( data == null )
+        {
+            throw new FileNotFoundException( "File " + file + " not found" );
+        }
+        return data.lastModified;
+    }
+
+    @Override
+    public void deleteFileOrThrow( File file ) throws IOException
+    {
+        file = canonicalFile( file );
+        if ( !fileExists( file ) )
+        {
+            throw new NoSuchFileException( file.getAbsolutePath() );
+        }
+        if ( !deleteFile( file ) )
+        {
+            throw new IOException( "Could not delete file: " + file );
+        }
     }
 
     @SuppressWarnings( "serial" )
@@ -816,16 +902,20 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
         private int size;
         private int forcedSize;
         private int locked;
+        private final Clock clock;
+        private long lastModified;
 
-        public EphemeralFileData()
+        public EphemeralFileData( Clock clock )
         {
-            this( new DynamicByteBuffer() );
+            this( new DynamicByteBuffer(), clock );
         }
 
-        private EphemeralFileData( DynamicByteBuffer data )
+        private EphemeralFileData( DynamicByteBuffer data, Clock clock )
         {
             this.fileAsBuffer = data;
             this.forcedBuffer = data.copy();
+            this.clock = clock;
+            this.lastModified = clock.millis();
         }
 
         int read( Positionable fc, ByteBuffer dst )
@@ -877,12 +967,13 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
             }
 
             size = newSize;
+            lastModified = clock.millis();
             return wanted;
         }
 
         synchronized EphemeralFileData copy()
         {
-            EphemeralFileData copy = new EphemeralFileData( fileAsBuffer.copy() );
+            EphemeralFileData copy = new EphemeralFileData( fileAsBuffer.copy(), clock );
             copy.size = size;
             return copy;
         }
@@ -1017,10 +1108,17 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
         private static final int[] SIZES;
         private static final byte[] zeroBuffer = new byte[1024];
         private ByteBuffer buf;
+        private Exception freeCall;
 
         public DynamicByteBuffer()
         {
             buf = allocate( 0 );
+        }
+
+        public ByteBuffer buf()
+        {
+            assertNotFreed();
+            return buf;
         }
 
         /** This is a copying constructor, the input buffer is just read from, never stored in 'this'. */
@@ -1054,7 +1152,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
 
         synchronized DynamicByteBuffer copy()
         {
-            return new DynamicByteBuffer( buf ); // invoke "copy constructor"
+            return new DynamicByteBuffer( buf() ); // invoke "copy constructor"
         }
 
         static
@@ -1086,8 +1184,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
          */
         private ByteBuffer allocate( int sizeIndex )
         {
-            int capacity = (sizeIndex < SIZES.length) ?
-                           SIZES[sizeIndex] : ((sizeIndex - SIZES.length + 1) * SIZES[SIZES.length - 1]);
+            int capacity = capacity( sizeIndex );
             try
             {
                 return ByteBuffer.allocateDirect( capacity );
@@ -1106,8 +1203,15 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
             }
         }
 
+        private int capacity( int sizeIndex )
+        {
+            return (sizeIndex < SIZES.length) ?
+                           SIZES[sizeIndex] : ((sizeIndex - SIZES.length + 1) * SIZES[SIZES.length - 1]);
+        }
+
         void free()
         {
+            assertNotFreed();
             try
             {
                 clear();
@@ -1115,12 +1219,16 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
             finally
             {
                 buf = null;
+                freeCall = new Exception(
+                        "You're most likely seeing this exception because there was an attempt to use this buffer " +
+                        "after it was freed. This stack trace may help you figure out where and why it was freed" );
             }
         }
 
         synchronized void put( int pos, byte[] bytes, int offset, int length )
         {
             verifySize( pos + length );
+            ByteBuffer buf = buf();
             try
             {
                 buf.position( pos );
@@ -1134,12 +1242,14 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
 
         synchronized void get( int pos, byte[] scratchPad, int i, int howMuchToReadThisTime )
         {
+            ByteBuffer buf = buf();
             buf.position( pos );
             buf.get( scratchPad, i, howMuchToReadThisTime );
         }
 
         synchronized void fillWithZeros( int pos, int bytes )
         {
+            ByteBuffer buf = buf();
             buf.position( pos );
             while ( bytes > 0 )
             {
@@ -1155,6 +1265,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
          */
         private void verifySize( int totalAmount )
         {
+            ByteBuffer buf = buf();
             if ( buf.capacity() >= totalAmount )
             {
                 return;
@@ -1163,26 +1274,41 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
             // Double size each time, but after 1M only increase by 1M at a time, until required amount is reached.
             int newSize = buf.capacity();
             int sizeIndex = sizeIndexFor( newSize );
-            while ( newSize < totalAmount )
+            while ( capacity( sizeIndex ) < totalAmount )
             {
                 newSize += Math.min( newSize, 1024 * 1024 );
                 sizeIndex++;
             }
-            int oldPosition = this.buf.position();
-            ByteBuffer buf = allocate( sizeIndex );
-            this.buf.position( 0 );
-            buf.put( this.buf );
-            this.buf = buf;
-            this.buf.position( oldPosition );
+            int oldPosition = buf.position();
+
+            // allocate new buffer
+            ByteBuffer newBuf = allocate( sizeIndex );
+
+            // copy contents of current buffer into new buffer
+            buf.position( 0 );
+            newBuf.put( buf );
+
+            // re-assign buffer to new buffer
+            newBuf.position( oldPosition );
+            this.buf = newBuf;
         }
 
         public void clear()
         {
-            this.buf.clear();
+            buf().clear();
+        }
+
+        private void assertNotFreed()
+        {
+            if ( this.buf == null )
+            {
+                throw new IllegalStateException( "This buffer have been freed", freeCall );
+            }
         }
 
         void dump( OutputStream target, byte[] scratchPad, int size ) throws IOException
         {
+            ByteBuffer buf = buf();
             buf.position( 0 );
             while ( size > 0 )
             {
@@ -1195,20 +1321,20 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
     }
 
     // Copied from kernel since we don't want to depend on that module here
-    private static abstract class PrefetchingIterator<T> implements Iterator<T>
+    private abstract static class PrefetchingIterator<T> implements Iterator<T>
     {
         boolean hasFetchedNext;
         T nextObject;
 
-    	/**
-    	 * @return {@code true} if there is a next item to be returned from the next
-    	 * call to {@link #next()}.
-    	 */
-    	@Override
+        /**
+         * @return {@code true} if there is a next item to be returned from the next
+         * call to {@link #next()}.
+         */
+        @Override
         public boolean hasNext()
-    	{
-    		return peek() != null;
-    	}
+        {
+            return peek() != null;
+        }
 
         /**
          * @return the next element that will be returned from {@link #next()} without
@@ -1227,32 +1353,32 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction
         }
 
         /**
-    	 * Uses {@link #hasNext()} to try to fetch the next item and returns it
-    	 * if found, otherwise it throws a {@link java.util.NoSuchElementException}.
-    	 *
-    	 * @return the next item in the iteration, or throws
-    	 * {@link java.util.NoSuchElementException} if there's no more items to return.
-    	 */
-    	@Override
+         * Uses {@link #hasNext()} to try to fetch the next item and returns it
+         * if found, otherwise it throws a {@link java.util.NoSuchElementException}.
+         *
+         * @return the next item in the iteration, or throws
+         * {@link java.util.NoSuchElementException} if there's no more items to return.
+         */
+        @Override
         public T next()
-    	{
-    		if ( !hasNext() )
-    		{
-    			throw new NoSuchElementException();
-    		}
-    		T result = nextObject;
-    		nextObject = null;
-    		hasFetchedNext = false;
-    		return result;
-    	}
+        {
+            if ( !hasNext() )
+            {
+                throw new NoSuchElementException();
+            }
+            T result = nextObject;
+            nextObject = null;
+            hasFetchedNext = false;
+            return result;
+        }
 
-    	protected abstract T fetchNextOrNull();
+        protected abstract T fetchNextOrNull();
 
-    	@Override
+        @Override
         public void remove()
-    	{
-    		throw new UnsupportedOperationException();
-    	}
+        {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static class CombiningIterator<T> extends PrefetchingIterator<T>

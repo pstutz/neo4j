@@ -55,13 +55,14 @@ import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.AnonymousContext;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.ha.HighlyAvailableGraphDatabase;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.ha.ClusterManager;
 import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngine;
-import org.neo4j.kernel.impl.store.MetaDataStore;
+import org.neo4j.kernel.impl.store.format.highlimit.HighLimit;
 import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.storemigration.StoreUpgrader;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
@@ -72,10 +73,11 @@ import org.neo4j.register.Registers;
 import org.neo4j.server.CommunityBootstrapper;
 import org.neo4j.server.ServerBootstrapper;
 import org.neo4j.server.ServerTestUtils;
-import org.neo4j.test.SuppressOutput;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.server.configuration.ClientConnectorSettings;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import org.neo4j.test.Unzip;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
@@ -87,7 +89,6 @@ import static org.neo4j.helpers.collection.Iterables.count;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.kernel.impl.ha.ClusterManager.allSeesAllAsAvailable;
 import static org.neo4j.kernel.impl.ha.ClusterManager.clusterOfSize;
-import static org.neo4j.server.configuration.ServerSettings.httpConnector;
 
 @RunWith( Enclosed.class )
 public class StoreUpgradeIntegrationTest
@@ -146,6 +147,21 @@ public class StoreUpgradeIntegrationTest
                     selectivities( 1.0, 1.0, 1.0 ),
                     indexCounts( counts( 0, 38, 38, 38 ), counts( 0, 1, 1, 1 ), counts( 0, 133, 133, 133 ) )
             )} );
+    private static final List<Store[]> STORES300 = Arrays.asList(
+            new Store[]{new Store( "E.H.0-empty.zip",
+                    0 /* node count */,
+                    1 /* last txId */,
+                    selectivities(),
+                    indexCounts(),
+                    HighLimit.NAME
+                    )},
+            new Store[]{new Store( "E.H.0-data.zip",
+                    174 /* node count */,
+                    30 /* last txId */,
+                    selectivities( 1.0, 1.0, 1.0 ),
+                    indexCounts( counts( 0, 38, 38, 38 ), counts( 0, 1, 1, 1 ), counts( 0, 133, 133, 133 ) ),
+                    HighLimit.NAME
+                    )} );
 
     @RunWith( Parameterized.class )
     public static class StoreUpgradeTest
@@ -156,13 +172,13 @@ public class StoreUpgradeIntegrationTest
         @Parameterized.Parameters( name = "{0}" )
         public static Collection<Store[]> stores()
         {
-            return Iterables.asCollection( Iterables.concat( STORES20, STORES21, STORES22, STORES23 ) );
+            return Iterables.asCollection( Iterables.concat( STORES20, STORES21, STORES22, STORES23, STORES300 ) );
         }
 
         @Rule
         public SuppressOutput suppressOutput = SuppressOutput.suppressAll();
         @Rule
-        public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+        public TestDirectory testDir = TestDirectory.testDirectory();
 
         @Test
         public void embeddedDatabaseShouldStartOnOlderStoreWhenUpgradeIsEnabled() throws Throwable
@@ -173,7 +189,6 @@ public class StoreUpgradeIntegrationTest
             GraphDatabaseBuilder builder = factory.newEmbeddedDatabaseBuilder( dir );
             builder.setConfig( GraphDatabaseSettings.allow_store_upgrade, "true" );
             builder.setConfig( GraphDatabaseSettings.pagecache_memory, "8m" );
-            builder.setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME );
             builder.setConfig( GraphDatabaseSettings.logs_directory, testDir.directory( "logs" ).getAbsolutePath() );
             GraphDatabaseService db = builder.newGraphDatabase();
             try
@@ -186,7 +201,7 @@ public class StoreUpgradeIntegrationTest
                 db.shutdown();
             }
 
-            assertConsistentStore( dir, getConfig() );
+            assertConsistentStore( dir );
         }
 
         @Test
@@ -205,9 +220,8 @@ public class StoreUpgradeIntegrationTest
             props.setProperty( GraphDatabaseSettings.logs_directory.name(), rootDir.getAbsolutePath() );
             props.setProperty( GraphDatabaseSettings.allow_store_upgrade.name(), "true" );
             props.setProperty( GraphDatabaseSettings.pagecache_memory.name(), "8m" );
-            props.setProperty( GraphDatabaseSettings.record_format.name(), StandardV3_0.NAME );
-            props.setProperty( httpConnector( "1" ).type.name(), "HTTP" );
-            props.setProperty( httpConnector( "1" ).enabled.name(), "true" );
+            props.setProperty( ClientConnectorSettings.httpConnector( "http" ).type.name(), "HTTP" );
+            props.setProperty( ClientConnectorSettings.httpConnector( "http" ).enabled.name(), "true" );
             try ( FileWriter writer = new FileWriter( configFile ) )
             {
                 props.store( writer, "" );
@@ -216,7 +230,7 @@ public class StoreUpgradeIntegrationTest
             ServerBootstrapper bootstrapper = new CommunityBootstrapper();
             try
             {
-                bootstrapper.start( Optional.of( configFile ) );
+                bootstrapper.start( rootDir.getAbsoluteFile(), Optional.of( configFile ) );
                 assertTrue( bootstrapper.isRunning() );
                 checkInstance( store, bootstrapper.getServer().getDatabase().getGraph() );
             }
@@ -237,7 +251,6 @@ public class StoreUpgradeIntegrationTest
             GraphDatabaseBuilder builder = factory.newEmbeddedDatabaseBuilder( dir );
             builder.setConfig( GraphDatabaseSettings.allow_store_upgrade, "true" );
             builder.setConfig( GraphDatabaseSettings.pagecache_memory, "8m" );
-            builder.setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME );
             builder.setConfig( GraphDatabaseSettings.logs_directory, testDir.directory( "logs" ).getAbsolutePath() );
             GraphDatabaseService db = builder.newGraphDatabase();
             try
@@ -249,7 +262,7 @@ public class StoreUpgradeIntegrationTest
                 db.shutdown();
             }
 
-            assertConsistentStore( dir, getConfig() );
+            assertConsistentStore( dir );
 
             // start the cluster with the db migrated from the old instance
             File haDir = new File( dir.getParentFile(), "ha-stuff" );
@@ -275,8 +288,8 @@ public class StoreUpgradeIntegrationTest
                 clusterManager.safeShutdown();
             }
 
-            assertConsistentStore( new File( master.getStoreDir() ), getConfig() );
-            assertConsistentStore( new File( slave.getStoreDir() ), getConfig() );
+            assertConsistentStore( new File( master.getStoreDir() ) );
+            assertConsistentStore( new File( slave.getStoreDir() ) );
         }
     }
 
@@ -284,7 +297,7 @@ public class StoreUpgradeIntegrationTest
     public static class StoreUpgradeFailingTest
     {
         @Rule
-        public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+        public TestDirectory testDir = TestDirectory.testDirectory();
 
         @Parameterized.Parameter(0)
         public String ignored; // to make JUnit happy...
@@ -310,7 +323,6 @@ public class StoreUpgradeIntegrationTest
             GraphDatabaseBuilder builder = factory.newEmbeddedDatabaseBuilder( dir );
             builder.setConfig( GraphDatabaseSettings.allow_store_upgrade, "true" );
             builder.setConfig( GraphDatabaseSettings.pagecache_memory, "8m" );
-            builder.setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME );
             try
             {
                 builder.newGraphDatabase();
@@ -320,7 +332,7 @@ public class StoreUpgradeIntegrationTest
             {
                 assertTrue( ex.getCause() instanceof LifecycleException );
                 Throwable realException = ex.getCause().getCause();
-                assertTrue( Exceptions.contains( realException, MetaDataStore.DEFAULT_NAME,
+                assertTrue( "Unexpected exception", Exceptions.contains( realException,
                         StoreUpgrader.UnexpectedUpgradingStoreVersionException.class ) );
             }
         }
@@ -335,11 +347,11 @@ public class StoreUpgradeIntegrationTest
         @Parameterized.Parameters( name = "{0}" )
         public static Collection<Store[]> stores()
         {
-            return Iterables.asCollection( Iterables.concat( STORES21, STORES22, STORES23 ) );
+            return Iterables.asCollection( Iterables.concat( STORES21, STORES22, STORES23, STORES300 ) );
         }
 
         @Rule
-        public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+        public TestDirectory testDir = TestDirectory.testDirectory();
 
         @Test
         public void shouldBeAbleToUpgradeAStoreWithoutIdFilesAsBackups() throws Throwable
@@ -357,7 +369,7 @@ public class StoreUpgradeIntegrationTest
             GraphDatabaseFactory factory = new TestGraphDatabaseFactory();
             GraphDatabaseBuilder builder = factory.newEmbeddedDatabaseBuilder( dir );
             builder.setConfig( GraphDatabaseSettings.allow_store_upgrade, "true" );
-            builder.setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME );
+            builder.setConfig( GraphDatabaseSettings.record_format, store.getFormatFamily() );
             GraphDatabaseService db = builder.newGraphDatabase();
             try
             {
@@ -380,15 +392,23 @@ public class StoreUpgradeIntegrationTest
         final long lastTxId;
         private final double[] indexSelectivity;
         final long[][] indexCounts;
+        private final String formatFamily;
 
         private Store( String resourceName, long expectedNodeCount, long lastTxId,
                 double[] indexSelectivity, long[][] indexCounts )
+        {
+            this( resourceName, expectedNodeCount, lastTxId, indexSelectivity, indexCounts, StandardV3_0.NAME );
+        }
+
+        private Store( String resourceName, long expectedNodeCount, long lastTxId,
+                double[] indexSelectivity, long[][] indexCounts, String formatFamily )
         {
             this.resourceName = resourceName;
             this.expectedNodeCount = expectedNodeCount;
             this.lastTxId = lastTxId;
             this.indexSelectivity = indexSelectivity;
             this.indexCounts = indexCounts;
+            this.formatFamily = formatFamily;
         }
 
         public File prepareDirectory( File targetDir ) throws IOException
@@ -412,6 +432,11 @@ public class StoreUpgradeIntegrationTest
         {
             return indexCounts.length;
         }
+
+        public String getFormatFamily()
+        {
+            return formatFamily;
+        }
     }
 
     private static void checkInstance( Store store, GraphDatabaseAPI db ) throws KernelException
@@ -425,7 +450,7 @@ public class StoreUpgradeIntegrationTest
     private static void checkIndexCounts( Store store, GraphDatabaseAPI db ) throws KernelException
     {
         KernelAPI kernel = db.getDependencyResolver().resolveDependency( KernelAPI.class );
-        try ( KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.READ );
+        try ( KernelTransaction tx = kernel.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.read() );
               Statement statement = tx.acquireStatement() )
         {
             Iterator<IndexDescriptor> indexes = getAllIndexes( db );
@@ -477,7 +502,7 @@ public class StoreUpgradeIntegrationTest
                     }
                     else
                     {
-                        counts.put( label, 1l );
+                        counts.put( label, 1L );
                     }
                 }
             }
@@ -590,11 +615,5 @@ public class StoreUpgradeIntegrationTest
             }
         }
         throw new IllegalStateException( "Index did not become ONLINE within reasonable time" );
-    }
-
-    private static Config getConfig()
-    {
-        return new Config( stringMap( GraphDatabaseSettings.record_format.name(),
-                StandardV3_0.NAME ) );
     }
 }

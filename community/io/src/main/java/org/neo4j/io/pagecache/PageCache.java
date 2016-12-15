@@ -21,8 +21,11 @@ package org.neo4j.io.pagecache;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * A page caching mechanism that allows caching multiple files and accessing their data
@@ -50,16 +53,30 @@ public interface PageCache extends AutoCloseable
      * the {@link StandardOpenOption#TRUNCATE_EXISTING} will truncate any existing file <em>iff</em> it has not already
      * been mapped.
      * The {@link StandardOpenOption#DELETE_ON_CLOSE} will cause the file to be deleted after the last unmapping.
-     * The {@link PageCacheOpenOptions#EXCLUSIVE} will cause the {@code map} method to throw if the file is already
-     * mapped. Otherwise, the file will be mapped exclusively, and subsequent attempts at mapping the file will fail
-     * with an exception until the exclusively mapped file is closed.
      * All other options are either silently ignored, or will cause an exception to be thrown.
      * @throws java.nio.file.NoSuchFileException if the given file does not exist, and the
      * {@link StandardOpenOption#CREATE} option was not specified.
-     * @throws IOException if the file could otherwise not be mapped. Causes include the file being locked, or exclusive
-     * mapping conflicts.
+     * @throws IOException if the file could otherwise not be mapped. Causes include the file being locked.
      */
     PagedFile map( File file, int pageSize, OpenOption... openOptions ) throws IOException;
+
+    /**
+     * Ask for an already mapped paged file, backed by this page cache.
+     * <p>
+     * If mapping exist, the returned {@link Optional} will report {@link Optional#isPresent()} true and
+     * {@link Optional#get()} will return the same {@link PagedFile} instance that was initially returned my
+     * {@link #map(File, int, OpenOption...)}.
+     * If no mapping exist for this file, then returned {@link Optional} will report {@link Optional#isPresent()}
+     * false.
+     * <p>
+     * NOTE! User is responsible for closing the returned paged file.
+     *
+     * @param file The file to try to get the mapped paged file for.
+     * @return {@link Optional} containing the {@link PagedFile} mapped by this {@link PageCache} for given file, or an
+     * empty {@link Optional} if no mapping exist.
+     * @throws IOException if page cache has been closed or page eviction problems occur.
+     */
+    Optional<PagedFile> getExistingMapping( File file ) throws IOException;
 
     /** Flush all dirty pages */
     void flushAndForce() throws IOException;
@@ -71,12 +88,46 @@ public interface PageCache extends AutoCloseable
      */
     void flushAndForce( IOLimiter limiter ) throws IOException;
 
-    /** Flush all dirty pages and close the page cache. */
-    void close() throws IOException;
+    /**
+     * Close the page cache to prevent any future mapping of files.
+     * This also releases any internal resources, including the {@link PageSwapperFactory} through its
+     * {@link PageSwapperFactory#close() close} method.
+     * @throws IllegalStateException if not all files have been unmapped, with {@link PagedFile#close()}, prior to
+     * closing the page cache. In this case, the page cache <em>WILL NOT</em> be considered to be successfully closed.
+     * @throws RuntimeException if the {@link PageSwapperFactory#close()} method throws. In this case the page cache
+     * <em>WILL BE</em> considered to have been closed successfully.
+     **/
+    void close() throws IllegalStateException;
 
-    /** The size in bytes of the pages managed by this cache. */
+    /**
+     * The size in bytes of the pages managed by this cache.
+     **/
     int pageSize();
 
-    /** The max number of cached pages. */
+    /**
+     * The max number of cached pages.
+     **/
     int maxCachedPages();
+
+    /**
+     * Return a stream of {@link FileHandle file handles} for every file in the given directory, and its
+     * sub-directories.
+     * <p>
+     * Alternatively, if the {@link File} given as an argument refers to a file instead of a directory, then a stream
+     * will be returned with a file handle for just that file.
+     * <p>
+     * The stream is based on a snapshot of the file tree, so changes made to the tree using the returned file handles
+     * will not be reflected in the stream.
+     * <p>
+     * No directories will be returned. Only files. If a file handle ends up leaving a directory empty through a
+     * rename or a delete, then the empty directory will automatically be deleted as well.
+     * Likewise, if a file is moved to a path where not all of the directories in the path exists, then those missing
+     * directories will be created prior to the file rename.
+     *
+     * @param directory The base directory to start streaming files from, or the specific individual file to stream.
+     * @return A stream of all files in the tree.
+     * @throws NoSuchFileException If the given base directory or file does not exists.
+     * @throws IOException If an I/O error occurs, possibly with the canonicalisation of the paths.
+     */
+    Stream<FileHandle> streamFilesRecursive( File directory ) throws IOException;
 }

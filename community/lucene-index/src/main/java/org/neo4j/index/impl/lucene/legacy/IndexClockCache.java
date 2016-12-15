@@ -35,7 +35,7 @@ public class IndexClockCache extends ClockCache<IndexIdentifier, IndexReference>
     {
         try
         {
-            searcher.dispose( true );
+            searcher.dispose();
         }
         catch ( IOException e )
         {

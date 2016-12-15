@@ -20,13 +20,13 @@
 package org.neo4j.server;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Map;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.neo4j.graphdb.TransactionFailureException;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.kernel.GraphDatabaseDependencies;
 import org.neo4j.kernel.configuration.Config;
@@ -35,12 +35,13 @@ import org.neo4j.kernel.info.JvmMetadataRepository;
 import org.neo4j.logging.FormattedLogProvider;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.server.configuration.ClientConnectorSettings;
 import org.neo4j.server.configuration.ConfigLoader;
-import org.neo4j.server.configuration.ServerSettings;
 import org.neo4j.server.logging.JULBridge;
 import org.neo4j.server.logging.JettyLogBridge;
 
 import static java.lang.String.format;
+import static org.neo4j.server.configuration.ClientConnectorSettings.httpConnector;
 
 public abstract class ServerBootstrapper implements Bootstrapper
 {
@@ -51,28 +52,37 @@ public abstract class ServerBootstrapper implements Bootstrapper
     private NeoServer server;
     private Thread shutdownHook;
     private GraphDatabaseDependencies dependencies = GraphDatabaseDependencies.newDependencies();
-    private Log log;
+    // in case we have errors loading/validating the configuration log to stdout
+    private Log log = FormattedLogProvider.toOutputStream( System.out ).getLog( getClass() );
     private String serverAddress = "unknown address";
 
     public static int start( Bootstrapper boot, String... argv )
     {
         ServerCommandLineArgs args = ServerCommandLineArgs.parse( argv );
-        return boot.start( args.configFile(), args.configOverrides() );
+
+        if ( args.homeDir() == null )
+        {
+            throw new ServerStartupException( "Argument --home-dir is required and was not provided." );
+        }
+
+        return boot.start( args.homeDir(), args.configFile(), args.configOverrides() );
     }
 
     @Override
     @SafeVarargs
-    public final int start( Optional<File> configFile, Pair<String, String>... configOverrides )
+    public final int start( File homeDir, Optional<File> configFile, Pair<String, String>... configOverrides )
     {
-        LogProvider userLogProvider = setupLogging();
-        dependencies = dependencies.userLogProvider( userLogProvider );
-        log = userLogProvider.getLog( getClass() );
-
         try
         {
-            Config config = createConfig( log, configFile, configOverrides );
-            serverAddress = ServerSettings.httpConnector( config, ServerSettings.HttpConnector.Encryption.NONE )
-                    .map( ( connector ) -> connector.address.toString() )
+            Config config = createConfig( homeDir, configFile, configOverrides );
+
+            LogProvider userLogProvider = setupLogging( config );
+            dependencies = dependencies.userLogProvider( userLogProvider );
+            log = userLogProvider.getLog( getClass() );
+            config.setLogger( log );
+
+            serverAddress = ClientConnectorSettings.httpConnector( config, ClientConnectorSettings.HttpConnector.Encryption.NONE )
+                    .map( ( connector ) -> config.get( connector.address ).toString() )
                     .orElse( serverAddress );
 
             checkCompatibility();
@@ -98,7 +108,7 @@ public abstract class ServerBootstrapper implements Bootstrapper
         }
         catch ( Exception e )
         {
-            log.error( format( "Failed to start Neo4j on %s", serverAddress ), e );
+            log.error( format( "Failed to start Neo4j on %s.", serverAddress ), e );
             return WEB_SERVER_STARTUP_ERROR_CODE;
         }
     }
@@ -140,9 +150,11 @@ public abstract class ServerBootstrapper implements Bootstrapper
 
     protected abstract Iterable<Class<?>> settingsClasses( Map<String, String> settings );
 
-    private static LogProvider setupLogging()
+    private static LogProvider setupLogging( Config config )
     {
-        LogProvider userLogProvider = FormattedLogProvider.withoutRenderingContext().toOutputStream( System.out );
+        LogProvider userLogProvider = FormattedLogProvider.withoutRenderingContext()
+                            .withDefaultLogLevel( config.get( GraphDatabaseSettings.store_internal_log_level ) )
+                            .toOutputStream( System.out );
         JULBridge.resetJUL();
         Logger.getLogger( "" ).setLevel( Level.WARNING );
         JULBridge.forwardTo( userLogProvider );
@@ -150,9 +162,9 @@ public abstract class ServerBootstrapper implements Bootstrapper
         return userLogProvider;
     }
 
-    private Config createConfig( Log log, Optional<File> file, Pair<String, String>[] configOverrides ) throws IOException
+    private Config createConfig( File homeDir, Optional<File> file, Pair<String, String>[] configOverrides )
     {
-        return new ConfigLoader( this::settingsClasses ).loadConfig( file, log, configOverrides );
+        return new ConfigLoader( this::settingsClasses ).loadConfig( Optional.of( homeDir ), file, configOverrides );
     }
 
     private void addShutdownHook()

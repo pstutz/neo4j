@@ -19,15 +19,14 @@
  */
 package org.neo4j.kernel;
 
-import java.util.concurrent.TimeUnit;
+import java.time.Clock;
 
 import org.neo4j.kernel.impl.transaction.TransactionStats;
 import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.time.Clocks;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.locks.LockSupport.parkNanos;
-
-import static org.neo4j.helpers.Clock.SYSTEM_CLOCK;
 import static org.neo4j.kernel.AvailabilityGuard.AvailabilityRequirement;
 import static org.neo4j.kernel.AvailabilityGuard.availabilityRequirement;
 
@@ -42,11 +41,6 @@ public class DatabaseAvailability implements Lifecycle
     private final AvailabilityGuard availabilityGuard;
     private final TransactionStats transactionMonitor;
     private final long awaitActiveTransactionDeadlineMillis;
-
-    public DatabaseAvailability( AvailabilityGuard availabilityGuard, TransactionStats transactionMonitor )
-    {
-        this( availabilityGuard, transactionMonitor, TimeUnit.SECONDS.toMillis( 10 ) );
-    }
 
     public DatabaseAvailability( AvailabilityGuard availabilityGuard, TransactionStats transactionMonitor,
             long awaitActiveTransactionDeadlineMillis )
@@ -86,8 +80,9 @@ public class DatabaseAvailability implements Lifecycle
 
     private void awaitTransactionsClosedWithinTimeout()
     {
-        long deadline = SYSTEM_CLOCK.currentTimeMillis() + awaitActiveTransactionDeadlineMillis;
-        while ( transactionMonitor.getNumberOfActiveTransactions() > 0 && SYSTEM_CLOCK.currentTimeMillis() < deadline )
+        Clock clock = Clocks.systemClock();
+        long deadline = clock.millis() + awaitActiveTransactionDeadlineMillis;
+        while ( transactionMonitor.getNumberOfActiveTransactions() > 0 && clock.millis() < deadline )
         {
             parkNanos( MILLISECONDS.toNanos( 10 ) );
         }

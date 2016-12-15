@@ -19,12 +19,12 @@
  */
 package org.neo4j.kernel;
 
+import org.junit.Rule;
+import org.junit.Test;
+
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
-
-import org.junit.Rule;
-import org.junit.Test;
 
 import org.neo4j.adversaries.ClassGuardedAdversary;
 import org.neo4j.adversaries.CountingAdversary;
@@ -47,8 +47,8 @@ import org.neo4j.kernel.impl.transaction.command.Command;
 import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.AdversarialPageCacheGraphDatabaseFactory;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.hamcrest.Matchers.instanceOf;
 import static org.junit.Assert.assertEquals;
@@ -57,13 +57,12 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
 import static org.neo4j.graphdb.RelationshipType.withName;
 
 public class RecoveryIT
 {
     @Rule
-    public final TargetDirectory.TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory directory = TestDirectory.testDirectory();
 
     @Test
     public void idGeneratorsRebuildAfterRecovery() throws IOException
@@ -86,6 +85,8 @@ public class RecoveryIT
         NeoStores neoStore = ((GraphDatabaseAPI) recoveredDatabase).getDependencyResolver()
                 .resolveDependency( RecordStorageEngine.class ).testAccessNeoStores();
         assertEquals( numberOfNodes, neoStore.getNodeStore().getHighId() );
+        // Make sure id generator has been rebuilt so this doesn't throw null pointer exception
+        assertTrue( neoStore.getNodeStore().nextId() > 0 );
 
         database.shutdown();
         recoveredDatabase.shutdown();

@@ -46,13 +46,13 @@ import org.neo4j.helpers.Strings;
 import org.neo4j.io.IOUtils;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.schema.LuceneDocumentStructure;
-import org.neo4j.kernel.api.impl.schema.LuceneSchemaIndex;
 import org.neo4j.kernel.api.impl.schema.LuceneSchemaIndexBuilder;
+import org.neo4j.kernel.api.impl.schema.SchemaIndex;
 import org.neo4j.kernel.api.index.PreexistingIndexEntryConflictException;
 import org.neo4j.kernel.api.index.PropertyAccessor;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.test.Randoms;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.util.stream.Collectors.toSet;
 import static org.hamcrest.Matchers.instanceOf;
@@ -66,12 +66,12 @@ public class LuceneSchemaIndexUniquenessVerificationIT
     private static final int PROPERTY_KEY_ID = 42;
 
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
 
     @Parameter
     public int nodesToCreate;
 
-    private LuceneSchemaIndex index;
+    private SchemaIndex index;
 
     @Parameters( name = "created nodes: {0}" )
     public static Iterable<Object[]> data()

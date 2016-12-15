@@ -22,28 +22,42 @@ package org.neo4j.kernel.impl.query;
 import org.neo4j.graphdb.Lock;
 import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.kernel.GraphDatabaseQueryService;
-import org.neo4j.kernel.api.dbms.DbmsOperations;
+import org.neo4j.kernel.api.ExecutingQuery;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.dbms.DbmsOperations;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.api.txstate.TxStateHolder;
 
 public interface TransactionalContext
 {
+    ExecutingQuery executingQuery();
+
     ReadOperations readOperations();
 
     DbmsOperations dbmsOperations();
 
     boolean isTopLevelTx();
 
+    /**
+     * This should be called once the query is finished, either successfully or not.
+     * Should be called from the same thread the query was executing in.
+     * @param success signals if the underlying transaction should be committed or rolled back.
+     */
     void close( boolean success );
+
+    /**
+     * This is used to terminate a currently running query. Can be called from any thread. Will roll back the current
+     * transaction if it is still open.
+     */
+    void terminate();
 
     void commitAndRestartTx();
 
     void cleanForReuse();
 
-    TransactionalContext provideContext();
+    TransactionalContext getOrBeginNewIfClosed();
 
     boolean isOpen();
 
@@ -51,14 +65,17 @@ public interface TransactionalContext
 
     Statement statement();
 
+    /**
+     * Check that current context satisfy current execution guard.
+     * In case if guard criteria is not satisfied {@link org.neo4j.kernel.guard.GuardException} will be thrown.
+     */
+    void check();
+
     TxStateHolder stateView();
 
     Lock acquireWriteLock( PropertyContainer p );
 
-    AccessMode accessMode();
+    SecurityContext securityContext();
 
-    KernelTransaction.Revertable restrictCurrentTransaction( AccessMode accessMode );
-
-    QuerySession.MetadataKey<TransactionalContext> METADATA_KEY =
-            new QuerySession.MetadataKey<>( TransactionalContext.class, "transactional-context" );
+    KernelTransaction.Revertable restrictCurrentTransaction( SecurityContext context );
 }

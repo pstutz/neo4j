@@ -19,11 +19,11 @@
  */
 package org.neo4j.kernel.impl.traversal;
 
+import org.junit.Test;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-
-import org.junit.Test;
 
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
@@ -48,7 +48,7 @@ public class TestSorting extends TraversalTestBase
          *                   |
          *              (Nicholas)
          */
-        
+
         String me = "me";
         String abraham = "Abraham";
         String george = "George";
@@ -82,7 +82,7 @@ public class TestSorting extends TraversalTestBase
         }
         return all;
     }
-    
+
     private static String triplet( String i, String type, String you )
     {
         return i + " " + type + " " + you;

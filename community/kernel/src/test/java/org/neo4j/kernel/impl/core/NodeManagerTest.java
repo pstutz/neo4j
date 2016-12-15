@@ -84,7 +84,6 @@ public class NodeManagerTest
         thread.start();
         thread.join();
 
-
         // THEN the new node is picked up by the iterator
         assertThat( addToCollection( allNodes, new ArrayList<Node>() ).size(), is( 2 ) );
         transaction.close();
@@ -125,34 +124,6 @@ public class NodeManagerTest
         tx.close();
     }
 
-    private void delete( Relationship relationship )
-    {
-        Transaction tx = db.beginTx();
-        relationship.delete();
-        tx.success();
-        tx.close();
-    }
-
-    private Node createNodeWith( String key, Object value )
-    {
-        Transaction tx = db.beginTx();
-        Node node = db.createNode();
-        node.setProperty( key, value );
-        tx.success();
-        tx.close();
-        return node;
-    }
-
-
-    private Relationship createRelationshipWith( String key, Object value )
-    {
-        Transaction tx = db.beginTx();
-        Relationship relationship = createRelationshipAssumingTxWith( key, value );
-        tx.success();
-        tx.close();
-        return relationship;
-    }
-
     private Relationship createRelationshipAssumingTxWith( String key, Object value )
     {
         Node a = db.createNode();
@@ -160,18 +131,5 @@ public class NodeManagerTest
         Relationship relationship = a.createRelationshipTo( b, RelationshipType.withName( "FOO" ) );
         relationship.setProperty( key, value );
         return relationship;
-    }
-
-    private void delete( Node node )
-    {
-        Transaction tx = db.beginTx();
-        node.delete();
-        tx.success();
-        tx.close();
-    }
-
-    private NodeManager getNodeManager()
-    {
-        return db.getDependencyResolver().resolveDependency( NodeManager.class );
     }
 }

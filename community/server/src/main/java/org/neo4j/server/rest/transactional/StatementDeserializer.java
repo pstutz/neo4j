@@ -19,32 +19,20 @@
  */
 package org.neo4j.server.rest.transactional;
 
-import org.codehaus.jackson.JsonFactory;
-import org.codehaus.jackson.JsonGenerator;
-import org.codehaus.jackson.JsonParseException;
-import org.codehaus.jackson.JsonParser;
-import org.codehaus.jackson.JsonToken;
+import org.codehaus.jackson.*;
 import org.codehaus.jackson.map.JsonMappingException;
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-
 import org.neo4j.helpers.collection.PrefetchingIterator;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.server.rest.transactional.error.Neo4jError;
+import saschapeukert.QueryRewriter;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.*;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableMap;
-import static org.codehaus.jackson.JsonToken.END_ARRAY;
-import static org.codehaus.jackson.JsonToken.END_OBJECT;
-import static org.codehaus.jackson.JsonToken.FIELD_NAME;
-import static org.codehaus.jackson.JsonToken.START_ARRAY;
-import static org.codehaus.jackson.JsonToken.START_OBJECT;
+import static org.codehaus.jackson.JsonToken.*;
 import static org.neo4j.helpers.collection.Iterators.emptyIterator;
 import static org.neo4j.helpers.collection.MapUtil.map;
 
@@ -123,6 +111,10 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
                         {
                         case "statement":
                             statement = input.readValueAs( String.class );
+
+                            //TODO: Sascha, Just for the browser?!
+                            QueryRewriter  q = new QueryRewriter();
+                            statement = q.rewrite(statement);
                             break;
                         case "parameters":
                             parameters = readMap( input );
@@ -146,9 +138,11 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
                     return new Statement( statement, parameters == null ? NO_PARAMETERS : parameters, includeStats,
                                           ResultDataContent.fromNames( resultsDataContents ) );
 
-
                 case FINISHED:
                     return null;
+
+                default:
+                    break;
             }
             return null;
         }

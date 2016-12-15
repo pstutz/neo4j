@@ -21,20 +21,24 @@ package org.neo4j.tools.txlog;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.neo4j.collection.primitive.Primitive;
+import org.neo4j.collection.primitive.PrimitiveLongLongMap;
 import org.neo4j.helpers.Args;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
-import org.neo4j.kernel.impl.storemigration.LogFiles;
 import org.neo4j.kernel.impl.transaction.command.Command;
 import org.neo4j.kernel.impl.transaction.log.LogEntryCursor;
+import org.neo4j.kernel.impl.transaction.log.LogPosition;
 import org.neo4j.kernel.impl.transaction.log.PhysicalLogFiles;
+import org.neo4j.kernel.impl.transaction.log.entry.CheckPoint;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntry;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryCommand;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryCommit;
@@ -42,6 +46,8 @@ import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.test.LogTestUtils;
 import org.neo4j.tools.txlog.checktypes.CheckType;
 import org.neo4j.tools.txlog.checktypes.CheckTypes;
+
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_ID;
 
 /**
  * Tool that verifies consistency of transaction logs.
@@ -56,43 +62,113 @@ import org.neo4j.tools.txlog.checktypes.CheckTypes;
 public class CheckTxLogs
 {
     private static final String HELP_FLAG = "help";
+    private static final String VALIDATE_CHECKPOINTS_FLAG = "validate-checkpoints";
     private static final String CHECKS = "checks";
     private static final String SEPARATOR = ",";
 
+    private final PrintStream out;
     private final FileSystemAbstraction fs;
 
-    public CheckTxLogs( FileSystemAbstraction fs )
+    public CheckTxLogs( PrintStream out, FileSystemAbstraction fs )
     {
+        this.out = out;
         this.fs = fs;
     }
 
     public static void main( String[] args ) throws Exception
     {
-        Args arguments = Args.withFlags( HELP_FLAG ).parse( args );
+        PrintStream out = System.out;
+        Args arguments = Args.withFlags( HELP_FLAG, VALIDATE_CHECKPOINTS_FLAG ).parse( args );
         if ( arguments.getBoolean( HELP_FLAG ) )
         {
-            printUsageAndExit();
+            printUsageAndExit( out );
         }
-        CheckType[] checkTypes = parseChecks( arguments );
-        File dir = parseDir( arguments );
 
-        File[] logs = txLogsIn( dir );
-        System.out.println( "Found " + logs.length + " log files to verify" );
+        boolean validateCheckPoints = arguments.getBoolean( VALIDATE_CHECKPOINTS_FLAG );
+        CheckType<?,?>[] checkTypes = parseChecks( arguments );
+        File dir = parseDir( out, arguments );
 
-        CheckTxLogs tool = new CheckTxLogs( new DefaultFileSystemAbstraction() );
+        FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
+        PhysicalLogFiles logFiles = new PhysicalLogFiles( dir, fs );
+        int numberOfLogFilesFound = (int) (logFiles.getHighestLogVersion() - logFiles.getLowestLogVersion() + 1);
+        out.println( "Found " + numberOfLogFilesFound + " log files to verify in " + dir.getCanonicalPath() );
 
-        tool.scan( logs, new PrintingInconsistenciesHandler(), checkTypes );
+        CheckTxLogs tool = new CheckTxLogs( out, fs );
+        PrintingInconsistenciesHandler handler = new PrintingInconsistenciesHandler( out );
+        boolean success = tool.scan( logFiles, handler, checkTypes );
+
+        if ( validateCheckPoints )
+        {
+            success &= tool.validateCheckPoints( logFiles, handler );
+        }
+
+        if ( !success )
+        {
+            System.exit( 1 );
+        }
     }
 
-    void scan( File[] logs, InconsistenciesHandler handler, CheckType<?,?>... checkTypes ) throws IOException
+    // used in other projects do not remove!
+    public boolean checkAll( File storeDirectory ) throws IOException
     {
+        PhysicalLogFiles logFiles = new PhysicalLogFiles( storeDirectory, fs );
+        InconsistenciesHandler handler = new PrintingInconsistenciesHandler( out );
+        boolean success = scan( logFiles, handler, CheckTypes.CHECK_TYPES );
+        success &= validateCheckPoints( logFiles, handler );
+        return success;
+    }
+
+    boolean validateCheckPoints( PhysicalLogFiles logFiles, InconsistenciesHandler handler ) throws IOException
+    {
+        final long lowestLogVersion = logFiles.getLowestLogVersion();
+        final long highestLogVersion = logFiles.getHighestLogVersion();
+        boolean success = true;
+        try ( PrimitiveLongLongMap logFileSizes = Primitive.offHeapLongLongMap() )
+        {
+            for ( long i = lowestLogVersion; i <= highestLogVersion; i++ )
+            {
+                logFileSizes.put( i, fs.getFileSize( logFiles.getLogFileForVersion( i ) ) );
+            }
+
+            LogEntryCursor logEntryCursor = LogTestUtils.openLogs( fs, logFiles );
+            while ( logEntryCursor.next() )
+            {
+                LogEntry logEntry = logEntryCursor.get();
+                if ( logEntry instanceof CheckPoint )
+                {
+                    LogPosition logPosition = logEntry.<CheckPoint>as().getLogPosition();
+                    // if the file has been pruned we cannot validate the check point
+                    if ( logPosition.getLogVersion() >= lowestLogVersion )
+                    {
+                        long size = logFileSizes.get( logPosition.getLogVersion() );
+                        if ( logPosition.getByteOffset() < 0 || size < 0 || logPosition.getByteOffset() > size )
+                        {
+                            long currentLogVersion = logEntryCursor.getCurrentLogVersion();
+                            handler.reportInconsistentCheckPoint( currentLogVersion, logPosition, size );
+                            success = false;
+                        }
+
+                    }
+                }
+            }
+        }
+        return success;
+    }
+
+    boolean scan( PhysicalLogFiles logFiles, InconsistenciesHandler handler, CheckType<?,?>... checkTypes )
+            throws IOException
+    {
+        boolean success = true;
+        boolean checkTxIds = true;
         for ( CheckType<?,?> checkType : checkTypes )
         {
-            scan( logs, handler, checkType );
+            success &= scan( logFiles, handler, checkType, checkTxIds );
+            checkTxIds = false;
         }
+        return success;
     }
 
-    class CommandAndLogVersion
+    private class CommandAndLogVersion
     {
         StorageCommand command;
         long logVersion;
@@ -104,60 +180,76 @@ public class CheckTxLogs
         }
     }
 
-    private <C extends Command, R extends AbstractBaseRecord> void scan(
-            File[] logs, InconsistenciesHandler handler, CheckType<C,R> check ) throws IOException
+    private <C extends Command, R extends AbstractBaseRecord> boolean scan( PhysicalLogFiles logFiles,
+            InconsistenciesHandler handler, CheckType<C,R> check, boolean checkTxIds ) throws IOException
     {
-        System.out.println( "Checking logs for " + check.name() + " inconsistencies" );
+        out.println( "Checking logs for " + check.name() + " inconsistencies" );
         CommittedRecords<R> state = new CommittedRecords<>( check );
 
         List<CommandAndLogVersion> txCommands = new ArrayList<>();
-        for ( File log : logs )
+        boolean validLogs = true;
+        long commandsRead = 0;
+        long lastSeenTxId = BASE_TX_ID;
+        try ( LogEntryCursor logEntryCursor = LogTestUtils.openLogs( fs, logFiles ) )
         {
-            long commandsRead = 0;
-            long logVersion = PhysicalLogFiles.getLogVersion( log );
-
-            try ( LogEntryCursor logEntryCursor = LogTestUtils.openLog( fs, log ) )
+            while ( logEntryCursor.next() )
             {
-                while ( logEntryCursor.next() )
+                LogEntry entry = logEntryCursor.get();
+                if ( entry instanceof LogEntryCommand )
                 {
-                    LogEntry entry = logEntryCursor.get();
-                    if ( entry instanceof LogEntryCommand )
+                    StorageCommand command = ((LogEntryCommand) entry).getXaCommand();
+                    if ( check.commandClass().isInstance( command ) )
                     {
-                        StorageCommand command = ((LogEntryCommand) entry).getXaCommand();
-                        if ( check.commandClass().isInstance( command ) )
-                        {
-                            txCommands.add( new CommandAndLogVersion( command, logVersion ) );
-                        }
+                        long logVersion = logEntryCursor.getCurrentLogVersion();
+                        txCommands.add( new CommandAndLogVersion( command, logVersion ) );
                     }
-                    else if ( entry instanceof LogEntryCommit )
-                    {
-                        long txId = ((LogEntryCommit) entry).getTxId();
-                        for ( CommandAndLogVersion txCommand : txCommands )
-                        {
-                            checkAndHandleInconsistencies( txCommand, check, state, txId, handler );
-                        }
-                        txCommands.clear();
-                    }
-                    commandsRead++;
                 }
+                else if ( entry instanceof LogEntryCommit )
+                {
+                    long txId = ((LogEntryCommit) entry).getTxId();
+                    if ( checkTxIds )
+                    {
+                        validLogs &= checkNoDuplicatedTxsInTheLog( lastSeenTxId, txId, handler );
+                        lastSeenTxId = txId;
+                    }
+                    for ( CommandAndLogVersion txCommand : txCommands )
+                    {
+                        validLogs &= checkAndHandleInconsistencies( txCommand, check, state, txId, handler );
+                    }
+                    txCommands.clear();
+                }
+                commandsRead++;
             }
-            System.out.println( "Processed " + log.getCanonicalPath() + " with " + commandsRead + " commands" );
-            System.out.println( state );
         }
+        out.println( "Processed " + commandsRead + " commands" );
+        out.println( state );
 
         if ( !txCommands.isEmpty() )
         {
-            System.out.println( "Found " + txCommands.size() + " uncommitted commands at the end." );
+            out.println( "Found " + txCommands.size() + " uncommitted commands at the end." );
             for ( CommandAndLogVersion txCommand : txCommands )
             {
-                checkAndHandleInconsistencies( txCommand, check, state, -1, handler );
+                validLogs &= checkAndHandleInconsistencies( txCommand, check, state, -1, handler );
             }
             txCommands.clear();
         }
+
+        return validLogs;
     }
 
-    private <C extends Command, R extends AbstractBaseRecord> void checkAndHandleInconsistencies( CommandAndLogVersion txCommand, CheckType<C,R> check,
-            CommittedRecords<R> state, long txId, InconsistenciesHandler handler )
+    private boolean checkNoDuplicatedTxsInTheLog( long lastTxId, long currentTxId, InconsistenciesHandler handler )
+    {
+        boolean isValid = lastTxId <= BASE_TX_ID || lastTxId + 1 == currentTxId;
+        if ( !isValid )
+        {
+            handler.reportInconsistentTxIdSequence( lastTxId, currentTxId );
+        }
+        return isValid;
+    }
+
+    private <C extends Command, R extends AbstractBaseRecord> boolean checkAndHandleInconsistencies(
+            CommandAndLogVersion txCommand, CheckType<C,R> check, CommittedRecords<R> state, long txId,
+            InconsistenciesHandler handler )
     {
         C command = check.commandClass().cast( txCommand.command );
 
@@ -168,15 +260,18 @@ public class CheckTxLogs
 
         RecordInfo<R> lastSeen = state.get( after.getId() );
 
-        if ( lastSeen != null && !check.equal( before, lastSeen.record() ) )
+        boolean isValidRecord = (lastSeen == null) || check.equal( before, lastSeen.record() );
+        if ( !isValidRecord )
         {
             handler.reportInconsistentCommand( lastSeen, new RecordInfo<>( before, txCommand.logVersion, txId ) );
         }
 
         state.put( after, txCommand.logVersion, txId );
+
+        return isValidRecord;
     }
 
-    private static CheckType[] parseChecks( Args arguments )
+    private static CheckType<?,?>[] parseChecks( Args arguments )
     {
         String checks = arguments.get( CHECKS );
         if ( checks == null )
@@ -184,48 +279,34 @@ public class CheckTxLogs
             return CheckTypes.CHECK_TYPES;
         }
 
-        return Stream.of( checks.split( SEPARATOR ) )
-                .map( CheckTypes::fromName )
-                .toArray( CheckType<?,?>[]::new );
+        return Stream.of( checks.split( SEPARATOR ) ).map( CheckTypes::fromName ).toArray( CheckType[]::new );
     }
 
-    private static File parseDir( Args args )
+    private static File parseDir( PrintStream printStream, Args args )
     {
         if ( args.orphans().size() != 1 )
         {
-            printUsageAndExit();
+            printUsageAndExit( printStream );
         }
         File dir = new File( args.orphans().get( 0 ) );
         if ( !dir.isDirectory() )
         {
-            System.out.println( "Invalid directory: '" + dir + "'" );
-            printUsageAndExit();
+            printStream.println( "Invalid directory: '" + dir + "'" );
+            printUsageAndExit( printStream );
         }
         return dir;
     }
 
-    private static File[] txLogsIn( File dir )
+    private static void printUsageAndExit( PrintStream out )
     {
-        File[] logs = dir.listFiles( LogFiles.FILENAME_FILTER );
-        Arrays.sort( logs, ( f1, f2 ) -> {
-            long f1Version = PhysicalLogFiles.getLogVersion( f1 );
-            long f2Version = PhysicalLogFiles.getLogVersion( f2 );
-            return Long.compare( f1Version, f2Version );
-        } );
-        return logs;
-    }
-
-    private static void printUsageAndExit()
-    {
-        System.out.println( "Tool expects single argument - directory with tx logs" );
-        System.out.println( "Usage:" );
-        System.out.println( "\t./checkTxLogs [options] <directory>" );
-        System.out.println( "Options:" );
-        System.out.println( "\t--help\t\tprints this description" );
-        System.out.println( "\t--checks='checkname[,...]'\t\tthe list of checks to perform. Checks available: " +
-                            Arrays.stream( CheckTypes.CHECK_TYPES )
-                                    .map( CheckType::name )
-                                    .collect( Collectors.joining( SEPARATOR ) ) );
+        out.println( "Tool expects single argument - directory with tx logs" );
+        out.println( "Usage:" );
+        out.println( "\t./checkTxLogs [options] <directory>" );
+        out.println( "Options:" );
+        out.println( "\t--help\t\tprints this description" );
+        out.println( "\t--checks='checkname[,...]'\t\tthe list of checks to perform. Checks available: " +
+                Arrays.stream( CheckTypes.CHECK_TYPES ).map( CheckType::name )
+                        .collect( Collectors.joining( SEPARATOR ) ) );
         System.exit( 1 );
     }
 }

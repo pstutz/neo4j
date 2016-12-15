@@ -30,15 +30,13 @@ import java.util.Arrays;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.factory.TestHighlyAvailableGraphDatabaseFactory;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.ha.ClusterManager;
 import org.neo4j.kernel.impl.ha.ClusterManager.ManagedCluster;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.lifecycle.LifeSupport;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -101,7 +99,7 @@ public class LabelScanStoreHaIT
     }
 
     @Rule
-    public final TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory testDirectory = TestDirectory.testDirectory();
     private final LifeSupport life = new LifeSupport();
     private ManagedCluster cluster;
     private final TestMonitor monitor = new TestMonitor();
@@ -119,7 +117,6 @@ public class LabelScanStoreHaIT
                     {
                         GraphDatabaseService db = new TestGraphDatabaseFactory()
                                 .newEmbeddedDatabaseBuilder( storeDir.getAbsoluteFile() )
-                                .setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME )
                                 .newGraphDatabase();
                         try
                         {

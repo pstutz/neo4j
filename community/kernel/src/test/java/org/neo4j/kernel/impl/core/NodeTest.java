@@ -24,27 +24,22 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
-import java.lang.Thread.State;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
-import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.graphdb.Transaction;
-import org.neo4j.test.DatabaseRule;
-import org.neo4j.test.GraphTransactionRule;
-import org.neo4j.test.ImpermanentDatabaseRule;
+import org.neo4j.test.rule.DatabaseRule;
+import org.neo4j.test.rule.GraphTransactionRule;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.neo4j.helpers.Exceptions.launderedException;
 
 public class NodeTest
 {
@@ -96,7 +91,7 @@ public class NodeTest
             getGraphDb().getNodeById( nodeId );
             fail( "Node[" + nodeId + "] should be deleted." );
         }
-        catch ( NotFoundException e )
+        catch ( NotFoundException ignored )
         {
         }
     }
@@ -127,7 +122,7 @@ public class NodeTest
             node1.setProperty( null, null );
             fail( "Null argument should result in exception." );
         }
-        catch ( IllegalArgumentException e )
+        catch ( IllegalArgumentException ignored )
         {
         }
         String key1 = "key1";
@@ -177,7 +172,7 @@ public class NodeTest
                 fail( "Remove of non existing property should return null" );
             }
         }
-        catch ( NotFoundException e )
+        catch ( NotFoundException ignored )
         {
         }
         try
@@ -185,7 +180,7 @@ public class NodeTest
             node1.removeProperty( null );
             fail( "Remove null property should throw exception." );
         }
-        catch ( IllegalArgumentException e )
+        catch ( IllegalArgumentException ignored )
         {
         }
 
@@ -198,7 +193,7 @@ public class NodeTest
             node1.removeProperty( null );
             fail( "Null argument should result in exception." );
         }
-        catch ( IllegalArgumentException e )
+        catch ( IllegalArgumentException ignored )
         {
         }
 
@@ -245,7 +240,7 @@ public class NodeTest
             node1.setProperty( null, null );
             fail( "Null argument should result in exception." );
         }
-        catch ( IllegalArgumentException e )
+        catch ( IllegalArgumentException ignored )
         {
         }
         catch ( NotFoundException e )
@@ -306,7 +301,7 @@ public class NodeTest
             node1.getProperty( key1 );
             fail( "get non existing property din't throw exception" );
         }
-        catch ( NotFoundException e )
+        catch ( NotFoundException ignored )
         {
         }
         try
@@ -314,7 +309,7 @@ public class NodeTest
             node1.getProperty( null );
             fail( "get of null key din't throw exception" );
         }
-        catch ( IllegalArgumentException e )
+        catch ( IllegalArgumentException ignored )
         {
         }
         assertTrue( !node1.hasProperty( key1 ) );
@@ -423,61 +418,6 @@ public class NodeTest
         tx.success();
         tx.begin();
         assertEquals( "test4", node.getProperty( "test" ) );
-    }
-
-    @Test
-    public void testNodeLockingProblem() throws InterruptedException
-    {
-        testLockProblem( getGraphDb().createNode() );
-    }
-
-    @Test
-    public void testRelationshipLockingProblem() throws InterruptedException
-    {
-        Node node = getGraphDb().createNode();
-        Node node2 = getGraphDb().createNode();
-        testLockProblem( node.createRelationshipTo( node2,
-                RelationshipType.withName( "lock-rel" ) ) );
-    }
-
-    private void testLockProblem( final PropertyContainer entity ) throws InterruptedException
-    {
-        entity.setProperty( "key", "value" );
-        final AtomicBoolean gotTheLock = new AtomicBoolean();
-        Thread thread = new Thread()
-        {
-            @Override
-            public void run()
-            {
-                try( Transaction tx = getGraphDb().beginTx() )
-                {
-                    tx.acquireWriteLock( entity );
-                    gotTheLock.set( true );
-                    tx.success();
-                }
-                catch ( Exception e )
-                {
-                    e.printStackTrace();
-                    throw launderedException( e );
-                }
-            }
-        };
-        thread.start();
-        long endTime = System.currentTimeMillis() + 5000;
-        while ( thread.getState() != State.TERMINATED )
-        {
-            if ( thread.getState() == Thread.State.WAITING || thread.getState() == State.TIMED_WAITING)
-            {
-                break;
-            }
-            Thread.sleep( 1 );
-            if ( System.currentTimeMillis() > endTime ) break;
-        }
-        boolean gotLock = gotTheLock.get();
-        tx.success();
-        tx.begin();
-        assertFalse( gotLock );
-        thread.join();
     }
 
     private GraphDatabaseService getGraphDb()

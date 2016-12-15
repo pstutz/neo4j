@@ -76,16 +76,15 @@ public class LuceneLabelScanStoreExtension extends KernelExtensionFactory<Lucene
         boolean ephemeral = dependencies.getConfig().get( GraphDatabaseFacadeFactory.Configuration.ephemeral );
         DirectoryFactory directoryFactory = directoryFactory( ephemeral, context.fileSystem() );
 
-        LuceneLabelScanIndex index = getLuceneIndex( context, directoryFactory );
+        LabelScanIndex index = getLuceneIndex( context, directoryFactory );
         LuceneLabelScanStore scanStore = new LuceneLabelScanStore( index,
                 fullStoreLabelUpdateStream( dependencies.indexStoreView() ),
                 dependencies.getLogService().getInternalLogProvider(), monitor );
 
-
         return new LabelScanStoreProvider( scanStore, priority );
     }
 
-    private LuceneLabelScanIndex getLuceneIndex( KernelContext context, DirectoryFactory directoryFactory )
+    private LabelScanIndex getLuceneIndex( KernelContext context, DirectoryFactory directoryFactory )
     {
         return LuceneLabelScanIndexBuilder.create()
                 .withDirectoryFactory( directoryFactory )

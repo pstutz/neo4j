@@ -24,12 +24,19 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameter;
+import org.junit.runners.Parameterized.Parameters;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
@@ -39,15 +46,13 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.index.Index;
-import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.StoreLockException;
-import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.kernel.impl.api.TransactionHeaderInformation;
 import org.neo4j.kernel.impl.factory.CommunityEditionModule;
-import org.neo4j.kernel.impl.factory.CommunityFacadeFactory;
+import org.neo4j.kernel.impl.factory.DatabaseInfo;
 import org.neo4j.kernel.impl.factory.EditionModule;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory;
 import org.neo4j.kernel.impl.factory.PlatformModule;
@@ -55,16 +60,17 @@ import org.neo4j.kernel.impl.logging.StoreLogService;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.MetaDataStore.Position;
 import org.neo4j.kernel.impl.store.MismatchingStoreIdException;
+import org.neo4j.kernel.impl.store.format.highlimit.HighLimit;
 import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.IdGeneratorImpl;
 import org.neo4j.kernel.impl.storemigration.StoreFile;
 import org.neo4j.kernel.impl.storemigration.StoreFileType;
 import org.neo4j.kernel.impl.transaction.TransactionHeaderInformationFactory;
 import org.neo4j.test.DbRepresentation;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.SuppressOutput;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.subprocess.SubProcess;
 
 import static java.lang.Integer.parseInt;
@@ -77,28 +83,38 @@ import static org.junit.Assert.fail;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.dense_node_threshold;
 import static org.neo4j.kernel.impl.MyRelTypes.TEST;
 
+@RunWith( Parameterized.class )
 public class TestBackup
 {
+    private final TestDirectory testDir = TestDirectory.testDirectory();
+    private final PageCacheRule pageCacheRule = new PageCacheRule();
+
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( TestBackup.class );
-    @Rule
-    public final PageCacheRule pageCacheRule = new PageCacheRule();
-    @Rule
-    public SuppressOutput suppressOutput = SuppressOutput.suppressAll();
+    public final RuleChain ruleChain = RuleChain.outerRule( testDir )
+            .around( pageCacheRule )
+            .around( SuppressOutput.suppressAll() );
+
+    @Parameter
+    public String recordFormatName;
 
     private File serverPath;
     private File otherServerPath;
     private File backupPath;
     private List<ServerInterface> servers;
 
+    @Parameters( name = "{0}" )
+    public static List<String> recordFormatNames()
+    {
+        return Arrays.asList( StandardV3_0.NAME, HighLimit.NAME );
+    }
+
     @Before
     public void before() throws Exception
     {
         servers = new ArrayList<>();
-        File base = testDir.directory();
-        serverPath = new File( base, "server" );
-        otherServerPath = new File( base, "server2" );
-        backupPath = new File( base, "backuedup-serverdb" );
+        serverPath = testDir.directory( "server" );
+        otherServerPath = testDir.directory( "server2" );
+        backupPath = testDir.directory( "backedup-serverdb" );
     }
 
     @After
@@ -192,19 +208,15 @@ public class TestBackup
         DbRepresentation initialDataSetRepresentation = createInitialDataSet( serverPath );
         ServerInterface server = startServer( serverPath );
 
-        // START SNIPPET: onlineBackup
         OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
         backup.full( backupPath.getPath() );
         assertTrue( "Should be consistent", backup.isConsistent() );
-        // END SNIPPET: onlineBackup
         assertEquals( initialDataSetRepresentation, getDbRepresentation() );
         shutdownServer( server );
 
         DbRepresentation furtherRepresentation = addMoreData( serverPath );
         server = startServer( serverPath );
-        // START SNIPPET: onlineBackup
         backup.incremental( backupPath.getPath() );
-        // END SNIPPET: onlineBackup
         assertTrue( "Should be consistent", backup.isConsistent() );
         assertEquals( furtherRepresentation, getDbRepresentation() );
         shutdownServer( server );
@@ -246,7 +258,7 @@ public class TestBackup
         OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
         backup.full( backupPath.getPath() );
         assertTrue( "Should be consistent", backup.isConsistent() );
-        assertEquals( initialDataSetRepresentation, DbRepresentation.of( backupPath, getFormatConfig() ) );
+        assertEquals( initialDataSetRepresentation, DbRepresentation.of( backupPath ) );
         shutdownServer( server );
 
         // Create data set X+Y on server B
@@ -272,7 +284,7 @@ public class TestBackup
         server = startServer( serverPath );
         backup.incremental( backupPath.getPath() );
         assertTrue( "Should be consistent", backup.isConsistent() );
-        assertEquals( furtherRepresentation, DbRepresentation.of( backupPath, getFormatConfig() ) );
+        assertEquals( furtherRepresentation, DbRepresentation.of( backupPath ) );
         shutdownServer( server );
     }
 
@@ -400,12 +412,11 @@ public class TestBackup
     @Test
     public void shouldRetainFileLocksAfterFullBackupOnLiveDatabase() throws Exception
     {
-        File sourcePath = new File( "target/var/serverdb-lock" );
-        FileUtils.deleteDirectory( sourcePath );
+        File sourcePath = testDir.directory( "serverdb-lock" );
 
         GraphDatabaseService db = new TestGraphDatabaseFactory().newEmbeddedDatabaseBuilder( sourcePath )
                 .setConfig( OnlineBackupSettings.online_backup_enabled, Settings.TRUE )
-                .setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME )
+                .setConfig( GraphDatabaseSettings.record_format, recordFormatName )
                 .newGraphDatabase();
         try
         {
@@ -614,13 +625,8 @@ public class TestBackup
             protected GraphDatabaseService newDatabase( File storeDir, Map<String,String> config,
                     GraphDatabaseFacadeFactory.Dependencies dependencies )
             {
-                return new CommunityFacadeFactory()
-                {
-
-                    @Override
-                    protected EditionModule createEdition( PlatformModule platformModule )
-                    {
-                        return new CommunityEditionModule( platformModule )
+                Function<PlatformModule,EditionModule> factory =
+                        ( platformModule ) -> new CommunityEditionModule( platformModule )
                         {
 
                             @Override
@@ -636,14 +642,14 @@ public class TestBackup
                                 };
                             }
                         };
-                    }
-                }.newFacade( storeDir, config, dependencies );
+                return new GraphDatabaseFacadeFactory( DatabaseInfo.COMMUNITY, factory )
+                        .newFacade( storeDir, config, dependencies );
             }
         };
         return dbFactory.newEmbeddedDatabaseBuilder( storeDir )
                 .setConfig( OnlineBackupSettings.online_backup_enabled, String.valueOf( withOnlineBackup ) )
                 .setConfig( GraphDatabaseSettings.keep_logical_logs, Settings.TRUE )
-                .setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME )
+                .setConfig( GraphDatabaseSettings.record_format, recordFormatName )
                 .newGraphDatabase();
     }
 
@@ -679,18 +685,12 @@ public class TestBackup
     {
         return new TestGraphDatabaseFactory().newEmbeddedDatabaseBuilder( serverPath )
                 .setConfig( OnlineBackupSettings.online_backup_enabled, Settings.TRUE )
-                .setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME )
+                .setConfig( GraphDatabaseSettings.record_format, recordFormatName )
                 .newGraphDatabase();
-    }
-
-    private Config getFormatConfig()
-    {
-        return new Config(
-                MapUtil.stringMap( GraphDatabaseSettings.record_format.name(), StandardV3_0.NAME ) );
     }
 
     private DbRepresentation getDbRepresentation()
     {
-        return DbRepresentation.of( backupPath, getFormatConfig() );
+        return DbRepresentation.of( backupPath );
     }
 }

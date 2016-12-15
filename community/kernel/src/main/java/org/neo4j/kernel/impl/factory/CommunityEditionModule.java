@@ -29,6 +29,8 @@ import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.DatabaseAvailability;
 import org.neo4j.kernel.NeoStoreDataSource;
+import org.neo4j.kernel.api.exceptions.KernelException;
+import org.neo4j.kernel.api.security.AuthManager;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.api.SchemaWriteGuard;
 import org.neo4j.kernel.impl.api.index.RemoveOrphanConstraintIndexesOnStartup;
@@ -45,21 +47,24 @@ import org.neo4j.kernel.impl.core.TokenCreator;
 import org.neo4j.kernel.impl.coreapi.CoreAPIAvailabilityGuard;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.kernel.impl.locking.ResourceTypes;
+import org.neo4j.kernel.impl.locking.SimpleStatementLocksFactory;
+import org.neo4j.kernel.impl.locking.StatementLocksFactory;
 import org.neo4j.kernel.impl.locking.community.CommunityLockManger;
 import org.neo4j.kernel.impl.logging.LogService;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
+import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
+import org.neo4j.kernel.impl.store.id.IdReuseEligibility;
+import org.neo4j.kernel.impl.store.id.configuration.CommunityIdTypeConfigurationProvider;
+import org.neo4j.kernel.impl.store.id.configuration.IdTypeConfigurationProvider;
 import org.neo4j.kernel.impl.transaction.TransactionHeaderInformationFactory;
 import org.neo4j.kernel.impl.transaction.state.DataSourceManager;
+import org.neo4j.kernel.internal.DefaultKernelData;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.internal.KernelData;
-import org.neo4j.kernel.internal.Version;
 import org.neo4j.kernel.lifecycle.LifeSupport;
-import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.lifecycle.LifecycleStatus;
 import org.neo4j.udc.UsageData;
-
 
 /**
  * This implementation of {@link org.neo4j.kernel.impl.factory.EditionModule} creates the implementations of services
@@ -67,6 +72,8 @@ import org.neo4j.udc.UsageData;
  */
 public class CommunityEditionModule extends EditionModule
 {
+    public static final String COMMUNITY_SECURITY_MODULE_ID = "community-security-module";
+
     public CommunityEditionModule( PlatformModule platformModule )
     {
         org.neo4j.kernel.impl.util.Dependencies dependencies = platformModule.dependencies;
@@ -79,11 +86,15 @@ public class CommunityEditionModule extends EditionModule
         LifeSupport life = platformModule.life;
         life.add( platformModule.dataSourceManager );
 
+        this.accessCapability = config.get( GraphDatabaseSettings.read_only )? new ReadOnly() : new CanWrite();
+
         GraphDatabaseFacade graphDatabaseFacade = platformModule.graphDatabaseFacade;
 
         lockManager = dependencies.satisfyDependency( createLockManager( config, logging ) );
+        statementLocksFactory = createStatementLocksFactory( lockManager, config, logging );
 
-        idGeneratorFactory = dependencies.satisfyDependency( createIdGeneratorFactory( fileSystem ) );
+        idTypeConfigurationProvider = createIdTypeConfigurationProvider( config );
+        idGeneratorFactory = dependencies.satisfyDependency( createIdGeneratorFactory( fileSystem, idTypeConfigurationProvider ) );
 
         propertyKeyTokenHolder = life.add( dependencies.satisfyDependency( new DelegatingPropertyKeyTokenHolder(
                 createPropertyKeyCreator( config, dataSourceManager, idGeneratorFactory ) ) ) );
@@ -95,7 +106,6 @@ public class CommunityEditionModule extends EditionModule
         dependencies.satisfyDependency(
                 createKernelData( fileSystem, pageCache, storeDir, config, graphDatabaseFacade, life ) );
 
-        dependencies.satisfyDependencies( createAuthManager(config, life, logging.getUserLogProvider()) );
         commitProcessFactory = new CommunityCommitProcessFactory();
 
         headerInformationFactory = createHeaderInformationFactory();
@@ -110,16 +120,28 @@ public class CommunityEditionModule extends EditionModule
 
         ioLimiter = IOLimiter.unlimited();
 
-        formats = StandardV3_0.RECORD_FORMATS;
+        eligibleForIdReuse = IdReuseEligibility.ALWAYS;
 
         registerRecovery( platformModule.databaseInfo, life, dependencies );
 
         publishEditionInfo( dependencies.resolveDependency( UsageData.class ), platformModule.databaseInfo, config );
+
+        dependencies.satisfyDependency( createSessionTracker() );
+    }
+
+    protected IdTypeConfigurationProvider createIdTypeConfigurationProvider( Config config )
+    {
+        return new CommunityIdTypeConfigurationProvider();
     }
 
     protected ConstraintSemantics createSchemaRuleVerifier()
     {
         return new StandardConstraintSemantics();
+    }
+
+    protected StatementLocksFactory createStatementLocksFactory( Locks locks, Config config, LogService logService )
+    {
+        return new SimpleStatementLocksFactory( locks );
     }
 
     protected SchemaWriteGuard createSchemaWriteGuard()
@@ -172,11 +194,9 @@ public class CommunityEditionModule extends EditionModule
         return life.add( new DefaultKernelData( fileSystem, pageCache, storeDir, config, graphAPI ) );
     }
 
-
-
-    protected IdGeneratorFactory createIdGeneratorFactory( FileSystemAbstraction fs )
+    protected IdGeneratorFactory createIdGeneratorFactory( FileSystemAbstraction fs, IdTypeConfigurationProvider idTypeConfigurationProvider )
     {
-        return new DefaultIdGeneratorFactory( fs );
+        return new DefaultIdGeneratorFactory( fs, idTypeConfigurationProvider );
     }
 
     public static Locks createLockManager( Config config, LogService logging )
@@ -191,7 +211,7 @@ public class CommunityEditionModule extends EditionModule
             }
             else if ( key.equals( "" ) )
             {
-                logging.getInternalLog( CommunityFacadeFactory.class )
+                logging.getInternalLog( CommunityEditionModule.class )
                         .info( "No locking implementation specified, defaulting to '" + candidateId + "'" );
                 return candidate.newInstance( ResourceTypes.values() );
             }
@@ -203,7 +223,7 @@ public class CommunityEditionModule extends EditionModule
         }
         else if ( key.equals( "" ) )
         {
-            logging.getInternalLog( CommunityFacadeFactory.class )
+            logging.getInternalLog( CommunityEditionModule.class )
                     .info( "No locking implementation specified, defaulting to 'community'" );
             return new CommunityLockManger();
         }
@@ -228,6 +248,12 @@ public class CommunityEditionModule extends EditionModule
     }
 
     @Override
+    public void registerEditionSpecificProcedures( Procedures procedures ) throws KernelException
+    {
+        // Community does not add any extra procedures
+    }
+
+    @Override
     protected void doAfterRecoveryAndStartup( DatabaseInfo databaseInfo, DependencyResolver dependencyResolver )
     {
         super.doAfterRecoveryAndStartup( databaseInfo, dependencyResolver );
@@ -236,42 +262,17 @@ public class CommunityEditionModule extends EditionModule
                 .getKernel(), dependencyResolver.resolveDependency( LogService.class ).getInternalLogProvider() ).perform();
     }
 
-    protected final class DefaultKernelData extends KernelData implements Lifecycle
+    @Override
+    public void setupSecurityModule( PlatformModule platformModule, Procedures procedures )
     {
-        private final GraphDatabaseAPI graphDb;
-
-        public DefaultKernelData( FileSystemAbstraction fileSystem, PageCache pageCache, File storeDir, Config config,
-                GraphDatabaseAPI graphDb )
+        if ( platformModule.config.get( GraphDatabaseSettings.auth_enabled ) )
         {
-            super( fileSystem, pageCache, storeDir, config );
-            this.graphDb = graphDb;
+            setupSecurityModule( platformModule, platformModule.logging.getUserLog( getClass() ),
+                    procedures, COMMUNITY_SECURITY_MODULE_ID );
         }
-
-        @Override
-        public Version version()
+        else
         {
-            return Version.getKernel();
-        }
-
-        @Override
-        public GraphDatabaseAPI graphDatabase()
-        {
-            return graphDb;
-        }
-
-        @Override
-        public void init() throws Throwable
-        {
-        }
-
-        @Override
-        public void start() throws Throwable
-        {
-        }
-
-        @Override
-        public void stop() throws Throwable
-        {
+            platformModule.life.add( platformModule.dependencies.satisfyDependency( AuthManager.NO_AUTH ) );
         }
     }
 }

@@ -22,13 +22,15 @@ package org.neo4j.kernel.impl.api;
 import org.junit.Test;
 
 import org.neo4j.graphdb.TransactionTerminatedException;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.exceptions.Status;
+import org.neo4j.kernel.impl.factory.CanWrite;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.storageengine.api.StorageStatement;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.neo4j.kernel.api.security.SecurityContext.AUTH_DISABLED;
 
 public class KernelStatementTest
 {
@@ -36,29 +38,28 @@ public class KernelStatementTest
     public void shouldThrowTerminateExceptionWhenTransactionTerminated() throws Exception
     {
         KernelTransactionImplementation transaction = mock( KernelTransactionImplementation.class );
-        when( transaction.shouldBeTerminated() ).thenReturn( true );
-        when( transaction.mode() ).thenReturn( AccessMode.Static.FULL );
+        when( transaction.getReasonIfTerminated() ).thenReturn( Status.Transaction.Terminated );
+        when( transaction.securityContext() ).thenReturn( AUTH_DISABLED );
 
-        KernelStatement statement = new KernelStatement(
-            transaction, null, null, mock( StorageStatement.class ), null );
+        KernelStatement statement = new KernelStatement( transaction, null, mock( StorageStatement.class ), null, new CanWrite() );
         statement.acquire();
 
         statement.readOperations().nodeExists( 0 );
     }
 
     @Test
-    public void shouldCloseStorageStatementWhenForceClosed() throws Exception
+    public void shouldReleaseStorageStatementWhenForceClosed() throws Exception
     {
         // given
         StorageStatement storeStatement = mock( StorageStatement.class );
         KernelStatement statement = new KernelStatement( mock( KernelTransactionImplementation.class ),
-                null, null, storeStatement, new Procedures() );
+                null, storeStatement, new Procedures(), new CanWrite() );
         statement.acquire();
 
         // when
         statement.forceClose();
 
         // then
-        verify( storeStatement ).close();
+        verify( storeStatement ).release();
     }
 }

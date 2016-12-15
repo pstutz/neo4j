@@ -21,11 +21,14 @@ package org.neo4j.kernel.ha.cluster.modeswitch;
 
 import org.neo4j.function.Factory;
 import org.neo4j.kernel.AvailabilityGuard;
+import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.ha.DelegateInvocationHandler;
 import org.neo4j.kernel.ha.com.RequestContextFactory;
 import org.neo4j.kernel.ha.com.master.Master;
 import org.neo4j.kernel.ha.lock.SlaveLockManager;
 import org.neo4j.kernel.impl.locking.Locks;
+import org.neo4j.kernel.impl.locking.ReadOnlyLocks;
+import org.neo4j.logging.LogProvider;
 
 public class LockManagerSwitcher extends AbstractComponentSwitcher<Locks>
 {
@@ -33,48 +36,47 @@ public class LockManagerSwitcher extends AbstractComponentSwitcher<Locks>
     private final RequestContextFactory requestContextFactory;
     private final AvailabilityGuard availabilityGuard;
     private final Factory<Locks> locksFactory;
-
-    private volatile Locks currentLocks;
+    private final LogProvider logProvider;
+    private final Config config;
 
     public LockManagerSwitcher( DelegateInvocationHandler<Locks> delegate, DelegateInvocationHandler<Master> master,
-            RequestContextFactory requestContextFactory, AvailabilityGuard availabilityGuard,
-            Factory<Locks> locksFactory )
+                                RequestContextFactory requestContextFactory, AvailabilityGuard availabilityGuard,
+                                Factory<Locks> locksFactory, LogProvider logProvider, Config config )
     {
         super( delegate );
         this.master = master;
         this.requestContextFactory = requestContextFactory;
         this.availabilityGuard = availabilityGuard;
         this.locksFactory = locksFactory;
+        this.logProvider = logProvider;
+        this.config = config;
     }
 
     @Override
     protected Locks getMasterImpl()
     {
-        currentLocks = locksFactory.newInstance();
-        return currentLocks;
+        return locksFactory.newInstance();
     }
 
     @Override
     protected Locks getSlaveImpl()
     {
-        currentLocks = new SlaveLockManager( locksFactory.newInstance(), requestContextFactory, master.cement(),
-                availabilityGuard );
-        return currentLocks;
+        return new SlaveLockManager( locksFactory.newInstance(), requestContextFactory, master.cement(),
+                availabilityGuard, logProvider, config );
     }
 
     @Override
-    protected void shutdownCurrent()
+    protected Locks getPendingImpl()
     {
-        super.shutdownCurrent();
-        closeCurrentLocks();
+        return new ReadOnlyLocks();
     }
 
-    private void closeCurrentLocks()
+    @Override
+    protected void shutdownOldDelegate( Locks oldLocks )
     {
-        if ( currentLocks != null )
+        if ( oldLocks != null )
         {
-            currentLocks.close();
-            currentLocks = null;
+            oldLocks.close();
         }
     }
 }

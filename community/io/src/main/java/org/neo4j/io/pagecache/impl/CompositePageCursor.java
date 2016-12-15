@@ -22,13 +22,14 @@ package org.neo4j.io.pagecache.impl;
 import java.io.File;
 import java.io.IOException;
 
+import org.neo4j.io.pagecache.CursorException;
 import org.neo4j.io.pagecache.PageCursor;
 
 /**
  * A CompositePageCursor is a seamless view over parts of two other PageCursors.
  * @see #compose(PageCursor, int, PageCursor, int)
  */
-public class CompositePageCursor implements PageCursor
+public class CompositePageCursor extends PageCursor
 {
     private final PageCursor first;
     private final int firstBaseOffset;
@@ -39,7 +40,6 @@ public class CompositePageCursor implements PageCursor
     private int offset;
     private PageCursor byteAccessCursor;
     private boolean outOfBounds;
-
 
     // Constructed with static factory methods.
     private CompositePageCursor(
@@ -451,9 +451,29 @@ public class CompositePageCursor implements PageCursor
     }
 
     @Override
+    public void checkAndClearCursorException() throws CursorException
+    {
+        first.checkAndClearCursorException();
+        second.checkAndClearCursorException();
+    }
+
+    @Override
     public void raiseOutOfBounds()
     {
         outOfBounds = true;
+    }
+
+    @Override
+    public void setCursorException( String message )
+    {
+        cursor( 0 ).setCursorException( message );
+    }
+
+    @Override
+    public void clearCursorException()
+    {
+        first.clearCursorException();
+        second.clearCursorException();
     }
 
     @Override
@@ -464,7 +484,7 @@ public class CompositePageCursor implements PageCursor
 
     /**
      * Build a CompositePageCursor that is a view of the first page cursor from its current offset through the given
-     * length, concaternated with the second cursor from its current offset through the given length. The offsets are
+     * length, concatenated with the second cursor from its current offset through the given length. The offsets are
      * changed as part of accessing the underlying cursors through the composite cursor. However, the size and position
      * of the view does NOT change if the offsets of the underlying cursors are changed after constructing the composite
      * cursor.

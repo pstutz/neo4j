@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.util;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
@@ -142,6 +143,11 @@ public interface JobScheduler extends Lifecycle
         public static final Group checkPoint = new Group( "CheckPoint", POOLED );
 
         /**
+         * Raft Log pruning
+         */
+        public static final Group raftLogPruning = new Group( "RaftLogPruning", POOLED );
+
+        /**
          * Network IO threads for the Bolt protocol.
          */
         public static final Group boltNetworkIO = new Group( "BoltNetworkIO", NEW_THREAD );
@@ -155,11 +161,23 @@ public interface JobScheduler extends Lifecycle
          * UDC timed events.
          */
         public static Group udc  = new Group( "UsageDataCollection", POOLED );
+
+        /**
+         * Storage maintenance.
+         */
+        public static Group storageMaintenance = new Group( "StorageMaintenance", POOLED );
+
+        /**
+         * Native security.
+         */
+        public static Group nativeSecurity = new Group( "NativeSecurity", POOLED );
     }
 
     interface JobHandle
     {
         void cancel( boolean mayInterruptIfRunning );
+
+        void waitTermination() throws InterruptedException, ExecutionException;
     }
 
     /** Expose a group scheduler as an {@link Executor} */

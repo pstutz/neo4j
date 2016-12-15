@@ -20,9 +20,8 @@
 package org.neo4j.kernel.impl.query;
 
 import org.neo4j.helpers.Service;
+import org.neo4j.kernel.impl.util.Dependencies;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
-
-import static java.lang.String.format;
 
 public abstract class QueryEngineProvider extends Service
 {
@@ -31,9 +30,10 @@ public abstract class QueryEngineProvider extends Service
         super( name );
     }
 
-    protected abstract QueryExecutionEngine createEngine( GraphDatabaseAPI graphAPI );
+    protected abstract QueryExecutionEngine createEngine( Dependencies deps, GraphDatabaseAPI graphAPI );
 
-    public static QueryExecutionEngine initialize( GraphDatabaseAPI graphAPI, Iterable<QueryEngineProvider> providers )
+    public static QueryExecutionEngine initialize( Dependencies deps, GraphDatabaseAPI graphAPI,
+            Iterable<QueryEngineProvider> providers )
     {
         QueryEngineProvider provider = null;
         for ( QueryEngineProvider candidate : providers )
@@ -49,9 +49,10 @@ public abstract class QueryEngineProvider extends Service
         }
         if ( provider == null )
         {
-            return NoQueryEngine.INSTANCE;
+            return noEngine();
         }
-        return provider.createEngine( graphAPI );
+        QueryExecutionEngine engine = provider.createEngine( deps, graphAPI );
+        return deps.satisfyDependency( engine );
     }
 
     public static QueryExecutionEngine noEngine()
@@ -59,16 +60,8 @@ public abstract class QueryEngineProvider extends Service
         return NoQueryEngine.INSTANCE;
     }
 
-    public static QuerySession embeddedSession( TransactionalContext transactionalContext )
+    public static QuerySource describe()
     {
-        final Thread thread = Thread.currentThread();
-        return new QuerySession( transactionalContext )
-        {
-            @Override
-            public String toString()
-            {
-                return format( "embedded-session\tthread\t%s", thread.getName() );
-            }
-        };
+        return new QuerySource( "embedded-session" );
     }
 }

@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.api.integrationtest;
 
 import org.junit.Before;
 import org.junit.Test;
+
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.kernel.api.DataWriteOperations;
@@ -35,7 +36,7 @@ import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.test.DoubleLatch;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
 
 public class NodeGetUniqueFromIndexSeekIT extends KernelIntegrationTest
 {
@@ -61,7 +62,6 @@ public class NodeGetUniqueFromIndexSeekIT extends KernelIntegrationTest
     // Ensure that if that method is called again with the same argument from some other transaction,
     // that transaction blocks until this transaction has finished
     //
-
 
     // [X] must return node from the unique index with the given property
     // [X] must return NO_SUCH_NODE if it is not in the index for the given property
@@ -135,34 +135,31 @@ public class NodeGetUniqueFromIndexSeekIT extends KernelIntegrationTest
         // This adds the node to the unique index and should take an index write lock
         dataStatement.nodeSetProperty( nodeId, Property.stringProperty( propertyKeyId, value ) );
 
-        Runnable runnableForThread2 = new Runnable()
+        Runnable runnableForThread2 = () ->
         {
-            @Override
-            public void run()
+            latch.waitForAllToStart();
+            try ( Transaction tx = db.beginTx() )
             {
-                latch.awaitStart();
-                try ( Transaction tx = db.beginTx() )
+                try ( Statement statement1 = statementContextSupplier.get() )
                 {
-                    try ( Statement statement = statementContextSupplier.get() )
-                    {
-                        statement.readOperations().nodeGetFromUniqueIndexSeek( index, value );
-                    }
-                    tx.success();
+                    statement1.readOperations().nodeGetFromUniqueIndexSeek( index, value );
                 }
-                catch ( IndexNotFoundKernelException | IndexBrokenKernelException e )
-                {
-                    throw new RuntimeException( e );
-                }
-                finally
-                {
-                    latch.finish();
-                }
+                tx.success();
+            }
+            catch ( IndexNotFoundKernelException | IndexBrokenKernelException e )
+            {
+                throw new RuntimeException( e );
+            }
+            finally
+            {
+                latch.finish();
             }
         };
         Thread thread2 = new Thread( runnableForThread2, "Transaction Thread 2" );
         thread2.start();
-        latch.start();
+        latch.startAndWaitForAllToStart();
 
+        //noinspection UnusedLabel
         spinUntilBlocking:
         for (; ; )
         {
@@ -174,7 +171,7 @@ public class NodeGetUniqueFromIndexSeekIT extends KernelIntegrationTest
         }
 
         commit();
-        latch.awaitFinish();
+        latch.waitForAllToFinish();
     }
 
     private boolean isNoSuchNode( long foundId )

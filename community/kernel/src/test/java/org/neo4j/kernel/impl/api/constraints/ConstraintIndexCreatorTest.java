@@ -24,17 +24,20 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.TransactionHook;
+import org.neo4j.kernel.api.exceptions.ProcedureException;
+import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.PreexistingIndexEntryConflictException;
 import org.neo4j.kernel.api.proc.CallableProcedure;
+import org.neo4j.kernel.api.proc.CallableUserFunction;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.api.txstate.TransactionState;
 import org.neo4j.kernel.impl.api.KernelStatement;
 import org.neo4j.kernel.impl.api.StatementOperationParts;
@@ -155,82 +158,21 @@ public class ConstraintIndexCreatorTest
         verifyZeroInteractions( indexingService );
     }
 
-    public class StubKernel implements KernelAPI
+    private class StubKernel implements KernelAPI
     {
         private final List<KernelStatement> statements = new ArrayList<>();
 
         @Override
-        public KernelTransaction newTransaction( KernelTransaction.Type type, AccessMode accessMode )
+        public KernelTransaction newTransaction( KernelTransaction.Type type, SecurityContext securityContext )
         {
-            return new KernelTransaction()
-            {
-                @Override
-                public void success()
-                {
-                }
+            return new StubKernelTransaction();
+        }
 
-                @Override
-                public void failure()
-                {
-                }
-
-                @Override
-                public void close() throws TransactionFailureException
-                {
-                }
-
-                @Override
-                public Statement acquireStatement()
-                {
-                    return remember( mockedState() );
-                }
-
-                private Statement remember( KernelStatement mockedState )
-                {
-                    statements.add( mockedState );
-                    return mockedState;
-                }
-
-                @Override
-                public boolean isOpen()
-                {
-                    return true;
-                }
-
-                @Override
-                public AccessMode mode()
-                {
-                    throw new UnsupportedOperationException();
-                }
-
-                @Override
-                public boolean shouldBeTerminated()
-                {
-                    return false;
-                }
-
-                @Override
-                public void markForTermination()
-                {
-                }
-
-                @Override
-                public void registerCloseListener( CloseListener listener )
-                {
-                }
-
-                @Override
-                public Type transactionType()
-                {
-                    return null;
-                }
-
-                @Override
-                public Revertable restrict( AccessMode read )
-                {
-                    return null;
-                }
-            };
+        @Override
+        public KernelTransaction newTransaction( KernelTransaction.Type type, SecurityContext securityContext, long timeout )
+                throws TransactionFailureException
+        {
+            return new StubKernelTransaction( timeout );
         }
 
         @Override
@@ -246,9 +188,133 @@ public class ConstraintIndexCreatorTest
         }
 
         @Override
-        public void registerProcedure( CallableProcedure signature )
+        public void registerProcedure( CallableProcedure procedure )
         {
             throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void registerUserFunction( CallableUserFunction function ) throws ProcedureException
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        private class StubKernelTransaction implements KernelTransaction
+        {
+            private long timeout = 0;
+
+            StubKernelTransaction()
+            {
+            }
+
+            StubKernelTransaction( long timeout )
+            {
+                this.timeout = timeout;
+            }
+
+            @Override
+            public void success()
+            {
+            }
+
+            @Override
+            public void failure()
+            {
+            }
+
+            @Override
+            public long closeTransaction() throws TransactionFailureException
+            {
+                return ROLLBACK;
+            }
+
+            @Override
+            public Statement acquireStatement()
+            {
+                return remember( mockedState() );
+            }
+
+            private Statement remember( KernelStatement mockedState )
+            {
+                statements.add( mockedState );
+                return mockedState;
+            }
+
+            @Override
+            public boolean isOpen()
+            {
+                return true;
+            }
+
+            @Override
+            public SecurityContext securityContext()
+            {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public Status getReasonIfTerminated()
+            {
+                return null;
+            }
+
+            @Override
+            public void markForTermination( Status reason )
+            {
+            }
+
+            @Override
+            public long lastTransactionTimestampWhenStarted()
+            {
+                return 0;
+            }
+
+            @Override
+            public void registerCloseListener( CloseListener listener )
+            {
+            }
+
+            @Override
+            public Type transactionType()
+            {
+                return null;
+            }
+
+            @Override
+            public long getTransactionId()
+            {
+                return -1;
+            }
+
+            @Override
+            public long getCommitTime()
+            {
+                return -1;
+            }
+
+            @Override
+            public Revertable overrideWith( SecurityContext context )
+            {
+                return null;
+            }
+
+            @Override
+            public long lastTransactionIdWhenStarted()
+            {
+                return 0;
+            }
+
+            @Override
+            public long startTime()
+            {
+                return 0;
+            }
+
+            @Override
+            public long timeout()
+            {
+                return timeout;
+            }
         }
     }
 }

@@ -105,6 +105,7 @@ import org.neo4j.kernel.impl.store.NodeLabels;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.PropertyKeyTokenStore;
 import org.neo4j.kernel.impl.store.PropertyStore;
+import org.neo4j.kernel.impl.store.RecordCursors;
 import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.RelationshipTypeTokenStore;
@@ -133,7 +134,6 @@ import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
 import org.neo4j.kernel.impl.store.record.UniquePropertyConstraintRule;
 import org.neo4j.kernel.impl.transaction.state.DefaultSchemaIndexProviderMap;
-import org.neo4j.kernel.impl.transaction.state.NeoStoreIndexStoreView;
 import org.neo4j.kernel.impl.transaction.state.PropertyCreator;
 import org.neo4j.kernel.impl.transaction.state.PropertyDeleter;
 import org.neo4j.kernel.impl.transaction.state.PropertyTraverser;
@@ -141,12 +141,14 @@ import org.neo4j.kernel.impl.transaction.state.RecordAccess;
 import org.neo4j.kernel.impl.transaction.state.RecordAccess.RecordProxy;
 import org.neo4j.kernel.impl.transaction.state.RelationshipCreator;
 import org.neo4j.kernel.impl.transaction.state.RelationshipGroupGetter;
+import org.neo4j.kernel.impl.transaction.state.storeview.NeoStoreIndexStoreView;
 import org.neo4j.kernel.impl.util.Dependencies;
 import org.neo4j.kernel.impl.util.Listener;
 import org.neo4j.kernel.internal.EmbeddedGraphDatabase;
 import org.neo4j.kernel.internal.StoreLocker;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.Log;
+import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.NullLog;
 import org.neo4j.storageengine.api.Token;
 import org.neo4j.storageengine.api.schema.SchemaRule;
@@ -209,9 +211,8 @@ public class BatchInserterImpl implements BatchInserter
 
     private final LabelTokenStore labelTokenStore;
     private final Locks.Client noopLockClient = new NoOpClient();
-    private RecordFormats recordFormats;
     private final long maxNodeId;
-
+    private final RecordCursors cursors;
 
     BatchInserterImpl( File storeDir,
                        Map<String, String> stringParams ) throws IOException
@@ -246,11 +247,13 @@ public class BatchInserterImpl implements BatchInserter
         boolean dump = config.get( GraphDatabaseSettings.dump_configuration );
         this.idGeneratorFactory = new DefaultIdGeneratorFactory( fileSystem );
 
-        recordFormats = RecordFormatSelector.autoSelectFormat( config, logService );
-        maxNodeId = recordFormats.node().getMaxId();
-
+        LogProvider internalLogProvider = logService.getInternalLogProvider();
+        RecordFormats recordFormats = RecordFormatSelector.selectForStoreOrConfig( config, storeDir, fileSystem,
+                pageCache, internalLogProvider );
         StoreFactory sf = new StoreFactory( this.storeDir, config, idGeneratorFactory, pageCache, fileSystem,
-                recordFormats, logService.getInternalLogProvider() );
+                recordFormats, internalLogProvider );
+
+        maxNodeId = recordFormats.node().getMaxId();
 
         if ( dump )
         {
@@ -277,6 +280,7 @@ public class BatchInserterImpl implements BatchInserter
         relationshipTypeTokens = new BatchTokenHolder( types );
         indexStore = life.add( new IndexConfigStore( this.storeDir, fileSystem ) );
         schemaCache = new SchemaCache( new StandardConstraintSemantics(), schemaStore );
+
         indexStoreView = new NeoStoreIndexStoreView( LockService.NO_LOCK_SERVICE, neoStores );
 
         Dependencies deps = new Dependencies();
@@ -303,6 +307,7 @@ public class BatchInserterImpl implements BatchInserter
 
         flushStrategy = new BatchedFlushStrategy( recordAccess, config.get( GraphDatabaseSettings
                 .batch_inserter_batch_size ) );
+        cursors = new RecordCursors( neoStores );
     }
 
     private Map<String, String> getDefaultParams()
@@ -367,24 +372,13 @@ public class BatchInserterImpl implements BatchInserter
         return new IndexCreatorImpl( actions, label );
     }
 
-    private void removePropertyIfExist( RecordProxy<Long, ? extends PrimitiveRecord,Void> recordProxy,
-            int propertyKey, RecordAccess<Long,PropertyRecord,PrimitiveRecord> propertyRecords )
-    {
-        if ( propertyTraverser.findPropertyRecordContaining( recordProxy.forReadingData(),
-                propertyKey, propertyRecords, false ) != Record.NO_NEXT_PROPERTY.intValue() )
-        {
-            propertyDeletor.removeProperty( recordProxy, propertyKey, propertyRecords );
-        }
-    }
-
     private void setPrimitiveProperty( RecordProxy<Long,? extends PrimitiveRecord,Void> primitiveRecord,
             String propertyName, Object propertyValue )
     {
         int propertyKey = getOrCreatePropertyKeyId( propertyName );
         RecordAccess<Long,PropertyRecord,PrimitiveRecord> propertyRecords = recordAccess.getPropertyRecords();
 
-        removePropertyIfExist( primitiveRecord, propertyKey, propertyRecords );
-        propertyCreator.primitiveAddProperty( primitiveRecord, propertyKey, propertyValue, propertyRecords );
+        propertyCreator.primitiveSetProperty( primitiveRecord, propertyKey, propertyValue, propertyRecords );
     }
 
     private void validateIndexCanBeCreated( int labelId, int propertyKeyId )
@@ -525,8 +519,7 @@ public class BatchInserterImpl implements BatchInserter
         };
 
         InitialNodeLabelCreationVisitor labelUpdateVisitor = new InitialNodeLabelCreationVisitor();
-        StoreScan<IOException> storeScan = indexStoreView.visitNodes(
-                (labelId) -> PrimitiveIntCollections.contains( labelIds, labelId ),
+        StoreScan<IOException> storeScan = indexStoreView.visitNodes( labelIds,
                 (propertyKeyId) -> PrimitiveIntCollections.contains( propertyKeyIds, propertyKeyId ),
                 propertyUpdateVisitor, labelUpdateVisitor );
         storeScan.run();
@@ -757,8 +750,7 @@ public class BatchInserterImpl implements BatchInserter
     private void setNodeLabels( NodeRecord nodeRecord, Label... labels )
     {
         NodeLabels nodeLabels = parseLabelsField( nodeRecord );
-        nodeStore.updateDynamicLabelRecords( nodeLabels.put( getOrCreateLabelIds( labels ), nodeStore,
-                nodeStore.getDynamicLabelStore() ) );
+        nodeLabels.put( getOrCreateLabelIds( labels ), nodeStore, nodeStore.getDynamicLabelStore() );
         labelsTouched = true;
     }
 
@@ -912,7 +904,7 @@ public class BatchInserterImpl implements BatchInserter
     public Iterable<Long> getRelationshipIds( long nodeId )
     {
         flushStrategy.forceFlush();
-        return new BatchRelationshipIterable<Long>( neoStores, nodeId )
+        return new BatchRelationshipIterable<Long>( neoStores, nodeId, cursors )
         {
             @Override
             protected Long nextFrom( long relId, int type, long startNode, long endNode )
@@ -926,7 +918,7 @@ public class BatchInserterImpl implements BatchInserter
     public Iterable<BatchRelationship> getRelationships( long nodeId )
     {
         flushStrategy.forceFlush();
-        return new BatchRelationshipIterable<BatchRelationship>( neoStores, nodeId )
+        return new BatchRelationshipIterable<BatchRelationship>( neoStores, nodeId, cursors )
         {
             @Override
             protected BatchRelationship nextFrom( long relId, int type, long startNode, long endNode )
@@ -977,20 +969,23 @@ public class BatchInserterImpl implements BatchInserter
         {
             throw new RuntimeException( e );
         }
-
-        neoStores.close();
-
-        try
+        finally
         {
-            storeLocker.release();
-        }
-        catch ( IOException e )
-        {
-            throw new UnderlyingStorageException( "Could not release store lock", e );
-        }
+            cursors.close();
+            neoStores.close();
 
-        msgLog.info( Thread.currentThread() + " Clean shutdown on BatchInserter(" + this + ")", true );
-        life.shutdown();
+            try
+            {
+                storeLocker.close();
+            }
+            catch ( IOException e )
+            {
+                throw new UnderlyingStorageException( "Could not release store lock", e );
+            }
+
+            msgLog.info( Thread.currentThread() + " Clean shutdown on BatchInserter(" + this + ")", true );
+            life.shutdown();
+        }
     }
 
     @Override
@@ -1108,6 +1103,17 @@ public class BatchInserterImpl implements BatchInserter
         }
     }
 
+    // test-access
+    NeoStores getNeoStores()
+    {
+        return neoStores;
+    }
+
+    void forceFlushChanges()
+    {
+        flushStrategy.forceFlush();
+    }
+
     private class BatchSchemaActions implements InternalSchemaActions
     {
         @Override
@@ -1219,7 +1225,6 @@ public class BatchInserterImpl implements BatchInserter
             this.directRecordAccess = directRecordAccess;
             this.batchSize = batchSize;
         }
-
 
         @Override
         public void flush()

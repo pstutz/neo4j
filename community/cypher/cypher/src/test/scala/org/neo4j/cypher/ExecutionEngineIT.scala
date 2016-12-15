@@ -21,21 +21,21 @@ package org.neo4j.cypher
 
 import org.neo4j.collection.RawIterator
 import org.neo4j.cypher.internal.ExecutionEngine
-import org.neo4j.cypher.internal.compiler.v3_0.CostBasedPlannerName
-import org.neo4j.cypher.internal.frontend.v3_0.test_helpers.CypherFunSuite
+import org.neo4j.cypher.internal.compiler.v3_1.CostBasedPlannerName
+import org.neo4j.cypher.internal.frontend.v3_1.test_helpers.CypherFunSuite
 import org.neo4j.cypher.internal.helpers.GraphIcing
 import org.neo4j.cypher.javacompat.internal.GraphDatabaseCypherService
 import org.neo4j.graphdb.Result.{ResultRow, ResultVisitor}
 import org.neo4j.graphdb.factory.GraphDatabaseSettings
 import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.api.Statement
+import org.neo4j.kernel.api.proc._
+import org.neo4j.kernel.api.{proc, Statement}
 import org.neo4j.kernel.api.exceptions.ProcedureException
-import org.neo4j.kernel.api.proc.CallableProcedure.Context
-import org.neo4j.kernel.api.proc.CallableProcedure.Context.KERNEL_TRANSACTION
-import org.neo4j.kernel.api.proc.ProcedureSignature.FieldSignature
-import org.neo4j.kernel.api.proc.{CallableProcedure, Neo4jTypes, ProcedureSignature}
+import Context.KERNEL_TRANSACTION
+import org.neo4j.kernel.api.proc._
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge
 import org.neo4j.kernel.impl.proc.Procedures
+import org.neo4j.kernel.impl.query.TransactionalContext
 import org.neo4j.test.TestGraphDatabaseFactory
 
 import scala.collection.immutable.Map
@@ -65,6 +65,24 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     val db = new TestGraphDatabaseFactory()
       .newImpermanentDatabaseBuilder()
       .setConfig(GraphDatabaseSettings.cypher_parser_version, "3.0").newGraphDatabase()
+    val service = new GraphDatabaseCypherService(db)
+
+    //when
+    val plan1 = service.planDescriptionForQuery("PROFILE MATCH (a) RETURN a")
+    val plan2 = service.planDescriptionForQuery("PROFILE MATCH (a)-[:T*]-(a) RETURN a")
+
+    //then
+    plan1.getArguments.get("planner") should equal("COST")
+    plan1.getArguments.get("planner-impl") should equal(CostBasedPlannerName.default.name)
+    plan2.getArguments.get("planner") should equal("COST")
+    plan2.getArguments.get("planner-impl") should equal(CostBasedPlannerName.default.name)
+  }
+
+  test("by default when using cypher 3.1 some queries should default to COST") {
+    //given
+    val db = new TestGraphDatabaseFactory()
+      .newImpermanentDatabaseBuilder()
+      .setConfig(GraphDatabaseSettings.cypher_parser_version, "3.1").newGraphDatabase()
     val service = new GraphDatabaseCypherService(db)
 
     //when
@@ -110,6 +128,22 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     plan.getArguments.get("planner-impl") should equal("RULE")
   }
 
+  test("should be able to set RULE as default when using cypher 3.1") {
+    //given
+    val db = new TestGraphDatabaseFactory()
+      .newImpermanentDatabaseBuilder()
+      .setConfig(GraphDatabaseSettings.cypher_planner, "RULE")
+      .setConfig(GraphDatabaseSettings.cypher_parser_version, "3.1").newGraphDatabase()
+    val service = new GraphDatabaseCypherService(db)
+
+    //when
+    val plan = service.planDescriptionForQuery("PROFILE MATCH (a) RETURN a")
+
+    //then
+    plan.getArguments.get("planner") should equal("RULE")
+    plan.getArguments.get("planner-impl") should equal("RULE")
+  }
+
   test("should be able to force COST as default when using cypher 2.3") {
     //given
     val db = new TestGraphDatabaseFactory()
@@ -132,6 +166,22 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
       .newImpermanentDatabaseBuilder()
       .setConfig(GraphDatabaseSettings.cypher_planner, "COST")
       .setConfig(GraphDatabaseSettings.cypher_parser_version, "3.0").newGraphDatabase()
+    val service = new GraphDatabaseCypherService(db)
+
+    //when
+    val plan = service.planDescriptionForQuery("PROFILE MATCH (a)-[:T*]-(a) RETURN a")
+
+    //then
+    plan.getArguments.get("planner") should equal("COST")
+    plan.getArguments.get("planner-impl") should equal("IDP")
+  }
+
+  test("should be able to force COST as default when using cypher 3.1") {
+    //given
+    val db = new TestGraphDatabaseFactory()
+      .newImpermanentDatabaseBuilder()
+      .setConfig(GraphDatabaseSettings.cypher_planner, "COST")
+      .setConfig(GraphDatabaseSettings.cypher_parser_version, "3.1").newGraphDatabase()
     val service = new GraphDatabaseCypherService(db)
 
     //when
@@ -166,12 +216,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("return 1", Map.empty[String, Object], service.session()).close()
+    engine.execute("return 1", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("return 1", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.execute("return 1", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -188,22 +238,22 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile return 1", Map.empty[String, Object], service.session()).close()
+    engine.execute("profile return 1", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile return 1", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.execute("profile return 1", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.profile("return 1", Map.empty[String, Object], service.session()).close()
+    engine.profile("return 1", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.profile("return 1", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.profile("return 1", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -220,14 +270,27 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain return 1", Map.empty[String, Object], service.session()).close()
+    engine.execute("explain return 1", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain return 1", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.execute("explain return 1", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
+  }
+
+  test("should not leak transaction when failing in pre-parsing") {
+    //given
+    val db = new TestGraphDatabaseFactory().newImpermanentDatabase()
+    val service = new GraphDatabaseCypherService(db)
+    val engine = new ExecutionEngine(service)
+
+    // when
+    intercept[SyntaxException](engine.execute("", Map.empty[String, Object]))
+    // then
+    txBridge(service).hasTransaction shouldBe false
+
   }
 
   test("should not leak transaction when closing the result for a procedure query") {
@@ -245,12 +308,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).close()
+    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -270,12 +333,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).close()
+    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -295,12 +358,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).close()
+    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).close()
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).javaIterator.close()
+    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).javaIterator.close()
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -318,12 +381,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("return 1", Map.empty[String, Object], service.session()).length
+    engine.execute("return 1", Map.empty[String, Object]).length
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("return 1", Map.empty[String, Object], service.session()).javaIterator.asScala.length
+    engine.execute("return 1", Map.empty[String, Object]).javaIterator.asScala.length
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -341,12 +404,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile return 1", Map.empty[String, Object], service.session()).length
+    engine.execute("profile return 1", Map.empty[String, Object]).length
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile return 1", Map.empty[String, Object], service.session()).javaIterator.asScala.length
+    engine.execute("profile return 1", Map.empty[String, Object]).javaIterator.asScala.length
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -364,12 +427,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain return 1", Map.empty[String, Object], service.session()).length
+    engine.execute("explain return 1", Map.empty[String, Object]).length
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain return 1", Map.empty[String, Object], service.session()).javaIterator.asScala.length
+    engine.execute("explain return 1", Map.empty[String, Object]).javaIterator.asScala.length
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -390,12 +453,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).length
+    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).length
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).javaIterator.asScala.length
+    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).javaIterator.asScala.length
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -416,12 +479,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).length
+    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).length
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).javaIterator.asScala.length
+    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).javaIterator.asScala.length
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -442,12 +505,12 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).length
+    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).length
     // then
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).javaIterator.asScala.length
+    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).javaIterator.asScala.length
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -464,7 +527,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("return 1", Map.empty[String, Object], service.session()).accept(consumerVisitor)
+    engine.execute("return 1", Map.empty[String, Object]).accept(consumerVisitor)
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -481,7 +544,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile return 1", Map.empty[String, Object], service.session()).accept(consumerVisitor)
+    engine.execute("profile return 1", Map.empty[String, Object]).accept(consumerVisitor)
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -498,7 +561,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain return 1", Map.empty[String, Object], service.session()).accept(consumerVisitor)
+    engine.execute("explain return 1", Map.empty[String, Object]).accept(consumerVisitor)
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -518,7 +581,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).accept(consumerVisitor)
+    engine.execute("CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).accept(consumerVisitor)
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -538,7 +601,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).accept(consumerVisitor)
+    engine.execute("profile CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).accept(consumerVisitor)
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -558,7 +621,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     txBridge(service).hasTransaction shouldBe false
 
     // when
-    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object], service.session()).accept(consumerVisitor)
+    engine.execute("explain CALL org.neo4j.bench.getAllNodes()", Map.empty[String, Object]).accept(consumerVisitor)
     // then
     txBridge(service).hasTransaction shouldBe false
   }
@@ -568,7 +631,7 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     val db = new TestGraphDatabaseFactory().newImpermanentDatabase()
 
     // when
-    val result = db.execute("CYPHER runtime=compiled MATCH (n) RETURN n")
+    val result = db.execute("CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n")
     result.accept(new ResultVisitor[RuntimeException] {
       def visit(row: ResultRow) = true
     })
@@ -612,16 +675,25 @@ class ExecutionEngineIT extends CypherFunSuite with GraphIcing {
     db.getDependencyResolver.resolveDependency(classOf[Procedures])
   }
 
+  implicit class RichExecutionEngine(engine: ExecutionEngine) {
+    def profile(query: String, params: Map[String, Any]) =
+      engine.profile(query, params, engine.queryService.transactionalContext(query = query -> params))
+
+    def execute(query: String, params: Map[String, Any]) =
+      engine.execute(query, params, engine.queryService.transactionalContext(query = query -> params))
+  }
+
   class AllNodesProcedure extends CallableProcedure {
     import scala.collection.JavaConverters._
 
     private val results = Map[String, AnyRef]("node" -> Neo4jTypes.NTInteger)
-    val procedureName = new ProcedureSignature.ProcedureName(Array[String]("org", "neo4j", "bench"), "getAllNodes")
-    val emptySignature = List.empty[ProcedureSignature.FieldSignature].asJava
+    val procedureName = new QualifiedName(Array[String]("org", "neo4j", "bench"), "getAllNodes")
+    val emptySignature = List.empty[FieldSignature].asJava
     val signature: ProcedureSignature = new ProcedureSignature(
-      procedureName, paramSignature, resultSignature, ProcedureSignature.Mode.READ_ONLY)
+      procedureName, paramSignature, resultSignature, proc.Mode.READ_ONLY, java.util.Optional.empty(), Array.empty,
+      java.util.Optional.empty())
 
-    def paramSignature = List.empty[ProcedureSignature.FieldSignature].asJava
+    def paramSignature = List.empty[FieldSignature].asJava
 
     def resultSignature = results.keys.foldLeft(List.empty[FieldSignature]) { (fields, entry) =>
       fields :+ new FieldSignature(entry, results(entry).asInstanceOf[Neo4jTypes.AnyType])

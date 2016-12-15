@@ -35,18 +35,17 @@ import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.transaction.CommittedTransactionRepresentation;
 import org.neo4j.kernel.impl.transaction.log.LogicalTransactionStore;
-import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.NullLogProvider;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.neo4j.com.StoreIdTestFactory.newStoreIdForCurrentVersion;
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_COMMIT_TIMESTAMP;
 
 public class ResponsePackerIT
 {
@@ -62,21 +61,20 @@ public class ResponsePackerIT
         LogicalTransactionStore transactionStore = mock( LogicalTransactionStore.class );
         FileSystemAbstraction fs = fsRule.get();
         PageCache pageCache = pageCacheRule.getPageCache( fs );
-        Monitors monitors = new Monitors();
 
-        try ( NeoStores neoStore = createNeoStore( fs, pageCache, monitors ) )
+        try ( NeoStores neoStore = createNeoStore( fs, pageCache ) )
         {
             MetaDataStore store = neoStore.getMetaDataStore();
-            store.transactionCommitted( 2, 111 );
-            store.transactionCommitted( 3, 222 );
-            store.transactionCommitted( 4, 333 );
-            store.transactionCommitted( 5, 444 );
-            store.transactionCommitted( 6, 555 );
+            store.transactionCommitted( 2, 111, BASE_TX_COMMIT_TIMESTAMP );
+            store.transactionCommitted( 3, 222, BASE_TX_COMMIT_TIMESTAMP );
+            store.transactionCommitted( 4, 333, BASE_TX_COMMIT_TIMESTAMP );
+            store.transactionCommitted( 5, 444, BASE_TX_COMMIT_TIMESTAMP );
+            store.transactionCommitted( 6, 555, BASE_TX_COMMIT_TIMESTAMP );
 
             // skip 7 to emulate the fact we have an hole in the committed tx ids list
 
             final long expectedTxId = 8L;
-            store.transactionCommitted( expectedTxId, 777 );
+            store.transactionCommitted( expectedTxId, 777, BASE_TX_COMMIT_TIMESTAMP );
 
             ResponsePacker packer =
                     new ResponsePacker( transactionStore, store, Suppliers.singleton( newStoreIdForCurrentVersion() ) );
@@ -104,13 +102,11 @@ public class ResponsePackerIT
         }
     }
 
-    private NeoStores createNeoStore( FileSystemAbstraction fs, PageCache pageCache, Monitors monitors )
-            throws IOException
+    private NeoStores createNeoStore( FileSystemAbstraction fs, PageCache pageCache ) throws IOException
     {
         File storeDir = new File( "/store/" );
         fs.mkdirs( storeDir );
-        StoreFactory storeFactory = new StoreFactory( fs, storeDir, pageCache, RecordFormatSelector.autoSelectFormat(),
-                NullLogProvider.getInstance() );
+        StoreFactory storeFactory = new StoreFactory( storeDir, pageCache, fs, NullLogProvider.getInstance() );
         return storeFactory.openAllNeoStores( true );
     }
 }

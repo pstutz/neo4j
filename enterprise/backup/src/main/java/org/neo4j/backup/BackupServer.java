@@ -30,13 +30,14 @@ import org.neo4j.com.ProtocolVersion;
 import org.neo4j.com.RequestContext;
 import org.neo4j.com.RequestType;
 import org.neo4j.com.Server;
-import org.neo4j.com.TxChecksumVerifier;
 import org.neo4j.com.monitor.RequestMonitor;
 import org.neo4j.helpers.HostnamePort;
 import org.neo4j.kernel.monitoring.ByteCounterMonitor;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.time.Clocks;
 
-import static org.neo4j.helpers.Clock.SYSTEM_CLOCK;
+import static org.neo4j.com.ProtocolVersion.INTERNAL_PROTOCOL_VERSION;
+import static org.neo4j.com.TxChecksumVerifier.ALWAYS_MATCH;
 
 class BackupServer extends Server<TheBackupInterface,Object>
 {
@@ -45,7 +46,14 @@ class BackupServer extends Server<TheBackupInterface,Object>
 
     private static final BackupRequestType[] contexts = BackupRequestType.values();
 
-    static final byte PROTOCOL_VERSION = 1;
+    /**
+     * Protocol Version : Product Version
+     *                1 : * to 3.0.x
+     *                2 : 3.1.x
+     */
+    public static final ProtocolVersion BACKUP_PROTOCOL_VERSION =
+            new ProtocolVersion( (byte) 2, INTERNAL_PROTOCOL_VERSION );
+
     static final int DEFAULT_PORT = 6362;
     static final int FRAME_LENGTH = Protocol.MEGA * 4;
 
@@ -53,8 +61,7 @@ class BackupServer extends Server<TheBackupInterface,Object>
                          LogProvider logProvider, ByteCounterMonitor byteCounterMonitor, RequestMonitor requestMonitor )
     {
         super( requestTarget, newBackupConfig( FRAME_LENGTH, server ), logProvider, FRAME_LENGTH,
-                new ProtocolVersion( PROTOCOL_VERSION, ProtocolVersion.INTERNAL_PROTOCOL_VERSION ),
-                TxChecksumVerifier.ALWAYS_MATCH, SYSTEM_CLOCK, byteCounterMonitor, requestMonitor );
+                BACKUP_PROTOCOL_VERSION, ALWAYS_MATCH, Clocks.systemClock(), byteCounterMonitor, requestMonitor );
     }
 
     @Override

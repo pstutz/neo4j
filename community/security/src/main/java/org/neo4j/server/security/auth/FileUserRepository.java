@@ -19,212 +19,92 @@
  */
 package org.neo4j.server.security.auth;
 
+import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
-import org.neo4j.kernel.lifecycle.LifecycleAdapter;
+import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
-import org.neo4j.server.security.auth.exception.ConcurrentModificationException;
-import org.neo4j.server.security.auth.exception.IllegalCredentialsException;
+import org.neo4j.server.security.auth.exception.FormatException;
 
-import static java.nio.file.StandardCopyOption.ATOMIC_MOVE;
-import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static org.neo4j.server.security.auth.ListSnapshot.FROM_MEMORY;
+import static org.neo4j.server.security.auth.ListSnapshot.FROM_PERSISTED;
 
 /**
  * Stores user auth data. In memory, but backed by persistent storage so changes to this repository will survive
  * JVM restarts and crashes.
  */
-public class FileUserRepository extends LifecycleAdapter implements UserRepository
+public class FileUserRepository extends AbstractUserRepository
 {
-    private final Path authFile;
+    private final File authFile;
+    private final FileSystemAbstraction fileSystem;
 
-    /** Quick lookup of users by name */
-    private final Map<String, User> usersByName = new ConcurrentHashMap<>();
+    // TODO: We could improve concurrency by using a ReadWriteLock
+
     private final Log log;
-
-    /** Master list of users */
-    private volatile List<User> users = new ArrayList<>();
 
     private final UserSerialization serialization = new UserSerialization();
 
-    public FileUserRepository( Path file, LogProvider logProvider )
+    public FileUserRepository( FileSystemAbstraction fileSystem, File file, LogProvider logProvider )
     {
-        this.authFile = file.toAbsolutePath();
+        this.fileSystem = fileSystem;
+        this.authFile = file;
         this.log = logProvider.getLog( getClass() );
-    }
-
-    @Override
-    public User findByName( String name )
-    {
-        return usersByName.get( name );
     }
 
     @Override
     public void start() throws Throwable
     {
-        if ( Files.exists( authFile ) )
+        clear();
+        ListSnapshot<User> onDiskUsers = readPersistedUsers();
+        if ( onDiskUsers != null )
         {
-            loadUsersFromFile();
+            setUsers( onDiskUsers );
         }
     }
 
     @Override
-    public void create( User user ) throws IllegalCredentialsException, IOException
+    protected ListSnapshot<User> readPersistedUsers() throws IOException
     {
-        if ( !isValidName( user.name() ) )
+        if ( fileSystem.fileExists( authFile ) )
         {
-            throw new IllegalCredentialsException( "'" + user.name() + "' is not a valid user name." );
-        }
-
-        synchronized (this)
-        {
-            // Check for existing user
-            for ( User other : users )
+            long readTime;
+            List<User> readUsers;
+            try
             {
-                if ( other.name().equals( user.name() ) )
-                {
-                    throw new IllegalCredentialsException( "The specified user already exists" );
-                }
+                readTime = fileSystem.lastModifiedTime( authFile );
+                readUsers = serialization.loadRecordsFromFile( fileSystem, authFile );
+            }
+            catch ( FormatException e )
+            {
+                log.error( "Failed to read authentication file \"%s\" (%s)",
+                        authFile.getAbsolutePath(), e.getMessage() );
+                throw new IllegalStateException( "Failed to read authentication file: " + authFile );
             }
 
-            users.add( user );
-
-            saveUsersToFile();
-
-            usersByName.put( user.name(), user );
+            return new ListSnapshot<>( readTime, readUsers, FROM_PERSISTED );
         }
+        return null;
     }
 
     @Override
-    public void update( User existingUser, User updatedUser ) throws ConcurrentModificationException, IOException
+    protected void persistUsers() throws IOException
     {
-        // Assert input is ok
-        if ( !existingUser.name().equals( updatedUser.name() ) )
-        {
-            throw new IllegalArgumentException( "updatedUser has a different name" );
-        }
-
-        synchronized (this)
-        {
-            // Copy-on-write for the users list
-            List<User> newUsers = new ArrayList<>();
-            boolean foundUser = false;
-            for ( User other : users )
-            {
-                if ( other.equals( existingUser ) )
-                {
-                    foundUser = true;
-                    newUsers.add( updatedUser );
-                } else
-                {
-                    newUsers.add( other );
-                }
-            }
-
-            if ( !foundUser )
-            {
-                throw new ConcurrentModificationException();
-            }
-
-            users = newUsers;
-
-            saveUsersToFile();
-
-            usersByName.put( updatedUser.name(), updatedUser );
-        }
+        serialization.saveRecordsToFile( fileSystem, authFile, users );
     }
 
     @Override
-    public boolean delete( User user ) throws IOException
+    public ListSnapshot<User> getPersistedSnapshot() throws IOException
     {
-        boolean foundUser = false;
-        synchronized (this)
+        if ( lastLoaded.get() < fileSystem.lastModifiedTime( authFile ) )
         {
-            // Copy-on-write for the users list
-            List<User> newUsers = new ArrayList<>();
-            for ( User other : users )
-            {
-                if ( other.name().equals( user.name() ) )
-                {
-                    foundUser = true;
-                } else
-                {
-                    newUsers.add( other );
-                }
-            }
-
-            if ( foundUser )
-            {
-                users = newUsers;
-
-                saveUsersToFile();
-
-                usersByName.remove( user.name() );
-            }
+            return readPersistedUsers();
         }
-        return foundUser;
-    }
-
-    @Override
-    public int numberOfUsers()
-    {
-        return users.size();
-    }
-
-    @Override
-    public boolean isValidName( String name )
-    {
-        return name.matches( "^[a-zA-Z0-9_]+$" );
-    }
-
-    private void saveUsersToFile() throws IOException
-    {
-        Path directory = authFile.getParent();
-        if ( !Files.exists( directory ) )
+        synchronized ( this )
         {
-            Files.createDirectories( directory );
-        }
-
-        Path tempFile = Files.createTempFile( directory, authFile.getFileName().toString() + "-", ".tmp" );
-        try
-        {
-            Files.write( tempFile, serialization.serialize( users ) );
-            Files.move( tempFile, authFile, ATOMIC_MOVE, REPLACE_EXISTING );
-        } catch ( Throwable e )
-        {
-            Files.delete( tempFile );
-            throw e;
-        }
-    }
-
-    private void loadUsersFromFile() throws IOException
-    {
-        byte[] fileBytes = Files.readAllBytes( authFile );
-        List<User> loadedUsers;
-        try
-        {
-            loadedUsers = serialization.deserializeUsers( fileBytes );
-        } catch ( UserSerialization.FormatException e )
-        {
-            log.error( "Ignoring authorization file \"%s\" (%s)", authFile.toAbsolutePath(), e.getMessage() );
-            loadedUsers = new ArrayList<>();
-        }
-
-        if ( loadedUsers == null )
-        {
-            throw new IllegalStateException( "Failed to read authentication file: " + authFile );
-        }
-
-        users = loadedUsers;
-        for ( User user : users )
-        {
-            usersByName.put( user.name(), user );
+            return new ListSnapshot<>( lastLoaded.get(), users.stream().collect( Collectors.toList() ), FROM_MEMORY );
         }
     }
 }

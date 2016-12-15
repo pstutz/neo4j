@@ -41,6 +41,7 @@ import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
+import org.neo4j.kernel.api.index.IndexConfiguration;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.InternalIndexState;
@@ -99,7 +100,6 @@ public class IndexingService extends LifecycleAdapter
     private final PrimitiveLongSet recoveredNodeIds = Primitive.longSet( 20 );
     private final JobScheduler scheduler;
     private final Runnable schemaStateChangeCallback;
-
 
     enum State
     {
@@ -210,9 +210,18 @@ public class IndexingService extends LifecycleAdapter
                     break;
                 case POPULATING:
                     // The database was shut down during population, or a crash has occurred, or some other sad thing.
-
-                    indexProxy = indexProxyCreator
-                            .createRecoveringIndexProxy( descriptor, providerDescriptor, constraint );
+                    if ( constraint && indexRule.getOwningConstraint() == null )
+                    {
+                        // don't bother rebuilding if we are going to throw the index away anyhow
+                        indexProxy = indexProxyCreator.createFailedIndexProxy(
+                                indexId, descriptor, providerDescriptor, constraint,
+                                failure( "Constraint for index was not committed." ) );
+                    }
+                    else
+                    {
+                        indexProxy = indexProxyCreator
+                                .createRecoveringIndexProxy( descriptor, providerDescriptor, constraint );
+                    }
                     break;
                 case FAILED:
                     IndexPopulationFailure failure = failure( provider.getPopulationFailure( indexId ) );
@@ -257,6 +266,8 @@ public class IndexingService extends LifecycleAdapter
                 case FAILED:
                     // Don't do anything, the user needs to drop the index and re-create
                     break;
+                default:
+                    throw new IllegalStateException( "Unknown state: " + state );
             }
         } );
 
@@ -270,17 +281,16 @@ public class IndexingService extends LifecycleAdapter
             for ( Map.Entry<Long,RebuildingIndexDescriptor> entry : rebuildingDescriptors.entrySet() )
             {
                 long indexId = entry.getKey();
-                RebuildingIndexDescriptor descriptors = entry.getValue();
+                RebuildingIndexDescriptor descriptor = entry.getValue();
 
-                /*
-                 * Passing in "false" for unique here may seem surprising, and.. well, yes, it is, I was surprised too.
-                 * However, it is actually perfectly safe, because whenever we have constraint indexes here, they will
-                 * be in a state where they didn't finish populating, and despite the fact that we re-create them here,
-                 * they will get dropped as soon as recovery is completed by the constraint system.
-                 */
                 IndexProxy proxy = indexProxyCreator.createPopulatingIndexProxy(
-                        indexId, descriptors.getIndexDescriptor(), descriptors.getProviderDescriptor(), false,
-                        monitor, populationJob );
+                        indexId,
+                        descriptor.getIndexDescriptor(),
+                        descriptor.getProviderDescriptor(),
+                        descriptor.getConfiguration(),
+                        false, // never pass through a tentative online state during recovery
+                        monitor,
+                        populationJob );
                 proxy.start();
                 indexMap.putIndexProxy( indexId, proxy );
             }
@@ -467,6 +477,9 @@ public class IndexingService extends LifecycleAdapter
                         }
                     }
                     break;
+
+                default:
+                    throw new IllegalStateException( "Unknown update mode: " + update.getUpdateMode() );
                 }
             }
         }
@@ -525,7 +538,8 @@ public class IndexingService extends LifecycleAdapter
             {
                 populationJob = populationJob == null ? newIndexPopulationJob() : populationJob;
                 index = indexProxyCreator.createPopulatingIndexProxy(
-                        ruleId, descriptor, providerDescriptor, constraint, monitor, populationJob );
+                        ruleId, descriptor, providerDescriptor, IndexConfiguration.of( constraint ), constraint,
+                        monitor, populationJob );
                 index.start();
             }
             else

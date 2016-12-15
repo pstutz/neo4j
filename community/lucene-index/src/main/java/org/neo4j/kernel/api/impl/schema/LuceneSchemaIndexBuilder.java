@@ -23,8 +23,12 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 
 import org.neo4j.function.Factory;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.kernel.api.impl.index.IndexWriterConfigs;
 import org.neo4j.kernel.api.impl.index.builder.AbstractLuceneIndexBuilder;
+import org.neo4j.kernel.api.impl.index.partition.ReadOnlyIndexPartitionFactory;
+import org.neo4j.kernel.api.impl.index.partition.WritableIndexPartitionFactory;
+import org.neo4j.kernel.api.impl.index.storage.PartitionedIndexStorage;
 import org.neo4j.kernel.api.index.IndexConfiguration;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.api.index.sampling.IndexSamplingConfig;
@@ -109,9 +113,20 @@ public class LuceneSchemaIndexBuilder extends AbstractLuceneIndexBuilder<LuceneS
      *
      * @return lucene schema index
      */
-    public LuceneSchemaIndex build()
+    public SchemaIndex build()
     {
-        return new LuceneSchemaIndex( storageBuilder.build(), indexConfig, samplingConfig, writerConfigFactory );
+        if ( isReadOnly() )
+        {
+            return new ReadOnlyDatabaseSchemaIndex( storageBuilder.build(), indexConfig, samplingConfig,
+                    new ReadOnlyIndexPartitionFactory() );
+        }
+        else
+        {
+            Boolean archiveFailed = getConfig( GraphDatabaseSettings.archive_failed_index );
+            PartitionedIndexStorage storage = storageBuilder.archivingFailed( archiveFailed ).build();
+            return new WritableDatabaseSchemaIndex( storage, indexConfig, samplingConfig,
+                    new WritableIndexPartitionFactory( writerConfigFactory ) );
+        }
     }
 
 }

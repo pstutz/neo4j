@@ -20,13 +20,14 @@
 package org.neo4j.cypher
 
 import org.neo4j.collection.RawIterator
-import org.neo4j.cypher.internal.compiler.v3_0.executionplan.InternalExecutionResult
-import org.neo4j.cypher.internal.compiler.v3_0.helpers.Counter
-import org.neo4j.cypher.internal.compiler.v3_0.test_helpers.CreateTempFileTestSupport
+import org.neo4j.cypher.internal.compiler.v3_1.executionplan.InternalExecutionResult
+import org.neo4j.cypher.internal.compiler.v3_1.helpers.Counter
+import org.neo4j.cypher.internal.compiler.v3_1.test_helpers.CreateTempFileTestSupport
 import org.neo4j.graphdb.Node
 import org.neo4j.kernel.api.exceptions.ProcedureException
-import org.neo4j.kernel.api.proc.CallableProcedure.{BasicProcedure, Context}
-import org.neo4j.kernel.api.proc.{CallableProcedure, Neo4jTypes}
+import org.neo4j.kernel.api.proc
+import org.neo4j.kernel.api.proc.CallableProcedure.BasicProcedure
+import org.neo4j.kernel.api.proc.{Context, Mode, Neo4jTypes}
 import org.neo4j.storageengine.api.{Direction, RelationshipItem}
 import org.scalatest.prop.TableDrivenPropertyChecks
 
@@ -43,6 +44,41 @@ class EagerizationAcceptanceTest
   val VERBOSE_INCLUDE_PLAN_DESCRIPTION = true
 
   val EagerRegEx: Regex = "Eager(?!(Aggregation))".r
+
+  test("should be eager between property writes in QG and reads in horizon") {
+    val n1 = createNode("val" -> 1)
+    val n2 = createNode("val" -> 1)
+    relate(n1, n2)
+
+    val query = """MATCH (n)--(m)
+                  |SET n.val = n.val + 1
+                  |RETURN n.val AS nv, m.val AS mv
+                """.stripMargin
+
+    val result = updateWithBothPlanners(query)
+
+    result.toList should equal(List(Map("nv" -> 2, "mv" -> 2),
+                                    Map("nv" -> 2, "mv" -> 2)))
+    assertStats(result, propertiesWritten = 2)
+  }
+
+  test("should handle detach deleting the same node twice") {
+    val a = createLabeledNode("A")
+    relate(a, createNode())
+
+    val query = """MATCH (a:A)
+                  |UNWIND [0, 1] AS i
+                  |MATCH (a)-->()
+                  |DETACH DELETE a
+                  |RETURN count(*)
+                """.stripMargin
+
+    val result = updateWithBothPlanners(query)
+
+    result.columnAs[Long]("count(*)").next should equal(2)
+    assertStats(result, nodesDeleted = 1, relationshipsDeleted = 1)
+    assertNumberOfEagerness(query, 1)
+  }
 
   test("should introduce eagerness between MATCH and DELETE relationships") {
     val a = createNode()
@@ -62,10 +98,10 @@ class EagerizationAcceptanceTest
       builder.in("x", Neo4jTypes.NTNode)
       builder.in("y", Neo4jTypes.NTNode)
       builder.out("relId", Neo4jTypes.NTInteger)
-      builder.mode(org.neo4j.kernel.api.proc.ProcedureSignature.Mode.READ_WRITE)
+      builder.mode(Mode.READ_WRITE)
       new BasicProcedure(builder.build) {
         override def apply(ctx: Context, input: Array[AnyRef]): RawIterator[Array[AnyRef], ProcedureException] = {
-          val transaction = ctx.get(CallableProcedure.Context.KERNEL_TRANSACTION)
+          val transaction = ctx.get(proc.Context.KERNEL_TRANSACTION)
           val statement = transaction.acquireStatement()
           try {
             val relType = statement.tokenWriteOperations().relationshipTypeGetOrCreateForName("KNOWS")
@@ -99,10 +135,10 @@ class EagerizationAcceptanceTest
       builder.in("x", Neo4jTypes.NTNode)
       builder.in("y", Neo4jTypes.NTNode)
       builder.out(org.neo4j.kernel.api.proc.ProcedureSignature.VOID)
-      builder.mode(org.neo4j.kernel.api.proc.ProcedureSignature.Mode.READ_WRITE)
+      builder.mode(proc.Mode.READ_WRITE)
       new BasicProcedure(builder.build) {
         override def apply(ctx: Context, input: Array[AnyRef]): RawIterator[Array[AnyRef], ProcedureException] = {
-          val transaction = ctx.get(CallableProcedure.Context.KERNEL_TRANSACTION)
+          val transaction = ctx.get(proc.Context.KERNEL_TRANSACTION)
           val statement = transaction.acquireStatement()
           try {
             val relType = statement.tokenWriteOperations().relationshipTypeGetOrCreateForName("KNOWS")
@@ -138,10 +174,9 @@ class EagerizationAcceptanceTest
       builder.out("relId", Neo4jTypes.NTInteger)
       new BasicProcedure(builder.build) {
         override def apply(ctx: Context, input: Array[AnyRef]): RawIterator[Array[AnyRef], ProcedureException] = {
-          val transaction = ctx.get(CallableProcedure.Context.KERNEL_TRANSACTION)
+          val transaction = ctx.get(proc.Context.KERNEL_TRANSACTION)
           val statement = transaction.acquireStatement()
           try {
-            val relType = statement.tokenWriteOperations().relationshipTypeGetOrCreateForName("KNOWS")
             val idX = input(0).asInstanceOf[Node].getId
             val idY = input(1).asInstanceOf[Node].getId
             val nodeCursor = statement.readOperations().nodeCursor(idX)
@@ -187,14 +222,12 @@ class EagerizationAcceptanceTest
       builder.out(org.neo4j.kernel.api.proc.ProcedureSignature.VOID)
       new BasicProcedure(builder.build) {
         override def apply(ctx: Context, input: Array[AnyRef]): RawIterator[Array[AnyRef], ProcedureException] = {
-          val transaction = ctx.get(CallableProcedure.Context.KERNEL_TRANSACTION)
+          val transaction = ctx.get(proc.Context.KERNEL_TRANSACTION)
           val statement = transaction.acquireStatement()
           try {
-            val relType = statement.tokenWriteOperations().relationshipTypeGetOrCreateForName("KNOWS")
             val idX = input(0).asInstanceOf[Node].getId
             val idY = input(1).asInstanceOf[Node].getId
             val nodeCursor = statement.readOperations().nodeCursor(idX)
-            val result = Array.newBuilder[Array[AnyRef]]
             while (nodeCursor.next()) {
               val relCursor = nodeCursor.get().relationships( Direction.OUTGOING )
               while (relCursor.next()) {
@@ -857,27 +890,6 @@ class EagerizationAcceptanceTest
     result.columnAs[Long]("count(*)").next shouldBe 4
     assertStats(result, relationshipsCreated = 4)
     assertNumberOfEagerness(query, 1)
-  }
-
-  ignore("should not introduce an eager pipe between a non-leaf relationship read and a relationship create on different nodes") {
-    // TODO: ExecuteUpdateCommandsPipe could interpret that it creates only rel-bound nodes in this case
-    relate(createLabeledNode("LabelOne"), createLabeledNode("LabelTwo"), "TYPE")
-    relate(createLabeledNode("LabelOne"), createLabeledNode("LabelTwo"), "TYPE")
-    val query = "MATCH ()-[:TYPE]->() MATCH (a:LabelOne)-[:TYPE]->(b:LabelTwo) CREATE ()-[:TYPE]->()"
-
-    assertStats(executeWithRulePlanner(query), relationshipsCreated = 4, nodesCreated = 8)
-    assertNumberOfEagerness(query, 0)
-  }
-
-  ignore("should not introduce eagerness for a non-leaf match on simple pattern and create single node") {
-    // TODO: SimplePatternMatcher uses an AllNodes item in a NodeStartPipe, losing us information
-    // about the match actually being on relationship-bound nodes.
-    relate(createNode(), createNode())
-    relate(createNode(), createNode())
-    val query = "MATCH ()-->() MATCH ()-->() CREATE ()"
-
-    assertStats(executeWithRulePlanner(query), nodesCreated = 4)
-    assertNumberOfEagerness(query, 0)
   }
 
   test("should not introduce eagerness for match - create on different relationship types") {
@@ -1689,10 +1701,10 @@ class EagerizationAcceptanceTest
     createLabeledNode("Lol")
     createNode()
     val query = "MATCH (n), (m:Lol) SET n:Lol RETURN count(*)"
-
+    val fullQuery = s"cypher planner=rule $query"
     // this is intended for the rule planner only, since the assumption is made that
     // the left-most node in the match pattern will become the 'stable leaf'
-    val result = eengine.execute(s"cypher planner=rule $query", Map.empty[String, Object], graph.session())
+    val result = eengine.execute(fullQuery, Map.empty[String, Object], graph.transactionalContext(query = fullQuery -> Map.empty))
     result.columnAs[Long]("count(*)").next shouldBe 2
     assertStatsResult(labelsAdded = 1)(result.queryStatistics)
 //    assertNumberOfEagerness(query, 1) -- not with rule planner
@@ -2564,7 +2576,7 @@ class EagerizationAcceptanceTest
       expectedEagerCount shouldBe >=(optimalEagerCount)
     }
     val q = if (query.contains("EXPLAIN")) query else "EXPLAIN CYPHER " + query
-    val result = eengine.execute(q, Map.empty[String, Object], graph.session())
+    val result = eengine.execute(q, Map.empty[String, Object], graph.transactionalContext(query = q -> Map.empty))
     val plan = result.executionPlanDescription().toString
     result.close()
     val eagers = EagerRegEx.findAllIn(plan).length

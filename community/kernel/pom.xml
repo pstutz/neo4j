@@ -23,13 +23,13 @@
   <parent>
     <groupId>org.neo4j</groupId>
     <artifactId>parent</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../..</relativePath>
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
   <artifactId>neo4j-kernel</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.1.0-SNAPSHOT</version>
 
   <name>Neo4j - Graph Database Kernel</name>
   <description>
@@ -45,6 +45,7 @@
     <version-package>kernel.impl</version-package>
     <license-text.header>GPL-3-header.txt</license-text.header>
     <licensing.prepend.text>notice-gpl-prefix.txt</licensing.prepend.text>
+	<checkstyle.skip>true</checkstyle.skip>
   </properties>
 
   <packaging>jar</packaging>
@@ -80,7 +81,7 @@ the relevant Commercial Agreement.
       <plugin>
         <artifactId>maven-failsafe-plugin</artifactId>
         <configuration>
-          <argLine>-Xmx300m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=target/test-data -Dorg.neo4j.unsafe.impl.internal.dragons.UnsafeUtil.DIRTY_MEMORY=true -XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields</argLine>
+          <argLine>-Xmx300m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=target/test-data -Dorg.neo4j.unsafe.impl.internal.dragons.UnsafeUtil.DIRTY_MEMORY=true -Dorg.neo4j.unsafe.impl.internal.dragons.UnsafeUtil.CHECK_NATIVE_ACCESS=true -Dorg.neo4j.io.pagecache.impl.muninn.usePreciseCursorErrorStackTraces=true -XX:+UnlockExperimentalVMOptions -XX:+TrustFinalNonStaticFields -XX:-OmitStackTraceInFastThrow</argLine>
         </configuration>
       </plugin>
       <plugin>
@@ -113,8 +114,8 @@ the relevant Commercial Agreement.
               <packageName>org/neo4j/kernel</packageName>
             </manifest>
             <manifestEntries>
-              <!-- This becomes programmatically accessible from the org.neo4j.kernel Package instance -->
-              <Implementation-Version>${project.version},${git.commit.id.describe}</Implementation-Version>
+              <!-- This becomes programmatically accessible from the 'org.neo4j.kernel' java.lang.Package object -->
+              <Implementation-Version>${project.version},${git.commit}</Implementation-Version>
             </manifestEntries>
           </archive>
         </configuration>
@@ -139,37 +140,36 @@ the relevant Commercial Agreement.
           </groups>
         </configuration>
       </plugin>
-      <!-- TODO: reenable clirr plugin after 3.0.0 release -->
-      <!--<plugin>-->
-        <!--<groupId>org.neo4j.build.plugins</groupId>-->
-        <!--<artifactId>clirr-maven-plugin</artifactId>-->
-        <!--<executions>-->
-          <!--<execution>-->
-            <!--<id>default</id>-->
-            <!--<phase>${clirr-check-phase}</phase>-->
-            <!--<goals>-->
-              <!--<goal>check</goal>-->
-            <!--</goals>-->
-          <!--</execution>-->
-        <!--</executions>-->
-        <!--<configuration>-->
-          <!--<failOnError>true</failOnError>-->
-          <!--<logResults>true</logResults>-->
-          <!--&lt;!&ndash; This is temporarily hard-coded, because the versionsBack attribute seems to not work on OS X, we'll-->
-           <!--need to fix that.-->
-           <!--OBS: Set this to one version ahead, i.e. if you'd like it to compare against 1.9.3 then set it to 1.9.4-->
-            <!--&ndash;&gt;-->
-          <!--<comparisonVersion>3.0.0</comparisonVersion>-->
-          <!--<ignoreMaintenenceVersions>false</ignoreMaintenenceVersions>-->
-          <!--<includes>-->
-            <!--<include>org/neo4j/graphdb/**</include>-->
-          <!--</includes>-->
-          <!--<excludeMessageCodes>-->
-            <!--<param>6006</param>&lt;!&ndash; Field was made final. &ndash;&gt;-->
-            <!--<param>7012</param>&lt;!&ndash; Method added to interface &ndash;&gt;-->
-          <!--</excludeMessageCodes>-->
-        <!--</configuration>-->
-      <!--</plugin>-->
+      <plugin>
+        <groupId>org.neo4j.build.plugins</groupId>
+        <artifactId>clirr-maven-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>default</id>
+            <phase>${clirr-check-phase}</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <failOnError>true</failOnError>
+          <logResults>true</logResults>
+          <!-- This is temporarily hard-coded, because the versionsBack attribute seems to not work on OS X, we'll
+           need to fix that.
+           OBS: Set this to one version ahead, i.e. if you'd like it to compare against 1.9.3 then set it to 1.9.4
+            -->
+          <comparisonVersion>3.0.1</comparisonVersion>
+          <ignoreMaintenenceVersions>false</ignoreMaintenenceVersions>
+          <includes>
+            <include>org/neo4j/graphdb/**</include>
+          </includes>
+          <excludeMessageCodes>
+            <param>6006</param><!-- Field was made final. -->
+            <param>7012</param><!-- Method added to interface -->
+          </excludeMessageCodes>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
 
@@ -212,11 +212,6 @@ the relevant Commercial Agreement.
     </dependency>
     <dependency>
       <groupId>org.neo4j</groupId>
-      <artifactId>neo4j-security</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.neo4j</groupId>
       <artifactId>neo4j-lucene-upgrade</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -250,8 +245,6 @@ the relevant Commercial Agreement.
     <dependency>
       <groupId>com.google.jimfs</groupId>
       <artifactId>jimfs</artifactId>
-      <version>1.0</version>
-      <scope>test</scope>
     </dependency>
 
     <dependency>
@@ -273,13 +266,6 @@ the relevant Commercial Agreement.
       <artifactId>neo4j-logging</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
-      <scope>test</scope>
-    </dependency>
-
-
-    <dependency>
-      <groupId>geronimo-spec</groupId>
-      <artifactId>geronimo-spec-j2ee</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

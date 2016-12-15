@@ -19,14 +19,14 @@
  */
 package org.neo4j.cluster.client;
 
+import org.jboss.netty.logging.InternalLoggerFactory;
+
 import java.net.URI;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-
-import org.jboss.netty.logging.InternalLoggerFactory;
 
 import org.neo4j.cluster.ClusterSettings;
 import org.neo4j.cluster.ExecutorLifecycleAdapter;
@@ -129,7 +129,7 @@ public class ClusterClientModule
 
         receiver.addNetworkChannelsListener( new NetworkReceiver.NetworkChannelsListener()
         {
-            volatile private StateTransitionLogger logger = null;
+            private volatile StateTransitionLogger logger = null;
 
             @Override
             public void listeningAt( URI me )
@@ -179,8 +179,8 @@ public class ClusterClientModule
 
         AcceptorInstanceStore acceptorInstanceStore = new InMemoryAcceptorInstanceStore();
 
-        server = protocolServerFactory.newProtocolServer( config.get( ClusterSettings.server_id ), timeoutStrategy,
-                receiver, sender,
+        server = protocolServerFactory.newProtocolServer( config.get( ClusterSettings.server_id ),
+                config.get( ClusterSettings.max_acceptors ), timeoutStrategy, receiver, sender,
                 acceptorInstanceStore, electionCredentialsProvider, stateMachineExecutor, objectInputStreamFactory,
                 objectOutputStreamFactory );
 
@@ -217,8 +217,6 @@ public class ClusterClientModule
                 return config.get( ClusterSettings.join_timeout );
             }
         }, server, logService ) );
-
-
 
         clusterClient =  dependencies.satisfyDependency(new ClusterClient( life, server ));
     }

@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.proc;
 
 import java.io.File;
+import java.util.Optional;
 import java.util.Set;
 
 import org.neo4j.collection.RawIterator;
@@ -27,8 +28,12 @@ import org.neo4j.function.ThrowingConsumer;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.proc.CallableProcedure;
+import org.neo4j.kernel.api.proc.CallableUserFunction;
+import org.neo4j.kernel.api.proc.Context;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
-import org.neo4j.kernel.builtinprocs.BuiltInProcedures;
+import org.neo4j.kernel.api.proc.QualifiedName;
+import org.neo4j.kernel.api.proc.UserFunctionSignature;
+import org.neo4j.kernel.builtinprocs.SpecialBuiltInProcedures;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.NullLog;
@@ -43,41 +48,100 @@ public class Procedures extends LifecycleAdapter
     private final ProcedureRegistry registry = new ProcedureRegistry();
     private final TypeMappers typeMappers = new TypeMappers();
     private final ComponentRegistry components = new ComponentRegistry();
-    private final ReflectiveProcedureCompiler compiler = new ReflectiveProcedureCompiler(typeMappers, components);
+    private final ReflectiveProcedureCompiler compiler;
     private final ThrowingConsumer<Procedures, ProcedureException> builtin;
     private final File pluginDir;
     private final Log log;
 
     public Procedures()
     {
-        this( new BuiltInProcedures( "N/A", "N/A" ), null, NullLog.getInstance() );
+        this( new SpecialBuiltInProcedures( "N/A", "N/A" ), null, NullLog.getInstance(), ProcedureAllowedConfig.DEFAULT );
     }
 
-    public Procedures( ThrowingConsumer<Procedures, ProcedureException> builtin, File pluginDir, Log log )
+    public Procedures( ThrowingConsumer<Procedures,ProcedureException> builtin, File pluginDir, Log log,
+            ProcedureAllowedConfig config )
     {
         this.builtin = builtin;
         this.pluginDir = pluginDir;
         this.log = log;
+        this.compiler = new ReflectiveProcedureCompiler( typeMappers, components, log, config );
     }
 
     /**
-     * Register a new procedure. This method must not be called concurrently with {@link #get(ProcedureSignature.ProcedureName)}.
+     * Register a new procedure. This method must not be called concurrently with {@link #procedure(QualifiedName)}.
      * @param proc the procedure.
      */
     public void register( CallableProcedure proc ) throws ProcedureException
     {
-        registry.register( proc );
+        register( proc, false );
+    }
+
+    /**
+     * Register a new function. This method must not be called concurrently with {@link #procedure(QualifiedName)}.
+     * @param function the fucntion.
+     */
+    public void register( CallableUserFunction function ) throws ProcedureException
+    {
+        register( function, false );
+    }
+
+    /**
+     * Register a new procedure. This method must not be called concurrently with {@link #procedure(QualifiedName)}.
+     * @param function the function.
+     */
+    public void register( CallableUserFunction function, boolean overrideCurrentImplementation ) throws ProcedureException
+    {
+        registry.register( function, overrideCurrentImplementation );
+    }
+
+    /**
+     * Register a new procedure. This method must not be called concurrently with {@link #procedure(QualifiedName)}.
+     * @param proc the procedure.
+     */
+    public void register( CallableProcedure proc, boolean overrideCurrentImplementation ) throws ProcedureException
+    {
+        registry.register( proc, overrideCurrentImplementation );
     }
 
     /**
      * Register a new procedure defined with annotations on a java class.
      * @param proc the procedure class
      */
-    public void register( Class<?> proc ) throws KernelException
+    public void registerProcedure( Class<?> proc ) throws KernelException
     {
-        for ( CallableProcedure procedure : compiler.compile( proc ) )
+        registerProcedure( proc, false );
+    }
+
+    /**
+     * Register a new procedure defined with annotations on a java class.
+     * @param proc the procedure class
+     */
+    public void registerProcedure( Class<?> proc, boolean overrideCurrentImplementation ) throws KernelException
+    {
+        for ( CallableProcedure procedure : compiler.compileProcedure( proc ) )
         {
-            register( procedure );
+            register( procedure, overrideCurrentImplementation );
+        }
+    }
+
+    /**
+     * Register a new function defined with annotations on a java class.
+     * @param func the function class
+     */
+    public void registerFunction( Class<?> func ) throws KernelException
+    {
+        registerFunction( func, false );
+    }
+
+    /**
+     * Register a new function defined with annotations on a java class.
+     * @param func the function class
+     */
+    public void registerFunction( Class<?> func, boolean overrideCurrentImplementation ) throws KernelException
+    {
+        for ( CallableUserFunction function : compiler.compileFunction( func ) )
+        {
+            register( function, overrideCurrentImplementation );
         }
     }
 
@@ -102,29 +166,52 @@ public class Procedures extends LifecycleAdapter
         components.register( cls, provider );
     }
 
-    public ProcedureSignature get( ProcedureSignature.ProcedureName name ) throws ProcedureException
+    public ProcedureSignature procedure( QualifiedName name ) throws ProcedureException
     {
-        return registry.get( name );
+        return registry.procedure( name );
     }
 
-    public Set<ProcedureSignature> getAll()
+    public Optional<UserFunctionSignature> function( QualifiedName name )
     {
-        return registry.getAll();
+        return registry.function( name );
     }
 
-    public RawIterator<Object[], ProcedureException> call( CallableProcedure.Context ctx, ProcedureSignature.ProcedureName name,
+    public Set<ProcedureSignature> getAllProcedures()
+    {
+        return registry.getAllProcedures();
+    }
+
+    public Set<UserFunctionSignature> getAllFunctions()
+    {
+        return registry.getAllFunctions();
+    }
+
+    public RawIterator<Object[], ProcedureException> callProcedure( Context ctx, QualifiedName name,
                                                            Object[] input ) throws ProcedureException
     {
-        return registry.call( ctx, name, input );
+        return registry.callProcedure( ctx, name, input );
+    }
+
+    public Object callFunction( Context ctx, QualifiedName name,
+            Object[] input ) throws ProcedureException
+    {
+        return registry.callFunction( ctx, name, input );
     }
 
     @Override
     public void start() throws Throwable
     {
+
         ProcedureJarLoader loader = new ProcedureJarLoader( compiler, log );
-        for ( CallableProcedure procedure : loader.loadProceduresFromDir( pluginDir ) )
+        ProcedureJarLoader.Callables callables = loader.loadProceduresFromDir( pluginDir );
+        for ( CallableProcedure procedure : callables.procedures() )
         {
             register( procedure );
+        }
+
+        for ( CallableUserFunction function : callables.functions() )
+        {
+            register( function );
         }
 
         // And register built-in procedures

@@ -22,6 +22,7 @@ package org.neo4j.unsafe.impl.batchimport;
 import org.junit.Test;
 
 import org.neo4j.kernel.configuration.Config;
+import org.neo4j.kernel.impl.pagecache.ConfiguringPageCacheFactory;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -30,6 +31,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.pagecache_memory;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
+import static org.neo4j.io.ByteUnit.kibiBytes;
+import static org.neo4j.io.ByteUnit.mebiBytes;
 import static org.neo4j.kernel.configuration.Settings.parseLongWithUnit;
 import static org.neo4j.unsafe.impl.batchimport.Configuration.MAX_PAGE_CACHE_MEMORY;
 
@@ -74,11 +77,76 @@ public class ConfigurationTest
         long memory = config.pageCacheMemory();
 
         // THEN
-        assertTrue( within( memory, Config.defaults().get( pagecache_memory ), MAX_PAGE_CACHE_MEMORY ) );
+        long heuristic = ConfiguringPageCacheFactory.defaultHeuristicPageCacheMemory();
+        assertTrue( within( memory, heuristic, MAX_PAGE_CACHE_MEMORY ) );
+    }
+
+    @Test
+    public void shouldCalculateBigPageSizeForBiggerMemory() throws Exception
+    {
+        // GIVEN
+        Configuration config = configWithPageCacheMemory( mebiBytes( 240 ) );
+
+        // WHEN
+        int pageSize = config.pageSize();
+
+        // THEN
+        assertEquals( mebiBytes( 4 ), pageSize );
+    }
+
+    @Test
+    public void shouldCalculateSmallPageSizeForSmallerMemory() throws Exception
+    {
+        // GIVEN
+        Configuration config = configWithPageCacheMemory( mebiBytes( 100 ) );
+
+        // WHEN
+        int pageSize = config.pageSize();
+
+        // THEN
+        assertEquals( mebiBytes( 1 ), pageSize );
+    }
+
+    @Test
+    public void shouldNotGoLowerThan8kPageSizeForSmallMemory() throws Exception
+    {
+        // GIVEN
+        Configuration config = configWithPageCacheMemory( kibiBytes( 8*30 ) );
+
+        // WHEN
+        int pageSize = config.pageSize();
+
+        // THEN
+        assertEquals( kibiBytes( 8 ), pageSize );
+    }
+
+    @Test
+    public void shouldNotGoHigherThan8mPageSizeForBigMemory() throws Exception
+    {
+        // GIVEN
+        Configuration config = configWithPageCacheMemory( mebiBytes( 700 ) );
+
+        // WHEN
+        int pageSize = config.pageSize();
+
+        // THEN
+        assertEquals( mebiBytes( 8 ), pageSize );
     }
 
     private boolean within( long value, long firstBound, long otherBound )
     {
         return value >= min( firstBound, otherBound ) && value <= max( firstBound, otherBound );
+    }
+
+    private Configuration configWithPageCacheMemory( long bytes )
+    {
+        return new Configuration.Default()
+        {
+            @Override
+            public long pageCacheMemory()
+            {
+                return bytes;
+            }
+        };
     }
 }

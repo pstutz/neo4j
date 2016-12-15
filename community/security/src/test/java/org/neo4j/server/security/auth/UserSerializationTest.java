@@ -38,14 +38,16 @@ public class UserSerializationTest
         UserSerialization serialization = new UserSerialization();
 
         List<User> users = asList(
-                new User( "Steve", Credential.forPassword( "1234321" ), false ),
-                new User( "Bob", Credential.forPassword( "0987654" ), false ) );
+                new User.Builder( "Mike", Credential.forPassword( "1234321" ) ).withFlag( "not_as_nice" ).build(),
+                new User.Builder( "Steve", Credential.forPassword( "1234321" ) ).build(),
+                new User.Builder( "Bob", Credential.forPassword( "0987654" ) ).build()
+            );
 
         // When
         byte[] serialized = serialization.serialize( users );
 
         // Then
-        assertThat( serialization.deserializeUsers( serialized ), equalTo( users ) );
+        assertThat( serialization.deserializeRecords( serialized ), equalTo( users ) );
     }
 
     /**
@@ -63,13 +65,18 @@ public class UserSerializationTest
         byte[] hash2 = new byte[] { (byte) 0x0e, (byte) 0x1f, (byte) 0xff, (byte) 0xc2, (byte) 0x3e };
 
         // When
-        List<User> deserialized = serialization.deserializeUsers( UTF8.encode(
-                ("Steve:SHA-256,FE0056C37E,A543:\n" +
-                 "Bob:SHA-256,0E1FFFC23E,34A4:password_change_required\n") ) );
+        List<User> deserialized = serialization.deserializeRecords( UTF8.encode(
+                ("Mike:SHA-256,FE0056C37E,A543:\n" +
+                        "Steve:SHA-256,FE0056C37E,A543:nice_guy,password_change_required\n" +
+                        "Bob:SHA-256,0E1FFFC23E,34A4:password_change_required\n") ) );
 
         // Then
         assertThat( deserialized, equalTo( asList(
-                new User( "Steve", new Credential( salt1, hash1 ), false ),
-                new User( "Bob", new Credential( salt2, hash2 ), true ) ) ) );
+                new User.Builder( "Mike", new Credential( salt1, hash1 )).build(),
+                new User.Builder( "Steve", new Credential( salt1, hash1 ))
+                        .withRequiredPasswordChange( true ).withFlag("nice_guy").build(),
+                new User.Builder( "Bob", new Credential( salt2, hash2 ))
+                        .withRequiredPasswordChange( true ).build()
+        ) ) );
     }
 }

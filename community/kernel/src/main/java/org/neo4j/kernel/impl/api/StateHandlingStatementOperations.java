@@ -19,19 +19,45 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import org.neo4j.collection.primitive.*;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.function.Predicate;
+
+import org.neo4j.collection.primitive.PrimitiveIntIterator;
+import org.neo4j.collection.primitive.PrimitiveLongCollections;
+import org.neo4j.collection.primitive.PrimitiveLongIterator;
+import org.neo4j.collection.primitive.PrimitiveLongResourceIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.kernel.api.DataWriteOperations;
 import org.neo4j.kernel.api.LegacyIndex;
 import org.neo4j.kernel.api.LegacyIndexHits;
 import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.constraints.*;
-import org.neo4j.kernel.api.exceptions.*;
+import org.neo4j.kernel.api.constraints.NodePropertyConstraint;
+import org.neo4j.kernel.api.constraints.NodePropertyExistenceConstraint;
+import org.neo4j.kernel.api.constraints.PropertyConstraint;
+import org.neo4j.kernel.api.constraints.RelationshipPropertyConstraint;
+import org.neo4j.kernel.api.constraints.RelationshipPropertyExistenceConstraint;
+import org.neo4j.kernel.api.constraints.UniquenessConstraint;
+import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
+import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
+import org.neo4j.kernel.api.exceptions.LabelNotFoundKernelException;
+import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
+import org.neo4j.kernel.api.exceptions.RelationshipTypeIdNotFoundKernelException;
+import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.LegacyIndexNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.schema.*;
+import org.neo4j.kernel.api.exceptions.schema.AlreadyConstrainedException;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
+import org.neo4j.kernel.api.exceptions.schema.CreateConstraintFailureException;
+import org.neo4j.kernel.api.exceptions.schema.DropConstraintFailureException;
+import org.neo4j.kernel.api.exceptions.schema.DropIndexFailureException;
+import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
+import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
+import org.neo4j.kernel.api.exceptions.schema.SchemaRuleNotFoundException;
+import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.legacyindex.AutoIndexing;
@@ -40,22 +66,33 @@ import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.api.properties.PropertyKeyIdIterator;
 import org.neo4j.kernel.api.txstate.TransactionCountingStateVisitor;
 import org.neo4j.kernel.api.txstate.TransactionState;
-import org.neo4j.kernel.impl.api.operations.*;
+import org.neo4j.kernel.impl.api.operations.CountsOperations;
+import org.neo4j.kernel.impl.api.operations.EntityOperations;
+import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
+import org.neo4j.kernel.impl.api.operations.KeyWriteOperations;
+import org.neo4j.kernel.impl.api.operations.LegacyIndexReadOperations;
+import org.neo4j.kernel.impl.api.operations.LegacyIndexWriteOperations;
+import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
+import org.neo4j.kernel.impl.api.operations.SchemaWriteOperations;
 import org.neo4j.kernel.impl.api.state.ConstraintIndexCreator;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.index.IndexEntityType;
 import org.neo4j.kernel.impl.index.LegacyIndexStore;
 import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.register.Register.DoubleLongRegister;
-import org.neo4j.storageengine.api.*;
+import org.neo4j.storageengine.api.EntityType;
+import org.neo4j.storageengine.api.LabelItem;
+import org.neo4j.storageengine.api.NodeItem;
+import org.neo4j.storageengine.api.PropertyItem;
+import org.neo4j.storageengine.api.RelationshipItem;
+import org.neo4j.storageengine.api.StorageProperty;
+import org.neo4j.storageengine.api.StorageStatement;
+import org.neo4j.storageengine.api.StoreReadLayer;
+import org.neo4j.storageengine.api.Token;
 import org.neo4j.storageengine.api.schema.IndexReader;
 import org.neo4j.storageengine.api.schema.PopulationProgress;
 import org.neo4j.storageengine.api.schema.SchemaRule;
 import org.neo4j.storageengine.api.txstate.ReadableDiffSets;
-
-import java.util.Iterator;
-import java.util.Map;
-import java.util.function.Predicate;
 
 import static org.neo4j.collection.primitive.PrimitiveLongCollections.single;
 import static org.neo4j.helpers.collection.Iterators.iterator;
@@ -262,8 +299,6 @@ public class StateHandlingStatementOperations implements
     @Override
     public long nodeCreate( KernelStatement state )
     {
-        //TODO: Sascha
-        // virtual
         long nodeId = storeLayer.reserveNode();
         state.txState().nodeDoCreate(nodeId);
         return nodeId;
@@ -278,6 +313,14 @@ public class StateHandlingStatementOperations implements
         {
             state.txState().nodeDoDelete( cursor.get().id() );
         }
+    }
+
+    @Override
+    public int nodeDetachDelete( KernelStatement state, long nodeId )
+            throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
+    {
+        nodeDelete( state, nodeId );
+        return 0;
     }
 
     @Override
@@ -934,11 +977,8 @@ public class StateHandlingStatementOperations implements
 
             state.txState().nodeDoReplaceProperty( node.id(), existingProperty, property );
 
-            PrimitiveIntCollection labelIds = getLabels( node );
-
-            indexesUpdateProperty( state, node.id(), labelIds, property.propertyKeyId(),
-                    existingProperty instanceof DefinedProperty ? (DefinedProperty) existingProperty : null,
-                    property );
+            DefinedProperty before = definedPropertyOrNull( existingProperty );
+            indexesUpdateProperty( state, node, property.propertyKeyId(), before, property );
 
             return existingProperty;
         }
@@ -994,7 +1034,6 @@ public class StateHandlingStatementOperations implements
         try ( Cursor<NodeItem> cursor = nodeCursorById( state, nodeId ) )
         {
             NodeItem node = cursor.get();
-            PrimitiveIntCollection labelIds = getLabels( node );
             Property existingProperty;
             try ( Cursor<PropertyItem> properties = node.property( propertyKeyId ) )
             {
@@ -1009,8 +1048,7 @@ public class StateHandlingStatementOperations implements
                     autoIndexing.nodes().propertyRemoved( ops, nodeId, propertyKeyId );
                     state.txState().nodeDoRemoveProperty( node.id(), (DefinedProperty) existingProperty );
 
-                    indexesUpdateProperty( state, node.id(), labelIds, propertyKeyId,
-                            (DefinedProperty) existingProperty, null );
+                    indexesUpdateProperty( state, node, propertyKeyId, (DefinedProperty) existingProperty, null );
                 }
             }
             return existingProperty;
@@ -1060,17 +1098,16 @@ public class StateHandlingStatementOperations implements
         return Property.noGraphProperty( propertyKeyId );
     }
 
-    private void indexesUpdateProperty( KernelStatement state,
-            long nodeId,
-            PrimitiveIntCollection labels,
-            int propertyKey,
-            DefinedProperty before,
+    private void indexesUpdateProperty( KernelStatement state, NodeItem node, int propertyKey, DefinedProperty before,
             DefinedProperty after )
     {
-        PrimitiveIntIterator labelIterator = labels.iterator();
-        while ( labelIterator.hasNext() )
+        try ( Cursor<LabelItem> labels = node.labels() )
         {
-            indexUpdateProperty( state, nodeId, labelIterator.next(), propertyKey, before, after );
+            while ( labels.next() )
+            {
+                LabelItem label = labels.get();
+                indexUpdateProperty( state, node.id(), label.getAsInt(), propertyKey, before, after );
+            }
         }
     }
 
@@ -1657,19 +1694,6 @@ public class StateHandlingStatementOperations implements
     }
     // </Legacy index>
 
-    private PrimitiveIntCollection getLabels( NodeItem node )
-    {
-        PrimitiveIntStack labelIds = new PrimitiveIntStack();
-        try ( Cursor<LabelItem> labels = node.labels() )
-        {
-            while ( labels.next() )
-            {
-                labelIds.push( labels.get().getAsInt() );
-            }
-        }
-        return labelIds;
-    }
-
     @Override
     public boolean nodeExists( KernelStatement statement, long id )
     {
@@ -1686,5 +1710,10 @@ public class StateHandlingStatementOperations implements
             }
         }
         return storeLayer.nodeExists( id );
+    }
+
+    private static DefinedProperty definedPropertyOrNull( Property existingProperty )
+    {
+        return existingProperty instanceof DefinedProperty ? (DefinedProperty) existingProperty : null;
     }
 }

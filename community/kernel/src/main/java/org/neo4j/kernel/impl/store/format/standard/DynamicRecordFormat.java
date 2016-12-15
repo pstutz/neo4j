@@ -20,7 +20,6 @@
 package org.neo4j.kernel.impl.store.format.standard;
 
 import org.neo4j.io.pagecache.PageCursor;
-import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.kernel.impl.store.format.BaseOneByteHeaderRecordFormat;
 import org.neo4j.kernel.impl.store.format.BaseRecordFormat;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
@@ -48,7 +47,7 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
     }
 
     @Override
-    public void read( DynamicRecord record, PageCursor cursor, RecordLoad mode, int recordSize, PagedFile storeFile )
+    public void read( DynamicRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
     {
         /*
          * First 4b
@@ -65,6 +64,13 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
         {
             int dataSize = recordSize - getRecordHeaderSize();
             int nrOfBytes = (int) (firstInteger & 0xFFFFFF);
+            if ( nrOfBytes > recordSize )
+            {
+                // We must have performed an inconsistent read,
+                // because this many bytes cannot possibly fit in a record!
+                cursor.setCursorException( payloadTooBigErrorMessage( record, recordSize, nrOfBytes ) );
+                return;
+            }
 
             /*
              * Pointer to next block 4b (low bits of the pointer)
@@ -77,23 +83,40 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
             if ( longNextBlock != Record.NO_NEXT_BLOCK.intValue()
                     && nrOfBytes < dataSize || nrOfBytes > dataSize )
             {
-                mode.report( format( "Next block set[%d] current block illegal size[%d/%d]",
-                        record.getNextBlock(), record.getLength(), dataSize ) );
+                cursor.setCursorException( illegalBlockSizeMessage( record, dataSize ) );
+                return;
             }
 
             readData( record, cursor );
         }
+        else
+        {
+            record.setInUse( inUse );
+        }
+    }
+
+    public static String payloadTooBigErrorMessage( DynamicRecord record, int recordSize, int nrOfBytes )
+    {
+        return format( "DynamicRecord[%s] claims to have a payload of %s bytes, " +
+                       "which is larger than the record size of %s bytes.",
+                record.getId(), nrOfBytes, recordSize );
+    }
+
+    private String illegalBlockSizeMessage( DynamicRecord record, int dataSize )
+    {
+        return format( "Next block set[%d] current block illegal size[%d/%d]",
+                record.getNextBlock(), record.getLength(), dataSize );
     }
 
     public static void readData( DynamicRecord record, PageCursor cursor )
     {
-        if ( record.getLength() == 0 ) // don't go though the trouble of acquiring the window if we would read nothing
+        int len = record.getLength();
+        if ( len == 0 ) // don't go though the trouble of acquiring the window if we would read nothing
         {
             record.setData( NO_DATA );
             return;
         }
 
-        int len = record.getLength();
         byte[] data = record.getData();
         if ( data == null || data.length != len )
         {
@@ -104,7 +127,7 @@ public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRe
     }
 
     @Override
-    public void write( DynamicRecord record, PageCursor cursor, int recordSize, PagedFile storeFile )
+    public void write( DynamicRecord record, PageCursor cursor, int recordSize )
     {
         if ( record.inUse() )
         {

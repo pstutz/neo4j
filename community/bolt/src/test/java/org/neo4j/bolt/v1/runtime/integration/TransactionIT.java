@@ -17,90 +17,347 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 package org.neo4j.bolt.v1.runtime.integration;
 
-import org.hamcrest.MatcherAssert;
+import org.eclipse.jetty.server.Request;
+import org.eclipse.jetty.server.Server;
+import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jetty.server.handler.AbstractHandler;
 import org.junit.Rule;
 import org.junit.Test;
 
-import java.util.Collections;
-import java.util.Map;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.regex.Pattern;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
-import org.neo4j.bolt.v1.runtime.Session;
-import org.neo4j.bolt.v1.runtime.StatementMetadata;
-import org.neo4j.bolt.v1.runtime.spi.RecordStream;
+import org.neo4j.bolt.testing.BoltResponseRecorder;
+import org.neo4j.bolt.v1.runtime.BoltConnectionFatality;
+import org.neo4j.bolt.v1.runtime.BoltStateMachine;
+import org.neo4j.concurrent.BinaryLatch;
+import org.neo4j.graphdb.Label;
+import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.Transaction;
+import org.neo4j.kernel.api.exceptions.Status;
+import org.neo4j.test.Barrier;
+import org.neo4j.test.DoubleLatch;
+
+import static java.lang.String.format;
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.singletonMap;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.Assert.assertFalse;
+import static org.neo4j.bolt.testing.BoltMatchers.failedWithStatus;
+import static org.neo4j.bolt.testing.BoltMatchers.succeeded;
+import static org.neo4j.bolt.testing.BoltMatchers.succeededWithMetadata;
+import static org.neo4j.bolt.testing.BoltMatchers.succeededWithRecord;
+import static org.neo4j.bolt.testing.BoltMatchers.wasIgnored;
+import static org.neo4j.bolt.testing.NullResponseHandler.nullResponseHandler;
+
 
 public class TransactionIT
 {
-    private static final Map<String, Object> EMPTY_PARAMS = Collections.emptyMap();
+    private static final String USER_AGENT = "TransactionIT/0.0";
+    private static final Pattern BOOKMARK_PATTERN = Pattern.compile( "neo4j:bookmark:v1:tx[0-9]+" );
 
     @Rule
-    public TestSessions env = new TestSessions();
+    public SessionRule env = new SessionRule();
 
     @Test
     public void shouldHandleBeginCommit() throws Throwable
     {
         // Given
-        RecordingCallback<StatementMetadata, ?> responses = new RecordingCallback<>();
-        Session session = env.newSession( "<test>" );
-        session.init( "TestClient",  Collections.<String, Object>emptyMap(), null, null );
+        BoltResponseRecorder recorder = new BoltResponseRecorder();
+        BoltStateMachine machine = env.newMachine( "<test>" );
+        machine.init( USER_AGENT, emptyMap(), null );
 
         // When
-        session.run( "BEGIN", EMPTY_PARAMS, null, responses );
-        session.discardAll( null, Session.Callbacks.<Void,Object>noop() );
+        machine.run( "BEGIN", emptyMap(), recorder );
+        machine.discardAll( nullResponseHandler() );
 
-        session.run( "CREATE (n:InTx)", EMPTY_PARAMS, null, responses );
-        session.discardAll( null, Session.Callbacks.<Void,Object>noop() );
+        machine.run( "CREATE (n:InTx)", emptyMap(), recorder );
+        machine.discardAll( nullResponseHandler() );
 
-        session.run( "COMMIT", EMPTY_PARAMS, null, responses );
-        session.discardAll( null, Session.Callbacks.<Void,Object>noop() );
+        machine.run( "COMMIT", emptyMap(), recorder );
+        machine.discardAll( nullResponseHandler() );
 
         // Then
-        MatcherAssert.assertThat( responses.next(), SessionMatchers.success() );
-        MatcherAssert.assertThat( responses.next(), SessionMatchers.success() );
-        MatcherAssert.assertThat( responses.next(), SessionMatchers.success() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
     }
 
     @Test
     public void shouldHandleBeginRollback() throws Throwable
     {
         // Given
-        RecordingCallback<StatementMetadata, ?> responses = new RecordingCallback<>();
-        Session session = env.newSession( "<test>" );
-        session.init( "TestClient",  Collections.<String, Object>emptyMap(), null, null );
+        BoltResponseRecorder recorder = new BoltResponseRecorder();
+        BoltStateMachine machine = env.newMachine( "<test>" );
+        machine.init( USER_AGENT, emptyMap(), null );
 
         // When
-        session.run( "BEGIN", EMPTY_PARAMS, null, responses );
-        session.discardAll( null, Session.Callbacks.<Void,Object>noop() );
+        machine.run( "BEGIN", emptyMap(), recorder );
+        machine.discardAll( nullResponseHandler() );
 
-        session.run( "CREATE (n:InTx)", EMPTY_PARAMS, null, responses );
-        session.discardAll( null, Session.Callbacks.<Void,Object>noop() );
+        machine.run( "CREATE (n:InTx)", emptyMap(), recorder );
+        machine.discardAll( nullResponseHandler() );
 
-        session.run( "ROLLBACK", EMPTY_PARAMS, null, responses );
-        session.discardAll( null, Session.Callbacks.<Void,Object>noop() );
+        machine.run( "ROLLBACK", emptyMap(), recorder );
+        machine.discardAll( nullResponseHandler() );
 
         // Then
-        MatcherAssert.assertThat( responses.next(), SessionMatchers.success() );
-        MatcherAssert.assertThat( responses.next(), SessionMatchers.success() );
-        MatcherAssert.assertThat( responses.next(), SessionMatchers.success() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
     }
 
     @Test
     public void shouldFailNicelyWhenOutOfOrderRollback() throws Throwable
     {
         // Given
-        RecordingCallback<StatementMetadata, ?> runResponse = new RecordingCallback<>();
-        RecordingCallback<RecordStream, Object> pullResponse = new RecordingCallback<>();
-        Session session = env.newSession( "<test>" );
-        session.init( "TestClient",  Collections.<String, Object>emptyMap(), null, null );
+        BoltResponseRecorder runRecorder = new BoltResponseRecorder();
+        BoltResponseRecorder pullAllRecorder = new BoltResponseRecorder();
+        BoltStateMachine machine = env.newMachine( "<test>" );
+        machine.init( USER_AGENT, emptyMap(), null );
 
         // When
-        session.run( "ROLLBACK", EMPTY_PARAMS, null, runResponse );
-        session.pullAll( null, pullResponse );
+        machine.run( "ROLLBACK", emptyMap(), runRecorder );
+        machine.pullAll( pullAllRecorder );
 
         // Then
-        MatcherAssert.assertThat( runResponse.next(),
-                SessionMatchers.failedWith( "rollback cannot be done when there is no open transaction in the session."));
-        MatcherAssert.assertThat( pullResponse.next(), SessionMatchers.ignored());
+        assertThat( runRecorder.nextResponse(), failedWithStatus( Status.Statement.SemanticError ) );
+        assertThat( pullAllRecorder.nextResponse(), wasIgnored() );
     }
+
+    @Test
+    public void shouldReceiveBookmarkOnCommitAndDiscardAll() throws Throwable
+    {
+        // Given
+        BoltResponseRecorder recorder = new BoltResponseRecorder();
+        BoltStateMachine machine = env.newMachine( "<test>" );
+        machine.init( USER_AGENT, emptyMap(), null );
+
+        // When
+        machine.run( "BEGIN", emptyMap(), recorder );
+        machine.discardAll( recorder );
+
+        machine.run( "CREATE (a:Person)", emptyMap(), recorder );
+        machine.discardAll( recorder );
+
+        machine.run( "COMMIT", emptyMap(), recorder );
+        machine.discardAll( recorder );
+
+        // Then
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeededWithMetadata( "bookmark", BOOKMARK_PATTERN ) );
+    }
+
+    @Test
+    public void shouldReceiveBookmarkOnCommitAndPullAll() throws Throwable
+    {
+        // Given
+        BoltResponseRecorder recorder = new BoltResponseRecorder();
+        BoltStateMachine machine = env.newMachine( "<test>" );
+        machine.init( USER_AGENT, emptyMap(), null );
+
+        // When
+        machine.run( "BEGIN", emptyMap(), recorder );
+        machine.discardAll( recorder );
+
+        machine.run( "CREATE (a:Person)", emptyMap(), recorder );
+        machine.discardAll( recorder );
+
+        machine.run( "COMMIT", emptyMap(), recorder );
+        machine.pullAll( recorder );
+
+        // Then
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeeded() );
+        assertThat( recorder.nextResponse(), succeededWithMetadata( "bookmark", BOOKMARK_PATTERN ) );
+    }
+
+    @Test
+    public void shouldReadYourOwnWrites() throws Exception
+    {
+        try ( Transaction tx = env.graph().beginTx() )
+        {
+            Node node = env.graph().createNode( Label.label( "A" ) );
+            node.setProperty( "prop", "one" );
+            tx.success();
+        }
+
+        BinaryLatch latch = new BinaryLatch();
+
+        long dbVersion = env.lastClosedTxId();
+        Thread thread = new Thread()
+        {
+            @Override
+            public void run()
+            {
+                try ( BoltStateMachine machine = env.newMachine( "<write>" ) )
+                {
+                    machine.init( USER_AGENT, emptyMap(), null );
+                    latch.await();
+                    machine.run( "MATCH (n:A) SET n.prop = 'two'", emptyMap(), nullResponseHandler() );
+                    machine.pullAll( nullResponseHandler() );
+                }
+                catch ( BoltConnectionFatality connectionFatality )
+                {
+                    throw new RuntimeException( connectionFatality );
+                }
+            }
+        };
+        thread.start();
+
+        long dbVersionAfterWrite = dbVersion + 1;
+        try ( BoltStateMachine machine = env.newMachine( "<read>" ) )
+        {
+            BoltResponseRecorder recorder = new BoltResponseRecorder();
+            machine.init( USER_AGENT, emptyMap(), null );
+            latch.release();
+            final String bookmark = "neo4j:bookmark:v1:tx" + Long.toString( dbVersionAfterWrite );
+            machine.run( "BEGIN", singletonMap( "bookmark", bookmark ), nullResponseHandler() );
+            machine.pullAll( recorder );
+            machine.run( "MATCH (n:A) RETURN n.prop", emptyMap(), nullResponseHandler() );
+            machine.pullAll( recorder );
+            machine.run( "COMMIT", emptyMap(), nullResponseHandler() );
+            machine.pullAll( recorder );
+
+            assertThat( recorder.nextResponse(), succeededWithMetadata( "bookmark", BOOKMARK_PATTERN ) );
+            assertThat( recorder.nextResponse(), succeededWithRecord( "two" ) );
+            assertThat( recorder.nextResponse(), succeededWithMetadata( "bookmark", BOOKMARK_PATTERN ) );
+        }
+
+        thread.join();
+    }
+
+    @Test
+    public void shouldTerminateQueriesEvenIfUsingPeriodicCommit() throws Exception
+    {
+        // Spawns a throttled HTTP server, runs a PERIODIC COMMIT that fetches data from this server,
+        // and checks that the query able to be terminated
+
+        // We start with 3, because that is how many actors we have -
+        // 1. the http server
+        // 2. the running query
+        // 3. the one terminating 2
+        final DoubleLatch latch = new DoubleLatch( 3, true );
+
+        // This is used to block the http server between the first and second batch
+        final Barrier.Control barrier = new Barrier.Control();
+
+        // Serve CSV via local web server, let Jetty find a random port for us
+        Server server = createHttpServer( latch, barrier, 20, 30 );
+        server.start();
+        int localPort = getLocalPort( server );
+
+        final BoltStateMachine[] machine = {null};
+
+        Thread thread = new Thread()
+        {
+            @Override
+            public void run()
+            {
+                try ( BoltStateMachine stateMachine = env.newMachine( "<write>" ) )
+                {
+                    machine[0] = stateMachine;
+                    stateMachine.init( USER_AGENT, emptyMap(), null );
+                    String query = format( "USING PERIODIC COMMIT 10 LOAD CSV FROM 'http://localhost:%d' AS line " +
+                                           "CREATE (n:A {id: line[0], square: line[1]}) " +
+                                           "WITH count(*) as number " +
+                                           "CREATE (n:ShouldNotExist)",
+                                           localPort );
+                    try
+                    {
+                        latch.start();
+                        stateMachine.run( query, emptyMap(), nullResponseHandler() );
+                        stateMachine.pullAll( nullResponseHandler() );
+                    }
+                    finally
+                    {
+                        latch.finish();
+                    }
+                }
+                catch ( BoltConnectionFatality connectionFatality )
+                {
+                    throw new RuntimeException( connectionFatality );
+                }
+            }
+        };
+        thread.setName( "query runner" );
+        thread.start();
+
+        // We block this thread here, waiting for the http server to spin up and the running query to get started
+        latch.startAndWaitForAllToStart();
+        Thread.sleep( 1000 );
+
+        // This is the call that RESETs the Bolt connection and will terminate the running query
+        machine[0].reset( nullResponseHandler() );
+
+        barrier.release();
+
+        // We block again here, waiting for the running query to have been terminated, and for the server to have
+        // wrapped up and finished streaming http results
+        latch.finishAndWaitForAllToFinish();
+
+        // And now we check that the last node did not get created
+        try ( Transaction ignored = env.graph().beginTx() )
+        {
+            assertFalse( "Query was not terminated in time - nodes were created!",
+                         env.graph().findNodes( Label.label( "ShouldNotExist" ) ).hasNext() );
+        }
+    }
+
+    public static Server createHttpServer(
+            DoubleLatch latch, Barrier.Control innerBarrier, int firstBatchSize, int otherBatchSize )
+    {
+        Server server = new Server( 0 );
+        server.setHandler( new AbstractHandler()
+        {
+            @Override
+            public void handle(
+                    String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response )
+                    throws IOException, ServletException
+            {
+                response.setContentType( "text/plain; charset=utf-8" );
+                response.setStatus( HttpServletResponse.SC_OK );
+                PrintWriter out = response.getWriter();
+
+                writeBatch( out, firstBatchSize );
+                out.flush();
+                latch.start();
+                innerBarrier.reached();
+
+                latch.finish();
+                writeBatch( out, otherBatchSize );
+                baseRequest.setHandled(true);
+            }
+
+            private void writeBatch( PrintWriter out, int batchSize )
+            {
+                for ( int i = 0; i < batchSize; i++ )
+                {
+                    out.write( format( "%d %d\n", i, i*i ) );
+                    i++;
+                }
+            }
+        } );
+        return server;
+    }
+
+    private int getLocalPort( Server server )
+    {
+        return ((ServerConnector) (server.getConnectors()[0])).getLocalPort();
+    }
+
 }

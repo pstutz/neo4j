@@ -45,7 +45,7 @@ import org.neo4j.kernel.NeoStoreDataSource;
 import org.neo4j.kernel.ha.cluster.HighAvailabilityMemberChangeEvent;
 import org.neo4j.kernel.ha.cluster.HighAvailabilityMemberState;
 import org.neo4j.kernel.ha.cluster.SwitchToMaster;
-import org.neo4j.kernel.ha.cluster.SwitchToSlave;
+import org.neo4j.kernel.ha.cluster.SwitchToSlaveCopyThenBranch;
 import org.neo4j.kernel.impl.logging.NullLogService;
 import org.neo4j.kernel.impl.logging.SimpleLogService;
 import org.neo4j.kernel.impl.store.MismatchingStoreIdException;
@@ -160,7 +160,7 @@ public class HighAvailabilityModeSwitcherTest
         final CountDownLatch slaveAvailable = new CountDownLatch( 2 );
         final AtomicBoolean firstSwitch = new AtomicBoolean( true );
         ClusterMemberAvailability availability = mock( ClusterMemberAvailability.class );
-        SwitchToSlave switchToSlave = mock( SwitchToSlave.class );
+        SwitchToSlaveCopyThenBranch switchToSlave = mock( SwitchToSlaveCopyThenBranch.class );
         @SuppressWarnings( "resource" )
         SwitchToMaster switchToMaster = mock( SwitchToMaster.class );
 
@@ -219,7 +219,7 @@ public class HighAvailabilityModeSwitcherTest
         final CountDownLatch secondMasterAvailableComes = new CountDownLatch( 1 );
         final CountDownLatch secondMasterAvailableHandled = new CountDownLatch( 1 );
 
-        SwitchToSlave switchToSlave = mock( SwitchToSlave.class );
+        SwitchToSlaveCopyThenBranch switchToSlave = mock( SwitchToSlaveCopyThenBranch.class );
 
         HighAvailabilityModeSwitcher modeSwitcher = new HighAvailabilityModeSwitcher( switchToSlave,
                 mock( SwitchToMaster.class ), mock( Election.class ), mock( ClusterMemberAvailability.class ),
@@ -274,7 +274,6 @@ public class HighAvailabilityModeSwitcherTest
         verify( switchToSlave ).switchToSlave( any( LifeSupport.class ), any( URI.class ), eq( uri1 ),
                 any( CancellationRequest.class ) );
 
-
         // masterIsAvailable for instance 2
         URI uri2 = URI.create( "ha://server2" );
         modeSwitcher.masterIsAvailable(
@@ -299,7 +298,7 @@ public class HighAvailabilityModeSwitcherTest
          */
 
         // Given
-        SwitchToSlave switchToSlave = mock( SwitchToSlave.class );
+        SwitchToSlaveCopyThenBranch switchToSlave = mock( SwitchToSlaveCopyThenBranch.class );
         // The fist run through switchToSlave
         final CountDownLatch firstCallMade = new CountDownLatch( 1 );
         // The second run through switchToSlave
@@ -351,7 +350,7 @@ public class HighAvailabilityModeSwitcherTest
     {
         // Given
         // A HAMS
-        SwitchToSlave switchToSlave = mock( SwitchToSlave.class );
+        SwitchToSlaveCopyThenBranch switchToSlave = mock( SwitchToSlaveCopyThenBranch.class );
         AssertableLogProvider logProvider = new AssertableLogProvider();
         SimpleLogService logService = new SimpleLogService( NullLogProvider.getInstance(), logProvider );
 
@@ -391,7 +390,7 @@ public class HighAvailabilityModeSwitcherTest
         ClusterMemberAvailability memberAvailability = mock( ClusterMemberAvailability.class );
         Election election = mock( Election.class );
 
-        HighAvailabilityModeSwitcher modeSwitcher = new HighAvailabilityModeSwitcher( mock( SwitchToSlave.class ),
+        HighAvailabilityModeSwitcher modeSwitcher = new HighAvailabilityModeSwitcher( mock( SwitchToSlaveCopyThenBranch.class ),
                 mock( SwitchToMaster.class ), election, memberAvailability, mock( ClusterClient.class ),
                 storeSupplierMock(), mock( InstanceId.class ), new ComponentSwitcherContainer(),
                 neoStoreDataSourceSupplierMock(), NullLogService.getInstance() );
@@ -413,7 +412,7 @@ public class HighAvailabilityModeSwitcherTest
         ClusterMemberAvailability memberAvailability = mock( ClusterMemberAvailability.class );
         Election election = mock( Election.class );
 
-        HighAvailabilityModeSwitcher modeSwitcher = new HighAvailabilityModeSwitcher( mock( SwitchToSlave.class ),
+        HighAvailabilityModeSwitcher modeSwitcher = new HighAvailabilityModeSwitcher( mock( SwitchToSlaveCopyThenBranch.class ),
                 mock( SwitchToMaster.class ), election, memberAvailability, mock( ClusterClient.class ),
                 storeSupplierMock(), mock( InstanceId.class ), new ComponentSwitcherContainer(),
                 neoStoreDataSourceSupplierMock(), NullLogService.getInstance() );
@@ -434,7 +433,7 @@ public class HighAvailabilityModeSwitcherTest
     public void shouldAllowForcedElectionsAfterModeSwitch() throws Throwable
     {
         // Given
-        SwitchToSlave switchToSlave = mock( SwitchToSlave.class );
+        SwitchToSlaveCopyThenBranch switchToSlave = mock( SwitchToSlaveCopyThenBranch.class );
         when( switchToSlave.switchToSlave( any( LifeSupport.class ), any( URI.class ), any( URI.class ),
                 any( CancellationRequest.class ) ) ).thenReturn( URI.create( "http://localhost" ) );
         ClusterMemberAvailability memberAvailability = mock( ClusterMemberAvailability.class );
@@ -492,7 +491,7 @@ public class HighAvailabilityModeSwitcherTest
          * as a constructor argument of the HAMS.
          */
         // Given
-        SwitchToSlave sts = mock( SwitchToSlave.class );
+        SwitchToSlaveCopyThenBranch sts = mock( SwitchToSlaveCopyThenBranch.class );
         SwitchToMaster stm = mock( SwitchToMaster.class );
         // this is necessary to trigger a revert which uses the serverId from the HAMS#me field
         when( stm.switchToMaster( any( LifeSupport.class ), any( URI.class ) ) ).thenThrow( new RuntimeException() );
@@ -535,6 +534,32 @@ public class HighAvailabilityModeSwitcherTest
         verify( election ).demote( instanceId );
     }
 
+    @Test
+    public void shouldSwitchToSlaveForNullMasterAndBeSilentWhenMovingToDetached() throws Throwable
+    {
+        // Given
+        SwitchToSlaveCopyThenBranch sts = mock( SwitchToSlaveCopyThenBranch.class );
+        SwitchToMaster stm = mock( SwitchToMaster.class );
+        Election election = mock( Election.class );
+        ClusterMemberAvailability cma = mock( ClusterMemberAvailability.class );
+        InstanceId instanceId = new InstanceId( 14 );
+        ComponentSwitcher componentSwitcher = mock( ComponentSwitcher.class );
+
+        HighAvailabilityModeSwitcher theSwitcher = new HighAvailabilityModeSwitcher( sts, stm, election, cma,
+                mock( ClusterClient.class ), storeSupplierMock(), instanceId, componentSwitcher,
+                neoStoreDataSourceSupplierMock(), NullLogService.getInstance() );
+
+        // When
+        theSwitcher.init();
+        theSwitcher.start();
+        theSwitcher.instanceDetached( new HighAvailabilityMemberChangeEvent( HighAvailabilityMemberState.MASTER,
+                       HighAvailabilityMemberState.PENDING, null, null ) );
+
+        // Then
+        verify( componentSwitcher ).switchToSlave();
+        verifyZeroInteractions( cma );
+    }
+
     @SuppressWarnings( "unchecked" )
     public static Supplier<StoreId> storeSupplierMock()
     {
@@ -545,7 +570,7 @@ public class HighAvailabilityModeSwitcherTest
 
     private static HighAvailabilityModeSwitcher createModeSwitcher( ClusterMemberAvailability availability )
     {
-        return new HighAvailabilityModeSwitcher( mock( SwitchToSlave.class ), mock( SwitchToMaster.class ),
+        return new HighAvailabilityModeSwitcher( mock( SwitchToSlaveCopyThenBranch.class ), mock( SwitchToMaster.class ),
                 mock( Election.class ), availability, mock( ClusterClient.class ), storeSupplierMock(),
                 mock( InstanceId.class ), new ComponentSwitcherContainer(), neoStoreDataSourceSupplierMock(),
                 NullLogService.getInstance() );

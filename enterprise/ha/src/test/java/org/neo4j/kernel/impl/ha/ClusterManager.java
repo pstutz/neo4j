@@ -22,7 +22,9 @@ package org.neo4j.kernel.impl.ha;
 import java.io.File;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
@@ -60,6 +62,7 @@ import org.neo4j.cluster.com.NetworkSender;
 import org.neo4j.cluster.member.ClusterMemberEvents;
 import org.neo4j.cluster.member.ClusterMemberListener;
 import org.neo4j.cluster.protocol.election.NotElectableElectionCredentialsProvider;
+import org.neo4j.consistency.store.StoreAssertions;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.TransactionFailureException;
 import org.neo4j.graphdb.config.Setting;
@@ -83,7 +86,6 @@ import org.neo4j.kernel.ha.com.master.Slaves;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory;
 import org.neo4j.kernel.impl.logging.LogService;
 import org.neo4j.kernel.impl.logging.NullLogService;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.util.Dependencies;
 import org.neo4j.kernel.impl.util.Listener;
 import org.neo4j.kernel.lifecycle.LifeSupport;
@@ -96,6 +98,8 @@ import org.neo4j.storageengine.api.StorageEngine;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableMap;
+
+import static org.neo4j.graphdb.factory.GraphDatabaseSettings.boltConnector;
 import static org.neo4j.helpers.ArrayUtil.contains;
 import static org.neo4j.helpers.collection.Iterables.count;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
@@ -108,8 +112,14 @@ import static org.neo4j.io.fs.FileUtils.copyRecursively;
 public class ClusterManager
         extends LifecycleAdapter
 {
-    private static final int CLUSTER_MIN_PORT = 10_000;
-    private static final int CLUSTER_MAX_PORT = 20_000;
+    /*
+     * The following ports are used by cluster instances to setup listening sockets. It is important that the range
+     * used remains below 30000, since that is where the ephemeral ports start in some linux kernels. If they are
+     * used, they can conflict with ephemeral sockets and result in address already in use errors, resulting in
+     * false failures.
+     */
+    private static final int CLUSTER_MIN_PORT = 11_000;
+    private static final int CLUSTER_MAX_PORT = 21_000;
     private static final int HA_MIN_PORT = CLUSTER_MAX_PORT + 1;
     private static final int HA_MAX_PORT = HA_MIN_PORT + 10_000;
 
@@ -131,7 +141,9 @@ public class ClusterManager
     public static final long DEFAULT_TIMEOUT_SECONDS = 60L;
     public static final Map<String,String> CONFIG_FOR_SINGLE_JVM_CLUSTER = unmodifiableMap( stringMap(
             GraphDatabaseSettings.pagecache_memory.name(), "8m",
-            GraphDatabaseSettings.record_format.name(), StandardV3_0.NAME ) );
+            boltConnector( "0" ).type.name(), "BOLT",
+            boltConnector( "0" ).enabled.name(), "false"
+    ) );
 
     public interface StoreDirInitializer
     {
@@ -157,7 +169,9 @@ public class ClusterManager
     private final Listener<GraphDatabaseService> initialDatasetCreator;
     private final List<Predicate<ManagedCluster>> availabilityChecks;
     private ManagedCluster managedCluster;
-    LifeSupport life;
+    private final boolean consistencyCheck;
+    private final int firstInstanceId;
+    private LifeSupport life;
 
     private ClusterManager( Builder builder )
     {
@@ -169,6 +183,8 @@ public class ClusterManager
         this.storeDirInitializer = builder.initializer;
         this.initialDatasetCreator = builder.initialDatasetCreator;
         this.availabilityChecks = builder.availabilityChecks;
+        this.consistencyCheck = builder.consistencyCheck;
+        this.firstInstanceId = builder.firstInstanceId;
     }
 
     private Map<String,IntFunction<String>> withDefaults( Map<String,IntFunction<String>> commonConfig )
@@ -218,7 +234,6 @@ public class ClusterManager
         return () -> {
             final Cluster cluster = new Cluster();
 
-
             HashSet<Integer> takenPorts = new HashSet<>();
             try
             {
@@ -257,17 +272,47 @@ public class ClusterManager
                 // This port is already taken but not bound yet, ignore it
                 continue;
             }
+
             try
             {
-                ServerSocket socket = new ServerSocket( port );
-                // Port is available, return it
+                // try binding it at wildcard
+                ServerSocket ss = new ServerSocket();
+                ss.setReuseAddress( false );
+                ss.bind( new InetSocketAddress( port ) );
+                ss.close();
+            }
+            catch ( IOException e )
+            {
+                except.add( port );
+                continue;
+            }
+
+            try
+            {
+                // try binding it at loopback
+                ServerSocket ss = new ServerSocket();
+                ss.setReuseAddress( false );
+                ss.bind( new InetSocketAddress( InetAddress.getLoopbackAddress(), port ) );
+                ss.close();
+            }
+            catch ( IOException e )
+            {
+                except.add( port );
+                continue;
+            }
+
+            try
+            {
+                // try connecting to it at loopback
+                Socket socket = new Socket( InetAddress.getLoopbackAddress(), port );
                 socket.close();
-                return port;
+                except.add( port );
+                continue;
             }
             catch ( IOException ex )
             {
-                // Port was already bound, try the next one
-                except.add( port );
+                // Port very likely free!
+                return port;
             }
         }
 
@@ -544,6 +589,31 @@ public class ClusterManager
         };
     }
 
+    public static Predicate<ClusterManager.ManagedCluster> instanceEvicted( final HighlyAvailableGraphDatabase instance )
+    {
+        return new Predicate<ClusterManager.ManagedCluster>()
+        {
+            @Override
+            public boolean test( ClusterManager.ManagedCluster managedCluster )
+            {
+                InstanceId instanceId = managedCluster.getServerId( instance );
+
+                Iterable<HighlyAvailableGraphDatabase> members = managedCluster.getAllMembers();
+                for ( HighlyAvailableGraphDatabase member : members )
+                {
+                    if ( instanceId.equals( managedCluster.getServerId( member ) ) )
+                    {
+                        if ( member.role().equals( "UNKNOWN" ) )
+                        {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+        };
+    }
+
     public static Predicate<ManagedCluster> memberSeesOtherMemberAsFailed(
             final HighlyAvailableGraphDatabase observer, final HighlyAvailableGraphDatabase observed )
     {
@@ -610,7 +680,6 @@ public class ClusterManager
 
         return buf.toString();
     }
-
 
     @Override
     public void start() throws Throwable
@@ -719,6 +788,19 @@ public class ClusterManager
          * @param checks availability checks that must pass before considering the cluster online.
          */
         SELF withAvailabilityChecks( Predicate<ManagedCluster>... checks );
+
+        /**
+         * Runs consistency checks on the databases after cluster has been shut down.
+         */
+        SELF withConsistencyCheckAfterwards();
+
+        /**
+         * Sets the instance id of the first cluster member to be started. The rest of the cluster members will have
+         * instance ids incremented by one, sequentially. Default is 1.
+
+         * @param firstInstanceId The lowest instance id that will be used in the cluster
+         */
+        SELF withFirstInstanceId( int firstInstanceId );
     }
 
     public static class Builder implements ClusterBuilder<Builder>
@@ -730,9 +812,12 @@ public class ClusterManager
         private StoreDirInitializer initializer;
         private Listener<GraphDatabaseService> initialDatasetCreator;
         private List<Predicate<ManagedCluster>> availabilityChecks = Collections.emptyList();
+        private boolean consistencyCheck;
+        private int firstInstanceId = 1;
 
         public Builder( File root )
         {
+            this();
             this.root = root;
         }
 
@@ -740,6 +825,9 @@ public class ClusterManager
         {
             // We want this, at least in the ClusterRule case where we fill this Builder instances
             // with all our behavior, but we don't know about the root directory until we evaluate the rule.
+            commonConfig.put( ClusterSettings.heartbeat_interval.name(), constant("1") );
+            commonConfig.put( ClusterSettings.leave_timeout.name(), constant( "5" ) );
+            commonConfig.put( GraphDatabaseSettings.pagecache_memory.name(), constant( "8m" ) );
         }
 
         @Override
@@ -819,6 +907,20 @@ public class ClusterManager
         public final Builder withAvailabilityChecks( Predicate<ManagedCluster>... checks )
         {
             this.availabilityChecks = Arrays.asList( checks );
+            return this;
+        }
+
+        @Override
+        public Builder withConsistencyCheckAfterwards()
+        {
+            this.consistencyCheck = true;
+            return this;
+        }
+
+        @Override
+        public Builder withFirstInstanceId( int firstInstanceId )
+        {
+            this.firstInstanceId = firstInstanceId;
             return this;
         }
 
@@ -966,7 +1068,7 @@ public class ClusterManager
             this.name = spec.getName();
             for ( int i = 0; i < spec.getMembers().size(); i++ )
             {
-                startMember( new InstanceId( i + 1 ) );
+                startMember( new InstanceId( firstInstanceId + i ) );
             }
             for ( HighlyAvailableGraphDatabaseProxy member : members.values() )
             {
@@ -993,8 +1095,19 @@ public class ClusterManager
         {
             for ( HighlyAvailableGraphDatabaseProxy member : members.values() )
             {
-                member.get( DEFAULT_TIMEOUT_SECONDS ).shutdown();
+                HighlyAvailableGraphDatabase memberDb = member.get( DEFAULT_TIMEOUT_SECONDS );
+                File storeDir = memberDb.getStoreDirectory();
+                memberDb.shutdown();
+                if ( consistencyCheck )
+                {
+                    consistencyCheck( storeDir );
+                }
             }
+        }
+
+        private void consistencyCheck( File storeDir ) throws Throwable
+        {
+            StoreAssertions.assertConsistentStore( storeDir );
         }
 
         /**
@@ -1105,7 +1218,6 @@ public class ClusterManager
             InstanceId serverId =
                     db.getDependencyResolver().resolveDependency( Config.class ).get( ClusterSettings.server_id );
             members.remove( serverId );
-            life.remove( db );
             db.shutdown();
             await( entireClusterSeesMemberAsNotAvailable( db ) );
             return wrap( new StartDatabaseAgainKit( this, serverId ) );
@@ -1206,7 +1318,7 @@ public class ClusterManager
 
         private void startMember( InstanceId serverId ) throws URISyntaxException, IOException
         {
-            Cluster.Member member = spec.getMembers().get( serverId.toIntegerIndex() - 1 );
+            Cluster.Member member = spec.getMembers().get( serverId.toIntegerIndex() - firstInstanceId );
             StringBuilder initialHosts = new StringBuilder();
             for ( int i = 0; i < spec.getMembers().size(); i++ )
             {
@@ -1340,7 +1452,7 @@ public class ClusterManager
             }
             String state = stateToString( this );
             throw new IllegalStateException( format(
-                    "Awaited condition never met, waited %s secondes for %s:%n%s", maxSeconds, predicate, state ) );
+                    "Awaited condition never met, waited %s seconds for %s:%n%s", maxSeconds, predicate, state ) );
         }
 
         /**

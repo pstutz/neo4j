@@ -33,7 +33,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 
-import org.neo4j.bolt.v1.runtime.Sessions;
+import org.neo4j.bolt.v1.runtime.WorkerFactory;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
@@ -41,8 +41,8 @@ import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.logging.AssertableLogProvider;
 import org.neo4j.shell.impl.AbstractClient;
 import org.neo4j.shell.kernel.GraphDatabaseShellServer;
-import org.neo4j.test.ImpermanentDatabaseRule;
-import org.neo4j.test.SuppressOutput;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
+import org.neo4j.test.rule.SuppressOutput;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -55,9 +55,9 @@ import static org.mockito.Mockito.anyMap;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-
 import static org.neo4j.logging.AssertableLogProvider.inLog;
-import static org.neo4j.test.SuppressOutput.suppressAll;
+import static org.neo4j.test.rule.SuppressOutput.suppressAll;
+
 
 public class StartClientTest
 {
@@ -240,7 +240,7 @@ public class StartClientTest
                 mock( CtrlCHandler.class ) );
 
         // Then
-        log.assertNone( inLog( startsWith( Sessions.class.getPackage().getName() ) ).any() );
+        log.assertNone( inLog( startsWith( WorkerFactory.class.getPackage().getName() ) ).any() );
     }
 
     private String runAndCaptureOutput( String[] arguments )

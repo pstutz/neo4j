@@ -22,7 +22,6 @@ package org.neo4j.tooling;
 import org.junit.Rule;
 import org.junit.Test;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -59,9 +58,9 @@ import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.util.Validator;
 import org.neo4j.kernel.impl.util.Validators;
 import org.neo4j.kernel.internal.Version;
-import org.neo4j.test.EmbeddedDatabaseRule;
-import org.neo4j.test.RandomRule;
-import org.neo4j.test.SuppressOutput;
+import org.neo4j.test.rule.EmbeddedDatabaseRule;
+import org.neo4j.test.rule.RandomRule;
+import org.neo4j.test.rule.SuppressOutput;
 import org.neo4j.unsafe.impl.batchimport.cache.idmapping.string.DuplicateInputIdException;
 import org.neo4j.unsafe.impl.batchimport.input.InputException;
 import org.neo4j.unsafe.impl.batchimport.input.csv.Configuration;
@@ -87,6 +86,7 @@ import static org.neo4j.helpers.collection.Iterators.count;
 import static org.neo4j.helpers.collection.MapUtil.store;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.tooling.ImportTool.MULTI_FILE_DELIMITER;
+import static org.neo4j.unsafe.impl.batchimport.Configuration.BAD_FILE_NAME;
 
 public class ImportToolTest
 {
@@ -197,7 +197,7 @@ public class ImportToolTest
 
             tx.success();
             ResourceIterator<Node> nodes = dbRule.findNodes( DynamicLabel.label( "FIRST 4096" ) );
-            assertEquals (1, Iterators.asList(nodes).size() );
+            assertEquals( 1, Iterators.asList( nodes ).size() );
             nodes = dbRule.findNodes( DynamicLabel.label( "SECOND 4096" ) );
             assertEquals( 1, Iterators.asList( nodes ).size() );
         }
@@ -441,6 +441,8 @@ public class ImportToolTest
                         result = Arrays.toString( (double[]) things );
                         expected = fExpected;
                         break;
+                    default:
+                        break;
                     }
 
                     assertEquals( expected, result );
@@ -494,6 +496,8 @@ public class ImportToolTest
                         break;
                     case "d":
                         result = Arrays.toString( (double[]) things );
+                        break;
+                    default:
                         break;
                     }
 
@@ -573,7 +577,7 @@ public class ImportToolTest
         int extraColumns = 3;
         try
         {
-            executeImportAndCatchOutput(
+            importTool(
                     "--into", dbRule.getStoreDirAbsolutePath(),
                     "--delimiter", "TAB",
                     "--array-delimiter", String.valueOf( config.arrayDelimiter() ),
@@ -588,6 +592,7 @@ public class ImportToolTest
         catch ( InputException e )
         {
             // THEN
+            assertFalse( suppressOutput.getErrorVoice().containsMessage( e.getClass().getName() ) );
             assertTrue( e.getMessage().contains( "Extra column not present in header on line" ) );
         }
     }
@@ -598,11 +603,11 @@ public class ImportToolTest
         // GIVEN
         List<String> nodeIds = nodeIds();
         Configuration config = Configuration.TABS;
-        File bad = file( "bad.log" );
+        File bad = badFile();
 
         // WHEN data file contains more columns than header file
         int extraColumns = 3;
-        executeImportAndCatchOutput(
+        importTool(
                 "--into", dbRule.getStoreDirAbsolutePath(),
                 "--bad", bad.getAbsolutePath(),
                 "--bad-tolerance", Integer.toString( nodeIds.size() * extraColumns ),
@@ -619,7 +624,6 @@ public class ImportToolTest
         String badContents = FileUtils.readTextFile( bad, Charset.defaultCharset() );
         assertTrue( badContents.contains( "Extra column not present in header on line" ) );
     }
-
 
     @Test
     public void shouldImportSplitInputFiles() throws Exception
@@ -890,7 +894,7 @@ public class ImportToolTest
                 relationship( "missing", "a", "KNOWS", "ee" ) ); // line 3 of file2
         File relationshipData1 = relationshipData( true, config, relationships.iterator(), lines( 0, 2 ), true );
         File relationshipData2 = relationshipData( false, config, relationships.iterator(), lines( 2, 5 ), true );
-        File bad = file( "bad.log" );
+        File bad = badFile();
 
         // WHEN importing data where some relationships refer to missing nodes
         importTool(
@@ -926,7 +930,7 @@ public class ImportToolTest
                 relationship( "missing", "a", "KNOWS" ) ); // line 3 of file2
         File relationshipData1 = relationshipData( true, config, relationships.iterator(), lines( 0, 2 ), true );
         File relationshipData2 = relationshipData( false, config, relationships.iterator(), lines( 2, 5 ), true );
-        File bad = file( "bad.log" );
+        File bad = badFile();
 
         // WHEN importing data where some relationships refer to missing nodes
         try
@@ -961,7 +965,7 @@ public class ImportToolTest
 
         File relationshipData1 = relationshipData( true, config, relationships.iterator(), lines( 0, 2 ), true );
         File relationshipData2 = relationshipData( false, config, relationships.iterator(), lines( 2, 5 ), true );
-        File bad = file( "bad.log" );
+        File bad = badFile();
 
         // WHEN importing data where some relationships refer to missing nodes
         try
@@ -1105,30 +1109,89 @@ public class ImportToolTest
     }
 
     @Test
+    public void shouldNotTrimStringsByDefault() throws Exception
+    {
+        // GIVEN
+        String name = "  This is a line with leading and trailing whitespaces   ";
+        File data = data( ":ID,name", "1,\"" + name + "\"");
+
+        // WHEN
+        importTool(
+                "--into", dbRule.getStoreDirAbsolutePath(),
+                "--nodes", data.getAbsolutePath() );
+
+        // THEN
+        GraphDatabaseService db = dbRule.getGraphDatabaseAPI();
+        try ( Transaction tx = db.beginTx() )
+        {
+            ResourceIterator<Node> allNodes = db.getAllNodes().iterator();
+            Node node = Iterators.single( allNodes );
+            allNodes.close();
+
+            assertEquals( name, node.getProperty( "name" ) );
+
+            tx.success();
+        }
+    }
+
+    @Test
+    public void shouldTrimStringsIfConfiguredTo() throws Exception
+    {
+        // GIVEN
+        String name = "  This is a line with leading and trailing whitespaces   ";
+        File data = data( ":ID,name", "1,\"" + name + "\"");
+
+        // WHEN
+        importTool(
+                "--into", dbRule.getStoreDirAbsolutePath(),
+                "--nodes", data.getAbsolutePath(),
+                "--trim-strings", "true" );
+
+        // THEN
+        GraphDatabaseService db = dbRule.getGraphDatabaseAPI();
+        try ( Transaction tx = db.beginTx() )
+        {
+            ResourceIterator<Node> allNodes = db.getAllNodes().iterator();
+            Node node = Iterators.single( allNodes );
+            allNodes.close();
+
+            assertEquals( name.trim(), node.getProperty( "name" ) );
+
+            tx.success();
+        }
+    }
+
+    @Test
     public void shouldPrintReferenceLinkOnDataImportErrors() throws Exception
     {
+        String[] versionParts = Version.getNeo4jVersion().split("-");
+        versionParts[0] = versionParts[0].substring(0, 3);
+        String docsVersion = String.join("-", versionParts);
+
         shouldPrintReferenceLinkAsPartOfErrorMessage( nodeIds(),
                 Iterators.iterator( new RelationshipDataLine( "1", "", "type", "name" ) ),
                 "Relationship missing mandatory field 'END_ID', read more about relationship " +
-                "format in the manual:  http://neo4j.com/docs/" + Version.getKernel().getReleaseVersion() +
-                "/import-tool-header-format.html#import-tool-header-format-rels" );
+                "format in the manual:  https://neo4j.com/docs/operations-manual/" +
+                docsVersion +
+                "/tools/import/import-tool-header-format/#import-tool-header-format-rels" );
         shouldPrintReferenceLinkAsPartOfErrorMessage( nodeIds(),
                 Iterators.iterator( new RelationshipDataLine( "", "1", "type", "name" ) ),
-                "Relationship missing mandatory field 'START_ID', read more" +
-                " about relationship format in the manual:  http://neo4j.com/docs/" +
-                Version.getKernel().getReleaseVersion() +
-                "/import-tool-header-format.html#import-tool-header-format-rels" );
+                "Relationship missing mandatory field 'START_ID', read more about relationship " +
+                "format in the manual:  https://neo4j.com/docs/operations-manual/" +
+                docsVersion +
+                "/tools/import/import-tool-header-format/#import-tool-header-format-rels" );
         shouldPrintReferenceLinkAsPartOfErrorMessage( nodeIds(),
                 Iterators.iterator( new RelationshipDataLine( "1", "2", "", "name" ) ),
                 "Relationship missing mandatory field 'TYPE', read more about relationship " +
-                "format in the manual:  http://neo4j.com/docs/" + Version.getKernel().getReleaseVersion() +
-                "/import-tool-header-format.html#import-tool-header-format-rels" );
+                "format in the manual:  https://neo4j.com/docs/operations-manual/" +
+                 docsVersion +
+                "/tools/import/import-tool-header-format/#import-tool-header-format-rels" );
         shouldPrintReferenceLinkAsPartOfErrorMessage( Arrays.asList( "1", "1" ),
                 Iterators.iterator( new RelationshipDataLine( "1", "2", "type", "name" ) ),
                 "Duplicate input ids that would otherwise clash can be put into separate id space, read more " +
-                "about how to use id spaces in the manual: http://neo4j.com/docs/" +
-                Version.getKernel().getReleaseVersion() +
-                "/import-tool-header-format.html#import-tool-id-spaces" );
+                "about how to use id spaces in the manual: https://neo4j.com/docs/operations-manual/" +
+                docsVersion +
+                "/tools/import/import-tool-header-format/#import-tool-id-spaces" );
     }
 
     private void shouldPrintReferenceLinkAsPartOfErrorMessage( List<String> nodeIds,
@@ -1549,6 +1612,34 @@ public class ImportToolTest
         assertEquals( stringBlockSize + headerSize, stores.getPropertyStore().getStringStore().getRecordSize() );
     }
 
+    @Test
+    public void shouldPrintStackTraceOnInputExceptionIfToldTo() throws Exception
+    {
+        // GIVEN
+        List<String> nodeIds = nodeIds();
+        Configuration config = Configuration.TABS;
+
+        // WHEN data file contains more columns than header file
+        int extraColumns = 3;
+        try
+        {
+            importTool(
+                    "--into", dbRule.getStoreDirAbsolutePath(),
+                    "--nodes", nodeHeader( config ).getAbsolutePath() + MULTI_FILE_DELIMITER +
+                            nodeData( false, config, nodeIds, TRUE, Charset.defaultCharset(), extraColumns )
+                                    .getAbsolutePath(),
+                    "--stacktrace" );
+
+            fail( "Should have thrown exception" );
+        }
+        catch ( InputException e )
+        {
+            // THEN
+            assertTrue( suppressOutput.getErrorVoice().containsMessage( e.getClass().getName() ) );
+            assertTrue( e.getMessage().contains( "Extra column not present in header on line" ) );
+        }
+    }
+
     private File writeArrayCsv( String[] headers, String[] values ) throws FileNotFoundException
     {
         File data = file( fileName( "whitespace.csv" ) );
@@ -1903,6 +1994,11 @@ public class ImportToolTest
         return new File( dbRule.getStoreDir(), localname );
     }
 
+    private File badFile()
+    {
+        return new File( dbRule.getStoreDirFile(), BAD_FILE_NAME );
+    }
+
     private void writeRelationshipHeader( PrintStream writer, Configuration config,
             String startIdGroup, String endIdGroup, boolean specifyType )
     {
@@ -2010,22 +2106,5 @@ public class ImportToolTest
     public static void importTool( String... arguments ) throws IOException
     {
         ImportTool.main( arguments, true );
-    }
-
-    private String executeImportAndCatchOutput(String... arguments) throws IOException
-    {
-        PrintStream originalStream = System.out;
-        ByteArrayOutputStream outputStreamBuffer = new ByteArrayOutputStream();
-        PrintStream replacement = new PrintStream( outputStreamBuffer );
-        System.setOut( replacement );
-        try
-        {
-            importTool( arguments );
-            return new String( outputStreamBuffer.toByteArray() );
-        }
-        finally
-        {
-            System.setOut( originalStream );
-        }
     }
 }

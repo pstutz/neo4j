@@ -29,7 +29,7 @@ import org.neo4j.server.configuration.ServerSettings;
 import org.neo4j.server.modules.ServerModule;
 import org.neo4j.server.web.WebServer;
 
-import static java.util.Collections.singletonList;
+import static java.util.Arrays.asList;
 
 public class DatabaseRoleInfoServerModule implements ServerModule
 {
@@ -62,7 +62,11 @@ public class DatabaseRoleInfoServerModule implements ServerModule
 
     private List<String> getClassNames()
     {
-        return singletonList( MasterInfoService.class.getName() );
+        return asList(
+                MasterInfoService.class.getName(),
+                CoreDatabaseAvailabilityService.class.getName(),
+                ReadReplicaDatabaseAvailabilityService.class.getName()
+        );
     }
 
     private URI managementApiUri()

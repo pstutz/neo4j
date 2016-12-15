@@ -22,9 +22,10 @@ package org.neo4j.kernel.ha;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.factory.Description;
 import org.neo4j.helpers.HostnamePort;
-import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.kernel.configuration.ConfigurationMigrator;
+import org.neo4j.kernel.configuration.Internal;
 import org.neo4j.kernel.configuration.Migrator;
+import org.neo4j.kernel.configuration.Settings;
 
 import static org.neo4j.kernel.configuration.Settings.BOOLEAN;
 import static org.neo4j.kernel.configuration.Settings.BYTES;
@@ -34,6 +35,7 @@ import static org.neo4j.kernel.configuration.Settings.INTEGER;
 import static org.neo4j.kernel.configuration.Settings.min;
 import static org.neo4j.kernel.configuration.Settings.options;
 import static org.neo4j.kernel.configuration.Settings.setting;
+import static org.neo4j.kernel.ha.HaSettings.BranchedDataCopyingStrategy.branch_then_copy;
 import static org.neo4j.kernel.ha.HaSettings.TxPushStrategy.fixed_ascending;
 
 /**
@@ -93,8 +95,37 @@ public class HaSettings
     @Description( "Push strategy of a transaction to a slave during commit." )
     public static final Setting<TxPushStrategy> tx_push_strategy = setting( "ha.tx_push_strategy", options( TxPushStrategy.class ), fixed_ascending.name() );
 
+    @Description( "Strategy for how to order handling of branched data on slaves and copying of the store from the" +
+            " master. The default is copy_then_branch, which, when combined with the keep_last or keep_none branch" +
+            " handling strategies results in a safer branching strategy, as there is always a store present so store" +
+            " failure to copy a store (for example, because of network failure) does not leave the instance without" +
+            " a store." )
+    public static final Setting<BranchedDataCopyingStrategy> branched_data_copying_strategy =
+            setting( "ha.branched_data_copying_strategy", options( BranchedDataCopyingStrategy.class ), branch_then_copy.name() );
+
     @Description( "Size of batches of transactions applied on slaves when pulling from master" )
     public static final Setting<Integer> pull_apply_batch_size = setting( "ha.pull_batch_size", INTEGER, "100" );
+
+    @Description( "Duration for which master will buffer ids and not reuse them to allow slaves read " +
+                  "consistently. Slaves will also terminate transactions longer than this duration, when " +
+                  "applying received transaction stream, to make sure they do not read potentially " +
+                  "inconsistent/reused records." )
+    @Internal
+    public static final Setting<Long> id_reuse_safe_zone_time = setting( "unsupported.dbms.id_reuse_safe_zone", Settings.DURATION, "1h" );
+
+    public enum BranchedDataCopyingStrategy
+    {
+        @Description("First handles the branched store, then copies down a new store from the master and replaces it." +
+                " This strategy, when combined with the keep_last or keep_none branch handling strategies results in " +
+                "less space used as the store is first removed and then the copy is fetched." )
+        branch_then_copy,
+
+        @Description("First copies down a new store from the master, then branches the existing store and replaces it" +
+                ". This strategy uses potentially more space than branch_then_copy but it allows for store copy " +
+                "failures to be recoverable as the original store is maintained until the store copy finishes " +
+                "successfully." )
+        copy_then_branch;
+    }
 
     public enum TxPushStrategy
     {

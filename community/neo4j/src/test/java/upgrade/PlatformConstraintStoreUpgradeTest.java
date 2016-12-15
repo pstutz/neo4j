@@ -32,17 +32,18 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.impl.store.format.standard.StandardV2_2;
 import org.neo4j.kernel.impl.storemigration.StoreUpgrader;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+import static org.neo4j.kernel.impl.pagecache.PageSwapperFactoryForTesting.TEST_PAGESWAPPER_NAME;
 import static org.neo4j.kernel.impl.storemigration.MigrationTestUtils.prepareSampleLegacyDatabase;
 
 public class PlatformConstraintStoreUpgradeTest
 {
     @Rule
-    public TargetDirectory.TestDirectory storeDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory storeDir = TestDirectory.testDirectory();
 
     private FileSystemAbstraction fileSystem;
     private File prepareDir;
@@ -75,6 +76,6 @@ public class PlatformConstraintStoreUpgradeTest
     {
         return new TestGraphDatabaseFactory().newEmbeddedDatabaseBuilder( workingDir )
                 .setConfig( GraphDatabaseSettings.allow_store_upgrade, "true" )
-                .setConfig( GraphDatabaseSettings.pagecache_swapper, "custom" ).newGraphDatabase();
+                .setConfig( GraphDatabaseSettings.pagecache_swapper, TEST_PAGESWAPPER_NAME ).newGraphDatabase();
     }
 }

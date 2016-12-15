@@ -31,8 +31,8 @@ import java.util.UUID;
 
 import org.neo4j.io.IOUtils;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
-import org.neo4j.test.DefaultFileSystemRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
+import org.neo4j.test.rule.fs.DefaultFileSystemRule;
 
 import static org.junit.Assert.assertTrue;
 
@@ -41,10 +41,10 @@ public class LuceneSchemaIndexTest
     @Rule
     public final DefaultFileSystemRule fs = new DefaultFileSystemRule();
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
 
     private final DirectoryFactory dirFactory = new DirectoryFactory.InMemoryDirectoryFactory();
-    private LuceneSchemaIndex index;
+    private SchemaIndex index;
 
     @After
     public void closeIndex() throws Exception
@@ -116,22 +116,22 @@ public class LuceneSchemaIndexTest
         assertTrue( "Should have had online status set", index.isOnline() );
     }
 
-    private LuceneSchemaIndex createIndex() throws IOException
+    private SchemaIndex createIndex() throws IOException
     {
-        LuceneSchemaIndex schemaIndex = newSchemaIndex( false );
+        SchemaIndex schemaIndex = newSchemaIndex( false );
         schemaIndex.create();
         schemaIndex.open();
         return schemaIndex;
     }
 
-    private LuceneSchemaIndex openIndex() throws IOException
+    private SchemaIndex openIndex() throws IOException
     {
-        LuceneSchemaIndex schemaIndex = newSchemaIndex( false );
+        SchemaIndex schemaIndex = newSchemaIndex( false );
         schemaIndex.open();
         return schemaIndex;
     }
 
-    private LuceneSchemaIndex newSchemaIndex( boolean unique )
+    private SchemaIndex newSchemaIndex( boolean unique )
     {
         LuceneSchemaIndexBuilder builder = LuceneSchemaIndexBuilder.create();
         if ( unique )

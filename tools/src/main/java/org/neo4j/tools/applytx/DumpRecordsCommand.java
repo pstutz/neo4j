@@ -90,7 +90,7 @@ public class DumpRecordsCommand implements Command
         return airlineHelp( cli );
     }
 
-    static abstract class DumpPropertyChain implements Action
+    abstract static class DumpPropertyChain implements Action
     {
         @Arguments( title = "id", description = "Entity id", required = true )
         public long id;
@@ -106,6 +106,8 @@ public class DumpRecordsCommand implements Command
             while ( propId != Record.NO_NEXT_PROPERTY.intValue() )
             {
                 propertyStore.getRecord( propId, record, NORMAL );
+                // We rely on this method having the side-effect of loading the property blocks:
+                record.numberOfProperties();
                 out.println( record );
                 propId = record.getNextProp();
             }

@@ -22,21 +22,28 @@ package org.neo4j.unsafe.impl.batchimport.staging;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.LongPredicate;
 
-import org.neo4j.graphdb.Resource;
 import org.neo4j.unsafe.impl.batchimport.executor.DynamicTaskExecutor;
+import org.neo4j.unsafe.impl.batchimport.executor.ParkStrategy;
 import org.neo4j.unsafe.impl.batchimport.executor.TaskExecutor;
 import org.neo4j.unsafe.impl.batchimport.stats.StatsProvider;
 
 import static java.lang.System.currentTimeMillis;
 import static java.lang.System.nanoTime;
-
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.neo4j.unsafe.impl.batchimport.executor.DynamicTaskExecutor.DEFAULT_PARK_STRATEGY;
+import static org.neo4j.unsafe.impl.batchimport.executor.TaskExecutor.SF_ABORT_QUEUED;
+import static org.neo4j.unsafe.impl.batchimport.executor.TaskExecutor.SF_AWAIT_ALL_COMPLETED;
+import static org.neo4j.unsafe.impl.batchimport.staging.Processing.await;
 
 /**
  * {@link Step} that uses {@link TaskExecutor} as a queue and execution mechanism.
  * Supports an arbitrary number of threads to execute batches in parallel.
  * Subclasses implement {@link #process(Object, BatchSender)} receiving the batch to process
  * and an {@link BatchSender} for sending the modified batch, or other batches downstream.
+ *
+ * There's an overlap of functionality in {@link TicketedProcessing}, however the fit isn't perfect
+ * for using it as the engine in a {@link ProcessorStep} because the queuing of processed results
+ * works a bit differently. Perhaps sometimes this can be addressed.
  */
 public abstract class ProcessorStep<T> extends AbstractStep<T>
 {
@@ -46,11 +53,11 @@ public abstract class ProcessorStep<T> extends AbstractStep<T>
     private final Configuration config;
     private final LongPredicate catchUp = queueSizeThreshold -> queuedBatches.get() <= queueSizeThreshold;
     protected final AtomicLong begunBatches = new AtomicLong();
-    private final LongPredicate rightBeginTicket = ticket -> begunBatches.get() == ticket;
 
     // Time stamp for when we processed the last queued batch received from upstream.
     // Useful for tracking how much time we spend waiting for batches from upstream.
     private final AtomicLong lastBatchEndTime = new AtomicLong();
+    private final ParkStrategy park = new ParkStrategy.Park( 1, MILLISECONDS );
 
     protected ProcessorStep( StageControl control, String name, Configuration config, int maxProcessors,
             StatsProvider... additionalStatsProviders )
@@ -77,33 +84,23 @@ public abstract class ProcessorStep<T> extends AbstractStep<T>
     public long receive( final long ticket, final T batch )
     {
         // Don't go too far ahead
-        long idleTime = await( catchUp, executor.numberOfProcessors() );
+        long idleTime = await( catchUp, executor.processors( 0 ), healthChecker, park );
         incrementQueue();
-
         executor.submit( sender -> {
             assertHealthy();
             sender.initialize( ticket );
             try
             {
-                // If we're ordering tickets we will force calls to #permit to be ordered by ticket
-                // since grabbing a permit may include locking.
-                if ( guarantees( ORDER_PROCESS ) )
+                begunBatches.incrementAndGet();
+                long startTime1 = nanoTime();
+                process( batch, sender );
+                if ( downstream == null )
                 {
-                    await( rightBeginTicket, ticket );
+                    // No batches were emmitted so we couldn't track done batches in that way.
+                    // We can see that we're the last step so increment here instead
+                    doneBatches.incrementAndGet();
                 }
-                try ( Resource precondition = permit( batch ) )
-                {
-                    begunBatches.incrementAndGet();
-                    long startTime1 = nanoTime();
-                    process( batch, sender );
-                    if ( downstream == null )
-                    {
-                        // No batches were emmitted so we couldn't track done batches in that way.
-                        // We can see that we're the last step so increment here instead
-                        doneBatches.incrementAndGet();
-                    }
-                    totalProcessingTime.add( nanoTime() - startTime1 - sender.sendTime );
-                }
+                totalProcessingTime.add( nanoTime() - startTime1 - sender.sendTime );
 
                 decrementQueue();
                 checkNotifyEndDownstream();
@@ -113,18 +110,7 @@ public abstract class ProcessorStep<T> extends AbstractStep<T>
                 issuePanic( e );
             }
         } );
-
         return idleTime;
-    }
-
-    /**
-     * Called before {@link #process(Object, BatchSender) processing} and time measurement starts.
-     * Coordination with other processors should happen in here.
-     * If total ordering is enabled then calls will arrive in order of ticket.
-     */
-    protected Resource permit( T batch ) throws Throwable
-    {
-        return Resource.EMPTY;
     }
 
     private void decrementQueue()
@@ -170,25 +156,13 @@ public abstract class ProcessorStep<T> extends AbstractStep<T>
     public void close() throws Exception
     {
         super.close();
-        executor.shutdown( panic == null );
+        executor.shutdown( panic == null ? SF_AWAIT_ALL_COMPLETED : SF_ABORT_QUEUED );
     }
 
     @Override
-    public int numberOfProcessors()
+    public int processors( int delta )
     {
-        return executor.numberOfProcessors();
-    }
-
-    @Override
-    public boolean incrementNumberOfProcessors()
-    {
-        return executor.incrementNumberOfProcessors();
-    }
-
-    @Override
-    public boolean decrementNumberOfProcessors()
-    {
-        return executor.decrementNumberOfProcessors();
+        return executor.processors( delta );
     }
 
     @SuppressWarnings( "unchecked" )
@@ -196,7 +170,7 @@ public abstract class ProcessorStep<T> extends AbstractStep<T>
     {
         if ( guarantees( ORDER_SEND_DOWNSTREAM ) )
         {
-            await( rightDoneTicket, ticket );
+            await( rightDoneTicket, ticket, healthChecker, park );
         }
         downstreamIdleTime.addAndGet( downstream.receive( ticket, batch ) );
         doneBatches.incrementAndGet();

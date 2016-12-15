@@ -19,15 +19,17 @@
  */
 package org.neo4j.kernel.impl.query;
 
+import java.util.function.Supplier;
+
 import org.neo4j.graphdb.Lock;
+import org.neo4j.graphdb.NotInTransactionException;
 import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.kernel.GraphDatabaseQueryService;
+import org.neo4j.kernel.api.*;
 import org.neo4j.kernel.api.dbms.DbmsOperations;
-import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.ReadOperations;
-import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.api.txstate.TxStateHolder;
+import org.neo4j.kernel.guard.Guard;
 import org.neo4j.kernel.impl.api.KernelStatement;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
@@ -36,28 +38,46 @@ import org.neo4j.kernel.impl.coreapi.PropertyContainerLocker;
 public class Neo4jTransactionalContext implements TransactionalContext
 {
     private final GraphDatabaseQueryService graph;
+    private final Supplier<Statement> statementSupplier;
+    private final Guard guard;
     private final ThreadToStatementContextBridge txBridge;
+    private final PropertyContainerLocker locker;
+
     private final KernelTransaction.Type transactionType;
-    private final AccessMode mode;
-    private final DbmsOperations dbmsOperations;
+    private final SecurityContext securityContext;
+    private final ExecutingQuery executingQuery;
 
     private InternalTransaction transaction;
     private Statement statement;
-    private PropertyContainerLocker locker;
-
     private boolean isOpen = true;
 
-    public Neo4jTransactionalContext( GraphDatabaseQueryService graph, InternalTransaction initialTransaction,
-            Statement initialStatement, PropertyContainerLocker locker )
-    {
+    public Neo4jTransactionalContext(
+        GraphDatabaseQueryService graph,
+        Supplier<Statement> statementSupplier,
+        Guard guard,
+        ThreadToStatementContextBridge txBridge,
+        PropertyContainerLocker locker,
+        InternalTransaction initialTransaction,
+        Statement initialStatement,
+        ExecutingQuery executingQuery
+    ) {
         this.graph = graph;
-        this.transaction = initialTransaction;
-        this.transactionType = initialTransaction.transactionType();
-        this.mode = initialTransaction.mode();
-        this.statement = initialStatement;
+        this.statementSupplier = statementSupplier;
+        this.guard = guard;
+        this.txBridge = txBridge;
         this.locker = locker;
-        this.txBridge = graph.getDependencyResolver().resolveDependency( ThreadToStatementContextBridge.class );
-        this.dbmsOperations = graph.getDependencyResolver().resolveDependency( DbmsOperations.class );
+        this.transactionType = initialTransaction.transactionType();
+        this.securityContext = initialTransaction.securityContext();
+        this.executingQuery = executingQuery;
+
+        this.transaction = initialTransaction;
+        this.statement = initialStatement;
+    }
+
+    @Override
+    public ExecutingQuery executingQuery()
+    {
+        return executingQuery;
     }
 
     @Override
@@ -69,7 +89,7 @@ public class Neo4jTransactionalContext implements TransactionalContext
     @Override
     public DbmsOperations dbmsOperations()
     {
-        return dbmsOperations;
+        return graph.getDbmsOperations();
     }
 
     @Override
@@ -78,13 +98,13 @@ public class Neo4jTransactionalContext implements TransactionalContext
         return transaction.transactionType() == KernelTransaction.Type.implicit;
     }
 
-    @Override
     public void close( boolean success )
     {
         if ( isOpen )
         {
             try
             {
+                statement.queryRegistration().unregisterExecutingQuery( executingQuery );
                 statement.close();
 
                 if ( success )
@@ -106,14 +126,73 @@ public class Neo4jTransactionalContext implements TransactionalContext
         }
     }
 
+    @Override // TODO: Make the state of this class a state machine that is a single value and maybe CAS state
+    // transitions
+    public void terminate()
+    {
+        if ( isOpen )
+        {
+            try
+            {
+                transaction.terminate();
+                close( false );
+            }
+            catch ( NotInTransactionException e )
+            {
+                // Ok then. Nothing to do
+            }
+        }
+    }
+
     @Override
     public void commitAndRestartTx()
     {
-        transaction.success();
-        transaction.close();
+       /*
+        * This method is use by the Cypher runtime to cater for PERIODIC COMMIT, which allows a single query to
+        * periodically, after x number of rows, to commit a transaction and spawn a new one.
+        *
+        * To still keep track of the running stream after switching transactions, we need to open the new transaction
+        * before closing the old one. This way, a query will not disappear and appear when switching transactions.
+        *
+        * Since our transactions are thread bound, we must first unbind the old transaction from the thread before
+        * creating a new one. And then we need to do that thread switching again to close the old transaction.
+        */
 
-        transaction = graph.beginTransaction( transactionType, mode );
+        // (1) Unbind current transaction
+        QueryRegistryOperations oldQueryRegistryOperations = statement.queryRegistration();
+        InternalTransaction oldTransaction = transaction;
+        KernelTransaction oldKernelTx = txBridge.getKernelTransactionBoundToThisThread( true );
+        txBridge.unbindTransactionFromCurrentThread();
+
+        // (2) Create, bind, register, and unbind new transaction
+        transaction = graph.beginTransaction( transactionType, securityContext );
         statement = txBridge.get();
+        statement.queryRegistration().registerExecutingQuery( executingQuery );
+        KernelTransaction kernelTx = txBridge.getKernelTransactionBoundToThisThread( true );
+        txBridge.unbindTransactionFromCurrentThread();
+
+        // (3) Rebind old transaction just to commit and close it (and unregister as a side effect of that)
+        txBridge.bindTransactionToCurrentThread( oldKernelTx );
+        oldQueryRegistryOperations.unregisterExecutingQuery( executingQuery );
+        try
+        {
+            oldTransaction.success();
+            oldTransaction.close();
+        }
+        catch ( Throwable t )
+        {
+            // Corner case: The old transaction might have been terminated by the user. Now we also need to
+            // terminate the new transaction.
+            txBridge.bindTransactionToCurrentThread( kernelTx );
+            transaction.failure();
+            transaction.close();
+            txBridge.unbindTransactionFromCurrentThread();
+            throw t;
+        }
+
+        // (4) Unbind the now closed old transaction and rebind the new transaction for continued execution
+        txBridge.unbindTransactionFromCurrentThread();
+        txBridge.bindTransactionToCurrentThread( kernelTx );
     }
 
     @Override
@@ -121,24 +200,23 @@ public class Neo4jTransactionalContext implements TransactionalContext
     {
         // close the old statement reference after the statement has been "upgraded"
         // to either a schema data or a schema statement, so that the locks are "handed over".
+        statement.queryRegistration().unregisterExecutingQuery( executingQuery );
         statement.close();
-        statement = txBridge.get();
+        statement = statementSupplier.get();
+        statement.queryRegistration().registerExecutingQuery( executingQuery );
     }
 
     @Override
-    public TransactionalContext provideContext()
+    public TransactionalContext getOrBeginNewIfClosed()
     {
-        if ( isOpen )
+        if ( !isOpen )
         {
-            return this;
+            transaction = graph.beginTransaction( transactionType, securityContext );
+            statement = statementSupplier.get();
+            statement.queryRegistration().registerExecutingQuery( executingQuery );
+            isOpen = true;
         }
-        else
-        {
-            InternalTransaction transaction =
-                    graph.beginTransaction( transactionType, mode );
-            Statement statement = txBridge.get();
-            return new Neo4jTransactionalContext( graph, transaction, statement, locker );
-        }
+        return this;
     }
 
     @Override
@@ -160,6 +238,12 @@ public class Neo4jTransactionalContext implements TransactionalContext
     }
 
     @Override
+    public void check()
+    {
+        guard.check( (KernelStatement) statement );
+    }
+
+    @Override
     public TxStateHolder stateView()
     {
         return (KernelStatement) statement;
@@ -168,18 +252,27 @@ public class Neo4jTransactionalContext implements TransactionalContext
     @Override
     public Lock acquireWriteLock( PropertyContainer p )
     {
-        return locker.exclusiveLock( () -> statement, p );
+        return locker.exclusiveLock( statement, p );
     }
 
     @Override
-    public KernelTransaction.Revertable restrictCurrentTransaction( AccessMode accessMode )
+    public KernelTransaction.Revertable restrictCurrentTransaction( SecurityContext context )
     {
-        return transaction.restrict( accessMode );
+        return transaction.overrideWith( context );
     }
 
     @Override
-    public AccessMode accessMode()
+    public SecurityContext securityContext()
     {
-        return mode;
+        return securityContext;
+    }
+
+    interface Creator {
+        Neo4jTransactionalContext create(
+            Supplier<Statement> statementSupplier,
+            InternalTransaction tx,
+            Statement initialStatement,
+            ExecutingQuery executingQuery
+        );
     }
 }

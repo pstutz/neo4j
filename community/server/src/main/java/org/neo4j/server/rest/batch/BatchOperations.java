@@ -40,6 +40,7 @@ import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.UriInfo;
 
 import org.neo4j.server.rest.web.InternalJettyServletRequest;
+import org.neo4j.server.rest.web.InternalJettyServletRequest.RequestData;
 import org.neo4j.server.rest.web.InternalJettyServletResponse;
 import org.neo4j.server.web.WebServer;
 
@@ -105,8 +106,7 @@ public abstract class BatchOperations
         return baseUri.resolve("." + requestedPath);
     }
 
-
-    private final static Pattern PLACHOLDER_PATTERN=Pattern.compile("\\{(\\d{1,10})\\}");
+    private static final Pattern PLACHOLDER_PATTERN=Pattern.compile("\\{(\\d{1,10})\\}");
 
     protected String replaceLocationPlaceholders( String str,
                                                   Map<Integer, String> locations )
@@ -153,6 +153,8 @@ public abstract class BatchOperations
     {
         JsonParser jp = jsonFactory.createJsonParser(body);
         JsonToken token;
+        RequestData requestData = RequestData.from( req );
+
         while ((token = jp.nextToken()) != null)
         {
             if (token == JsonToken.START_OBJECT)
@@ -177,11 +179,13 @@ public abstract class BatchOperations
                     case BODY_KEY:
                         jobBody = readBody( jp );
                         break;
+                    default:
+                        break;
                     }
                 }
                 // Read one job description. Execute it.
                 performRequest( uriInfo, jobMethod, jobPath, jobBody,
-                        jobId, httpHeaders, locations, req );
+                        jobId, httpHeaders, locations, requestData );
             }
         }
     }
@@ -200,17 +204,16 @@ public abstract class BatchOperations
 
     protected void performRequest( UriInfo uriInfo, String method, String path, String body, Integer id,
                                    HttpHeaders httpHeaders, Map<Integer, String> locations,
-                                   HttpServletRequest outerReq ) throws IOException, ServletException
+                                   RequestData requestData ) throws IOException, ServletException
     {
         path = replaceLocationPlaceholders(path, locations);
         body = replaceLocationPlaceholders(body, locations);
         URI targetUri = calculateTargetUri(uriInfo, path);
 
         InternalJettyServletResponse res = new InternalJettyServletResponse();
-        InternalJettyServletRequest req = new InternalJettyServletRequest( method, targetUri.toString(), body, res, outerReq );
+        InternalJettyServletRequest req = new InternalJettyServletRequest( method, targetUri.toString(), body, res, requestData );
         req.setScheme( targetUri.getScheme() );
         addHeaders( req, httpHeaders );
-
 
         invoke( method, path, body, id, targetUri, req, res );
     }

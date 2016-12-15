@@ -30,9 +30,6 @@ import static org.neo4j.unsafe.impl.batchimport.input.Group.GLOBAL;
  */
 public class InputRelationship extends InputEntity
 {
-    public static final long NO_SPECIFIC_ID = -1L;
-
-    private long id = NO_SPECIFIC_ID;
     private final Object startNode;
     private final Object endNode;
     private String type;
@@ -62,23 +59,6 @@ public class InputRelationship extends InputEntity
         this.endNode = endNode;
         this.type = type;
         this.typeId = typeId;
-    }
-
-    public InputRelationship setSpecificId( long id )
-    {
-        this.id = id;
-        return this;
-    }
-
-    public boolean hasSpecificId()
-    {
-        return id != NO_SPECIFIC_ID;
-    }
-
-    public long specificId()
-    {
-        assert hasSpecificId() : "Didn't have specific id set";
-        return id;
     }
 
     public Group startNodeGroup()
@@ -126,8 +106,8 @@ public class InputRelationship extends InputEntity
     protected void toStringFields( Collection<Pair<String, ?>> fields )
     {
         super.toStringFields( fields );
-        fields.add( Pair.of( "startNode", startNode ) );
-        fields.add( Pair.of( "endNode", endNode ) );
+        fields.add( Pair.of( "startNode", startNode + " (" + startNodeGroup.name() + ")" ) );
+        fields.add( Pair.of( "endNode", endNode + " (" + endNodeGroup.name() + ")" ) );
         if ( hasTypeId() )
         {
             fields.add( Pair.of( "typeId", typeId ) );
@@ -136,5 +116,10 @@ public class InputRelationship extends InputEntity
         {
             fields.add( Pair.of( "type", type ) );
         }
+    }
+
+    public Object typeAsObject()
+    {
+        return hasTypeId() ? typeId() : type();
     }
 }

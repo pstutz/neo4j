@@ -19,7 +19,8 @@
  */
 package org.neo4j.cypher
 
-import org.neo4j.cypher.internal.compiler.v3_0.planDescription.InternalPlanDescription.Arguments.MergePattern
+import org.neo4j.cypher.internal.compiler.v3_1.planDescription.InternalPlanDescription.Arguments.MergePattern
+import org.neo4j.kernel.impl.query.TransactionalContext
 
 class ExplainAcceptanceTest extends ExecutionEngineFunSuite {
   test("normal query is marked as such") {
@@ -38,8 +39,8 @@ class ExplainAcceptanceTest extends ExecutionEngineFunSuite {
     result should be(empty)
   }
 
-  test("EXPLAIN for Cypher 3.0") {
-    val result = eengine.execute("explain match (n) return n", Map.empty[String, Object], graph.session())
+  test("EXPLAIN for Cypher 3.1") {
+    val result = eengine.execute("explain match (n) return n", Map.empty[String, Object])
     result.toList
     assert(result.planDescriptionRequested, "result not marked with planDescriptionRequested")
     result.executionPlanDescription().toString should include("Estimated Rows")
@@ -54,5 +55,33 @@ class ExplainAcceptanceTest extends ExecutionEngineFunSuite {
     result.close()
 
     plan.toString should include(MergePattern("second").toString)
+  }
+
+  test("should handle query with nested expression") {
+    val query = """EXPLAIN
+                  |WITH
+                  |   ['Herfstvakantie Noord'] AS periodName
+                  |MATCH (perStart:Day)<-[:STARTS]-(per:Periode)-[:ENDS]->(perEnd:Day) WHERE per.naam=periodName
+                  |WITH perStart,perEnd
+                  |
+                  |MATCH perDays=shortestPath((perStart)-[:NEXT*]->(perEnd))
+                  |UNWIND nodes(perDays) as perDay
+                  |WITH perDay ORDER by perDay.day
+                  |
+                  |MATCH (bknStart:Day)-[:NEXT*0..]->(perDay)
+                  |WHERE (bknStart)<-[:FROM_DATE]-(:Boeking)
+                  |WITH distinct bknStart, collect(distinct perDay) as perDays
+                  |
+                  |MATCH (bknStart)<-[:FROM_DATE]-(bkn:Boeking)-[:TO_DATE]->(bknEnd)
+                  |WITH bknEnd, collect(bkn) as bookings, perDays
+                  |WHERE any(perDay IN perDays WHERE perDays = bknEnd OR exists((perDay)-[:NEXT*]->(bknEnd)))
+                  |
+                  |RETURN count(*), count(distinct bknEnd), avg(size(bookings)),avg(size(perDays));""".stripMargin
+
+    val result = execute(query)
+    val plan = result.executionPlanDescription()
+    result.close()
+
+    plan.toString should include("NestedExpression(VarLengthExpand(Into)-Argument)")
   }
 }

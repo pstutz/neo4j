@@ -46,7 +46,7 @@ public class DbStructureCollector implements DbStructureVisitor
     private final Set<RelationshipPropertyExistenceConstraint> relPropertyExistenceConstraints = new HashSet<>();
     private final Map<Integer, Long> nodeCounts = new HashMap<>();
     private final Map<RelSpecifier, Long> relCounts = new HashMap<>();
-    private long allNodesCount = -1l;
+    private long allNodesCount = -1L;
 
     public DbStructureLookup lookup()
     {
@@ -388,7 +388,6 @@ public class DbStructureCollector implements DbStructureVisitor
                         format( "Duplicate id %s for name %s in %s token map", token, name, tokenType )
                 );
             }
-
 
             if ( backward.containsKey( name ) )
             {

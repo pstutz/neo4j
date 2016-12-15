@@ -82,7 +82,7 @@ import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
 import org.neo4j.kernel.impl.transaction.state.RecordAccess.RecordProxy;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.schema.SchemaRule;
-import org.neo4j.test.NeoStoresRule;
+import org.neo4j.test.rule.NeoStoresRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -834,7 +834,6 @@ public class TransactionRecordStateTest
         int typeB = 1;
         tx.createRelationshipTypeToken( "B", typeB );
 
-
         // WHEN
         // i remove enough relationships to become dense and remove enough to become not dense
         long[] relationshipsOfTypeB = createRelationships( neoStores, tx, nodeId, typeB, OUTGOING, 5 );
@@ -1104,7 +1103,6 @@ public class TransactionRecordStateTest
             assertRelationshipGroupsInOrder( neoStores, nodeId, type5, type10 );
         }
 
-
         // WHEN inserting a relationship of type 15
         {
             TransactionRecordState recordState = newTransactionRecordState( neoStores );
@@ -1333,7 +1331,7 @@ public class TransactionRecordStateTest
     private void assertDynamicLabelRecordInUse( NeoStores store, long id, boolean inUse )
     {
         DynamicArrayStore dynamicLabelStore = store.getNodeStore().getDynamicLabelStore();
-        DynamicRecord record = dynamicLabelStore.getRecord( id, dynamicLabelStore.newRecord(), FORCE );
+        DynamicRecord record = dynamicLabelStore.getRecord( id, dynamicLabelStore.nextRecord(), FORCE );
         assertTrue( inUse == record.inUse() );
     }
 

@@ -21,19 +21,19 @@ package org.neo4j.kernel.impl.api;
 
 import org.neo4j.graphdb.NotInTransactionException;
 import org.neo4j.graphdb.TransactionTerminatedException;
-import org.neo4j.graphdb.security.AuthorizationViolationException;
-import org.neo4j.kernel.api.DataWriteOperations;
-import org.neo4j.kernel.api.ReadOperations;
-import org.neo4j.kernel.api.SchemaWriteOperations;
-import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.TokenWriteOperations;
+import org.neo4j.kernel.api.*;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
-import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.api.exceptions.Status;
+import org.neo4j.kernel.api.security.AccessMode;
 import org.neo4j.kernel.api.txstate.LegacyIndexTransactionState;
 import org.neo4j.kernel.api.txstate.TransactionState;
 import org.neo4j.kernel.api.txstate.TxStateHolder;
-import org.neo4j.kernel.impl.locking.Locks;
+import org.neo4j.kernel.impl.factory.AccessCapability;
+import org.neo4j.kernel.impl.locking.StatementLocks;
+import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.storageengine.api.StorageStatement;
+
+import java.util.function.Function;
 
 /**
  * A resource efficient implementation of {@link Statement}. Designed to be reused within a
@@ -43,14 +43,14 @@ import org.neo4j.storageengine.api.StorageStatement;
  * <ol>
  * <li>Construct {@link KernelStatement} when {@link KernelTransactionImplementation} is constructed</li>
  * <li>For every transaction...</li>
- * <li>Call {@link #initialize(org.neo4j.kernel.impl.locking.Locks.Client)} which makes this instance
+ * <li>Call {@link #initialize(StatementLocks, StatementOperationParts)} which makes this instance
  * full available and ready to use. Call when the {@link KernelTransactionImplementation} is initialized.</li>
  * <li>Alternate {@link #acquire()} / {@link #close()} when acquiring / closing a statement for the transaction...
  * Temporarily asymmetric number of calls to {@link #acquire()} / {@link #close()} is supported, although in
  * the end an equal number of calls must have been issued.</li>
  * <li>To be safe call {@link #forceClose()} at the end of a transaction to force a close of the statement,
  * even if there are more than one current call to {@link #acquire()}. This instance is now again ready
- * to be {@link #initialize(org.neo4j.kernel.impl.locking.Locks.Client) initialized} and used for the transaction
+ * to be {@link #initialize(StatementLocks, StatementOperationParts)  initialized} and used for the transaction
  * instance again, when it's initialized.</li>
  * </ol>
  */
@@ -58,39 +58,46 @@ public class KernelStatement implements TxStateHolder, Statement
 {
     private final TxStateHolder txStateHolder;
     private final StorageStatement storeStatement;
+    private final AccessCapability accessCapability;
     private final KernelTransactionImplementation transaction;
     private final VirtualOperationsFacade facade;
-    private Locks.Client locks;
+    private StatementLocks statementLocks;
     private int referenceCount;
-
-    private StatementOperationParts operations;
-    private Procedures procedures;
+    private volatile ExecutingQueryList executingQueryList;
 
     public KernelStatement( KernelTransactionImplementation transaction,
-            TxStateHolder txStateHolder,
-            StatementOperationParts operations, StorageStatement storeStatement, Procedures procedures )
+                            TxStateHolder txStateHolder,
+                            StorageStatement storeStatement,
+                            Procedures procedures,
+                            AccessCapability accessCapability )
     {
         this.transaction = transaction;
         this.txStateHolder = txStateHolder;
         this.storeStatement = storeStatement;
-
-        this.facade = new VirtualOperationsFacade( transaction, this, operations, procedures );
+        this.accessCapability = accessCapability;
+        this.facade =  new VirtualOperationsFacade( transaction, this, procedures );//new OperationsFacade( transaction, this, procedures );
+        this.executingQueryList = ExecutingQueryList.EMPTY;
     }
 
     @Override
     public ReadOperations readOperations()
     {
-        if( !transaction.mode().allowsReads() )
-        {
-            throw new AuthorizationViolationException(
-                    String.format( "Read operations are not allowed for `%s` transactions.", transaction.mode().name() ) );
-        }
+        assertAllows( AccessMode::allowsReads, "Read" );
+        return facade;
+    }
+
+    @Override
+    public ProcedureCallOperations procedureCallOperations()
+    {
         return facade;
     }
 
     @Override
     public TokenWriteOperations tokenWriteOperations()
     {
+        accessCapability.assertCanWrite();
+
+        assertAllows( AccessMode::allowsWrites, "Write" );
         return facade;
     }
 
@@ -98,19 +105,9 @@ public class KernelStatement implements TxStateHolder, Statement
     public DataWriteOperations dataWriteOperations()
             throws InvalidTransactionTypeKernelException
     {
-        // TODO: Sascha
-        // if(onlyVirtualWrites){
-        //      return facade;
-        //}
+        accessCapability.assertCanWrite();
 
-        // Virtual entities are allowed without write
-        if( !transaction.mode().allowsWrites() )
-        {
-
-            throw new AuthorizationViolationException(
-                    String.format( "Write operations are not allowed for `%s` transactions.", transaction.mode().name() ) );
-        }
-
+        assertAllows( AccessMode::allowsWrites, "Write" );
         transaction.upgradeToDataWrites();
         return facade;
     }
@@ -119,12 +116,16 @@ public class KernelStatement implements TxStateHolder, Statement
     public SchemaWriteOperations schemaWriteOperations()
             throws InvalidTransactionTypeKernelException
     {
-        if( !transaction.mode().allowsSchemaWrites() )
-        {
-            throw new AuthorizationViolationException(
-                    String.format( "Schema operations are not allowed for `%s` transactions.", transaction.mode().name() ) );
-        }
+        accessCapability.assertCanWrite();
+
+        assertAllows( AccessMode::allowsSchemaWrites, "Schema" );
         transaction.upgradeToSchemaWrites();
+        return facade;
+    }
+
+    @Override
+    public QueryRegistryOperations queryRegistration()
+    {
         return facade;
     }
 
@@ -163,28 +164,36 @@ public class KernelStatement implements TxStateHolder, Statement
         {
             throw new NotInTransactionException( "The statement has been closed." );
         }
-        if ( transaction.shouldBeTerminated() )
+
+        Status terminationReason = transaction.getReasonIfTerminated();
+        if ( terminationReason != null )
         {
-            throw new TransactionTerminatedException();
+            throw new TransactionTerminatedException( terminationReason );
         }
     }
 
-    void initialize( Locks.Client locks )
+    public void initialize( StatementLocks statementLocks, StatementOperationParts operationParts )
     {
-        this.locks = locks;
+        this.statementLocks = statementLocks;
+        facade.initialize( operationParts );
     }
 
-    public Locks.Client locks()
+    public StatementLocks locks()
     {
-        return locks;
+        return statementLocks;
     }
 
-    final void acquire()
+    public final void acquire()
     {
         if ( referenceCount++ == 0 )
         {
             storeStatement.acquire();
         }
+    }
+
+    final boolean isAcquired()
+    {
+        return referenceCount > 0;
     }
 
     final void forceClose()
@@ -196,13 +205,51 @@ public class KernelStatement implements TxStateHolder, Statement
         }
     }
 
-    private void cleanupResources()
+    final String username()
     {
-        storeStatement.close();
+        return transaction.securityContext().subject().username();
     }
 
-    public StorageStatement getStoreStatement()
+    final ExecutingQueryList executingQueryList()
+    {
+        return executingQueryList;
+    }
+
+    final void startQueryExecution( ExecutingQuery query )
+    {
+        this.executingQueryList = executingQueryList.push( query );
+    }
+
+    final void stopQueryExecution( ExecutingQuery executingQuery )
+    {
+        this.executingQueryList = executingQueryList.remove( executingQuery );
+    }
+
+    /* only public for tests */ public StorageStatement getStoreStatement()
     {
         return storeStatement;
+    }
+
+    private void cleanupResources()
+    {
+        // closing is done by KTI
+        storeStatement.release();
+        executingQueryList = ExecutingQueryList.EMPTY;
+    }
+
+    public KernelTransactionImplementation getTransaction()
+    {
+        return transaction;
+    }
+
+    private void assertAllows( Function<AccessMode,Boolean> allows, String mode )
+    {
+        AccessMode accessMode = transaction.securityContext().mode();
+        if ( !allows.apply( accessMode ) )
+        {
+            throw accessMode.onViolation(
+                    String.format( "%s operations are not allowed for %s.", mode,
+                            transaction.securityContext().description() ) );
+        }
     }
 }

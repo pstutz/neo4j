@@ -45,7 +45,6 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.KernelException;
@@ -55,11 +54,12 @@ import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngine;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.register.Register.DoubleLongRegister;
 import org.neo4j.register.Registers;
-import org.neo4j.test.DatabaseRule;
-import org.neo4j.test.EmbeddedDatabaseRule;
+import org.neo4j.test.rule.DatabaseRule;
+import org.neo4j.test.rule.EmbeddedDatabaseRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -76,7 +76,8 @@ public class IndexStatisticsTest
             "Chris"
     };
 
-    private static final int CREATION_MULTIPLIER = 10_000;
+    private static final int CREATION_MULTIPLIER =
+            Integer.getInteger( IndexStatisticsTest.class.getName() + ".creationMultiplier", 1_000 );
     private static final int MISSED_UPDATES_TOLERANCE = NAMES.length;
     private static final double DOUBLE_ERROR_TOLERANCE = 0.00001d;
 
@@ -130,8 +131,8 @@ public class IndexStatisticsTest
 
         // then
         assertEquals( 0.75d, indexSelectivity( index ), DOUBLE_ERROR_TOLERANCE );
-        assertEquals( 4l, indexSize( index ) );
-        assertEquals( 0l, indexUpdates( index ) );
+        assertEquals( 4L, indexSize( index ) );
+        assertEquals( 0L, indexUpdates( index ) );
     }
 
     @Test
@@ -145,8 +146,8 @@ public class IndexStatisticsTest
 
         // then
         assertEquals( 1.0d, indexSelectivity( index ), DOUBLE_ERROR_TOLERANCE );
-        assertEquals( 0l, indexSize( index ) );
-        assertEquals( 4l, indexUpdates( index ) );
+        assertEquals( 0L, indexSize( index ) );
+        assertEquals( 4L, indexUpdates( index ) );
     }
 
     @Test
@@ -162,8 +163,8 @@ public class IndexStatisticsTest
 
         // then
         assertEquals( 0.75d, indexSelectivity( index ), DOUBLE_ERROR_TOLERANCE );
-        assertEquals( 4l, indexSize( index ) );
-        assertEquals( 4l, indexUpdates( index ) );
+        assertEquals( 4L, indexSize( index ) );
+        assertEquals( 4L, indexUpdates( index ) );
     }
 
     @Test
@@ -186,13 +187,13 @@ public class IndexStatisticsTest
         {
             DoubleLongRegister actual = getTracker()
                     .indexSample( index.getLabelId(), index.getPropertyKeyId(), Registers.newDoubleLongRegister() );
-            assertDoubleLongEquals( 0l, 0l, actual );
+            assertDoubleLongEquals( 0L, 0L, actual );
         }
 
         // and then index size and index updates are zero on disk
         DoubleLongRegister actual = getTracker()
                 .indexUpdatesAndSize( index.getLabelId(), index.getPropertyKeyId(), Registers.newDoubleLongRegister() );
-        assertDoubleLongEquals( 0l, 0l, actual );
+        assertDoubleLongEquals( 0L, 0L, actual );
     }
 
     @Test
@@ -208,7 +209,7 @@ public class IndexStatisticsTest
         double expectedSelectivity = UNIQUE_NAMES / (created);
         assertCorrectIndexSelectivity( expectedSelectivity, indexSelectivity( index ) );
         assertCorrectIndexSize( created, indexSize( index ) );
-        assertEquals( 0l, indexUpdates( index ) );
+        assertEquals( 0L, indexUpdates( index ) );
     }
 
     @Test
@@ -548,7 +549,6 @@ public class IndexStatisticsTest
     {
         return internalExecuteCreationsDeletionsAndUpdates( nodes, index, numberOfCreations, false, true );
     }
-
 
     private UpdatesTracker executeCreationsDeletionsAndUpdates( long[] nodes,
                                                                 IndexDescriptor index,

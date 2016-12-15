@@ -43,8 +43,7 @@ import java.util.*;
 
 import static java.lang.String.format;
 
-public class RelationshipProxy extends PropertyContainerProxy implements Relationship,
-        RelationshipVisitor<RuntimeException>
+public class RelationshipProxy implements Relationship, RelationshipVisitor<RuntimeException>
 {
     public interface RelationshipActions
     {
@@ -66,13 +65,11 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
     private long startNode = AbstractBaseRecord.NO_ID;
     private long endNode = AbstractBaseRecord.NO_ID;
     private int type;
-    //private boolean isSet=false; // this looks stupid but does not work without. Would like to know why ...
 
     public RelationshipProxy( RelationshipActions actions, long id, long startNode, int type, long endNode )
     {
         this.actions = actions;
         visit( id, type, startNode, endNode );
-        //System.out.println("should be: "+ endNode + " but is: " + this.endNode);
     }
 
     public RelationshipProxy( RelationshipActions actions, long id )
@@ -84,14 +81,10 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
     @Override
     public void visit( long id, int type, long startNode, long endNode ) throws RuntimeException
     {
-        //if(isSet){}
-        //else {
-            this.id = id;
-            this.type = type;
-            this.startNode = startNode;
-            this.endNode = endNode;
-          //  isSet = true;
-        //}
+        this.id = id;
+        this.type = type;
+        this.startNode = startNode;
+        this.endNode = endNode;
     }
 
     private void initializeData()
@@ -133,7 +126,6 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
         initializeData();
         return endNode;
     }
-
 
     @Override
     public GraphDatabaseService getGraphDatabase()
@@ -258,7 +250,7 @@ public class RelationshipProxy extends PropertyContainerProxy implements Relatio
 
                 try ( Cursor<PropertyItem> propertyCursor = relationship.get().properties() )
                 {
-                    return super.getProperties( statement, propertyCursor, keys );
+                    return PropertyContainerProxyHelper.getProperties( statement, propertyCursor, keys );
                 }
             }
         }

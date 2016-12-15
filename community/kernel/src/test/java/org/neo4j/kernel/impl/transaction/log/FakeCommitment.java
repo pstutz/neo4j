@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.transaction.log;
 public class FakeCommitment implements Commitment
 {
     public static final int CHECKSUM = 3;
+    public static final long TIMESTAMP = 8194639457389L;
     private final long id;
     private final TransactionIdStore transactionIdStore;
     private boolean committed;
@@ -43,7 +44,7 @@ public class FakeCommitment implements Commitment
     public void publishAsCommitted()
     {
         committed = true;
-        transactionIdStore.transactionCommitted( id, CHECKSUM );
+        transactionIdStore.transactionCommitted( id, CHECKSUM, TIMESTAMP );
     }
 
     @Override

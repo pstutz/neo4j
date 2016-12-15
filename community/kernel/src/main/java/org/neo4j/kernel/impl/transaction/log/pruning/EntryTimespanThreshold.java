@@ -21,10 +21,9 @@ package org.neo4j.kernel.impl.transaction.log.pruning;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Clock;
 import java.util.concurrent.TimeUnit;
 
-import org.neo4j.helpers.Clock;
-import org.neo4j.kernel.impl.transaction.log.IllegalLogFormatException;
 import org.neo4j.kernel.impl.transaction.log.LogFileInformation;
 
 public final class EntryTimespanThreshold implements Threshold
@@ -34,7 +33,7 @@ public final class EntryTimespanThreshold implements Threshold
 
     private long lowerLimit;
 
-    EntryTimespanThreshold( Clock clock, TimeUnit timeUnit, long timeToKeep )
+    public EntryTimespanThreshold( Clock clock, TimeUnit timeUnit, long timeToKeep )
     {
         this.clock = clock;
         this.timeToKeepInMillis = timeUnit.toMillis( timeToKeep );
@@ -43,7 +42,7 @@ public final class EntryTimespanThreshold implements Threshold
     @Override
     public void init()
     {
-        lowerLimit = clock.currentTimeMillis() - timeToKeepInMillis;
+        lowerLimit = clock.millis() - timeToKeepInMillis;
     }
 
     @Override
@@ -53,10 +52,6 @@ public final class EntryTimespanThreshold implements Threshold
         {
             long firstStartRecordTimestamp = source.getFirstStartRecordTimestamp( version );
             return firstStartRecordTimestamp >= 0 && firstStartRecordTimestamp < lowerLimit;
-        }
-        catch(IllegalLogFormatException e)
-        {
-            return LogPruneStrategyFactory.decidePruneForIllegalLogFormat( e );
         }
         catch ( IOException e )
         {

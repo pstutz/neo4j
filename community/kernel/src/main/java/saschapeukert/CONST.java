@@ -6,7 +6,7 @@ package saschapeukert;
 public class CONST {
 
     // TODO: Refactor this
-    public static String PROPERTYKEY = "$VIRTUAL$";
+    public static String PROPERTYKEY = "VIRTUAL";
 
 
 }

@@ -19,16 +19,16 @@
  */
 package org.neo4j.harness.internal;
 
+import org.apache.commons.io.FileUtils;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Function;
-
-import org.apache.commons.io.FileUtils;
 
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.config.Setting;
@@ -47,6 +47,7 @@ import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.logging.FormattedLogProvider;
 import org.neo4j.server.AbstractNeoServer;
+import org.neo4j.server.configuration.ClientConnectorSettings.HttpConnector.Encryption;
 import org.neo4j.server.configuration.ServerSettings;
 import org.neo4j.server.configuration.ThirdPartyJaxRsPackage;
 
@@ -56,8 +57,7 @@ import static org.neo4j.graphdb.factory.GraphDatabaseSettings.boltConnector;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.pagecache_memory;
 import static org.neo4j.helpers.collection.Iterables.append;
 import static org.neo4j.io.file.Files.createOrOpenAsOuputStream;
-import static org.neo4j.server.ServerTestUtils.getRelativePath;
-import static org.neo4j.server.configuration.ServerSettings.httpConnector;
+import static org.neo4j.server.configuration.ClientConnectorSettings.httpConnector;
 import static org.neo4j.test.Digests.md5Hex;
 
 public abstract class AbstractInProcessServerBuilder implements TestServerBuilder
@@ -85,8 +85,12 @@ public abstract class AbstractInProcessServerBuilder implements TestServerBuilde
         withConfig( auth_enabled, "false" );
         withConfig( pagecache_memory, "8m" );
         withConfig( httpConnector( "1" ).type, "HTTP" );
+        withConfig( httpConnector( "1" ).encryption, Encryption.NONE.name() );
         withConfig( httpConnector( "1" ).enabled, "true" );
         withConfig( httpConnector( "1" ).address, "localhost:" + Integer.toString( freePort( 1001, 5000 ) ) );
+        withConfig( httpConnector( "2" ).type, "HTTP" );
+        withConfig( httpConnector( "2" ).encryption, Encryption.TLS.name() );
+        withConfig( httpConnector( "2" ).enabled, "false" );
         withConfig( boltConnector( "0" ).type, "BOLT" );
         withConfig( boltConnector( "0" ).enabled, "true" );
         withConfig( boltConnector( "0" ).address, "localhost:" + Integer.toString( freePort( 5001, 9000 ) ) );
@@ -105,7 +109,6 @@ public abstract class AbstractInProcessServerBuilder implements TestServerBuilde
         }
         return this;
     }
-
 
     @Override
     public ServerControls newServer()
@@ -198,7 +201,14 @@ public abstract class AbstractInProcessServerBuilder implements TestServerBuilde
     @Override
     public TestServerBuilder withProcedure( Class<?> procedureClass )
     {
-        procedures.add( procedureClass );
+        procedures.addProcedure( procedureClass );
+        return this;
+    }
+
+    @Override
+    public TestServerBuilder withFunction( Class<?> functionClass )
+    {
+        procedures.addFunction( functionClass );
         return this;
     }
 
@@ -211,7 +221,7 @@ public abstract class AbstractInProcessServerBuilder implements TestServerBuilde
 
     private String randomFolderName()
     {
-        return md5Hex( Long.toString( new Random().nextLong() ) );
+        return md5Hex( Long.toString( ThreadLocalRandom.current().nextLong() ) );
     }
 
     private int freePort(int startRange, int endRange)

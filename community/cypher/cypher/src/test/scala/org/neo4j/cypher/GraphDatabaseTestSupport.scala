@@ -20,20 +20,19 @@
 package org.neo4j.cypher
 
 import org.mockito.Mockito.when
-import org.neo4j.cypher.internal.compiler.v3_0.CypherCompilerConfiguration
-import org.neo4j.cypher.internal.compiler.v3_0.planner.logical.idp.DefaultIDPSolverConfig
-import org.neo4j.cypher.internal.compiler.v3_0.spi.PlanContext
-import org.neo4j.cypher.internal.frontend.v3_0.test_helpers.{CypherFunSuite, CypherTestSupport}
+import org.neo4j.cypher.internal.compiler.v3_1.planner.logical.idp.DefaultIDPSolverConfig
+import org.neo4j.cypher.internal.compiler.v3_1.spi.PlanContext
+import org.neo4j.cypher.internal.compiler.v3_1.{CypherCompilerConfiguration, devNullLogger}
+import org.neo4j.cypher.internal.frontend.v3_1.test_helpers.{CypherFunSuite, CypherTestSupport}
 import org.neo4j.cypher.internal.helpers.GraphIcing
-import org.neo4j.cypher.internal.spi.TransactionalContextWrapper
-import org.neo4j.cypher.internal.spi.v3_0.TransactionBoundPlanContext
-import org.neo4j.cypher.internal.spi.v3_0.TransactionBoundQueryContext.IndexSearchMonitor
+import org.neo4j.cypher.internal.spi.TransactionalContextWrapperv3_1
+import org.neo4j.cypher.internal.spi.v3_1.TransactionBoundPlanContext
+import org.neo4j.cypher.internal.spi.v3_1.TransactionBoundQueryContext.IndexSearchMonitor
 import org.neo4j.cypher.javacompat.internal.GraphDatabaseCypherService
 import org.neo4j.graphdb._
 import org.neo4j.graphdb.config.Setting
 import org.neo4j.kernel.api.KernelAPI
-import org.neo4j.kernel.api.proc.CallableProcedure
-import org.neo4j.kernel.api.proc.ProcedureSignature._
+import org.neo4j.kernel.api.proc.{CallableProcedure, CallableUserFunction, ProcedureSignature, UserFunctionSignature}
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge
 import org.neo4j.kernel.monitoring
 import org.neo4j.test.TestGraphDatabaseFactory
@@ -216,18 +215,32 @@ trait GraphDatabaseTestSupport extends CypherTestSupport with GraphIcing {
     (a, b, c, d)
   }
 
-  def registerProcedure[T <: CallableProcedure](qualifiedName: String)(f: Builder => T): T = {
+  def registerProcedure[T <: CallableProcedure](qualifiedName: String)(f: ProcedureSignature.Builder => T): T = {
     val parts = qualifiedName.split('.')
     val namespace = parts.reverse.tail.reverse
     val name = parts.last
     registerProcedure(namespace: _*)(name)(f)
   }
 
-  def registerProcedure[T <: CallableProcedure](namespace: String*)(name: String)(f: Builder => T): T = {
-    val builder = procedureSignature(namespace.toArray, name)
+  def registerProcedure[T <: CallableProcedure](namespace: String*)(name: String)(f: ProcedureSignature.Builder => T): T = {
+    val builder = ProcedureSignature.procedureSignature(namespace.toArray, name)
     val proc = f(builder)
     kernelAPI.registerProcedure(proc)
     proc
+  }
+
+  def registerUserDefinedFunction[T <: CallableUserFunction](qualifiedName: String)(f: UserFunctionSignature.Builder => T): T = {
+    val parts = qualifiedName.split('.')
+    val namespace = parts.reverse.tail.reverse
+    val name = parts.last
+    registerUserFunction(namespace: _*)(name)(f)
+  }
+
+  def registerUserFunction[T <: CallableUserFunction](namespace: String*)(name: String)(f: UserFunctionSignature.Builder => T): T = {
+    val builder = UserFunctionSignature.functionSignature(namespace.toArray, name)
+    val func = f(builder)
+    kernelAPI.registerUserFunction(func)
+    func
   }
 
   def statement = graph.getDependencyResolver.resolveDependency(classOf[ThreadToStatementContextBridge]).get()
@@ -237,11 +250,11 @@ trait GraphDatabaseTestSupport extends CypherTestSupport with GraphIcing {
   def kernelAPI = graph.getDependencyResolver.resolveDependency(classOf[KernelAPI])
 
   def planContext: PlanContext = {
-    val tc = mock[TransactionalContextWrapper]
+    val tc = mock[TransactionalContextWrapperv3_1]
     when(tc.statement).thenReturn(statement)
     when(tc.readOperations).thenReturn(statement.readOperations())
     when(tc.graph).thenReturn(graph)
-    new TransactionBoundPlanContext(tc)
+    new TransactionBoundPlanContext(tc, devNullLogger)
   }
 
   def indexSearchMonitor = kernelMonitors.newMonitor(classOf[IndexSearchMonitor])

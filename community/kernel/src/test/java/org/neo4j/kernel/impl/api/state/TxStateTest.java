@@ -56,8 +56,8 @@ import org.neo4j.storageengine.api.PropertyItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.txstate.ReadableDiffSets;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
-import org.neo4j.test.RandomRule;
 import org.neo4j.test.RepeatRule;
+import org.neo4j.test.rule.RandomRule;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.emptySet;
@@ -922,7 +922,7 @@ public class TxStateTest
         // Given
 
         // When
-        long nodeId = 1337l;
+        long nodeId = 1337L;
         state.nodeDoDelete( nodeId );
 
         // Then
@@ -1494,6 +1494,8 @@ public class TxStateTest
                     continue;
                 }
                 break;
+            default:
+                throw new IllegalStateException( "Unknown direction: " + direction );
             }
 
             if ( relationshipTypes != null )
@@ -1604,7 +1606,6 @@ public class TxStateTest
             }
         };
     }
-
 
     //endregion
 

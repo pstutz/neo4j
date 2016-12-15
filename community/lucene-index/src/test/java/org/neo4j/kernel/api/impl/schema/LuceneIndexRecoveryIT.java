@@ -44,8 +44,8 @@ import org.neo4j.kernel.impl.transaction.log.checkpoint.SimpleTriggerInfo;
 import org.neo4j.kernel.impl.transaction.log.rotation.LogRotation;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.lifecycle.Lifecycle;
-import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -58,7 +58,7 @@ public class LuceneIndexRecoveryIT
     public EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
 
     private final String NUM_BANANAS_KEY = "number_of_bananas_owned";
-    private final static Label myLabel = label( "MyLabel" );
+    private static final Label myLabel = label( "MyLabel" );
     private GraphDatabaseAPI db;
     private DirectoryFactory directoryFactory;
 
@@ -324,7 +324,8 @@ public class LuceneIndexRecoveryIT
                     throws Throwable
             {
                 return new LuceneSchemaIndexProvider( fs.get(),directoryFactory, context
-                        .storeDir() )
+                        .storeDir(), dependencies.getLogging().getInternalLogProvider(), dependencies.getConfig(),
+                        context.databaseInfo().operationalMode )
                 {
                     @Override
                     public InternalIndexState getInitialState( long indexId )
@@ -347,7 +348,9 @@ public class LuceneIndexRecoveryIT
             public Lifecycle newInstance( KernelContext context, LuceneSchemaIndexProviderFactory.Dependencies dependencies )
                     throws Throwable
             {
-                return new LuceneSchemaIndexProvider( fs.get(), directoryFactory, context.storeDir() )
+                return new LuceneSchemaIndexProvider( fs.get(), directoryFactory, context.storeDir(),
+                        dependencies.getLogging().getInternalLogProvider(), dependencies.getConfig(),
+                        context.databaseInfo().operationalMode )
                 {
                     @Override
                     public int compareTo( SchemaIndexProvider o )

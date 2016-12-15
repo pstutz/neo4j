@@ -23,15 +23,14 @@ import java.io.File;
 import java.util.Optional;
 
 import org.neo4j.dbms.DatabaseManagementSystemSettings;
+import org.neo4j.desktop.Parameters;
 import org.neo4j.desktop.config.Installation;
-import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.helpers.HostnamePort;
+import org.neo4j.helpers.ListenSocketAddress;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.logging.FormattedLog;
 import org.neo4j.server.CommunityBootstrapper;
+import org.neo4j.server.configuration.ClientConnectorSettings;
 import org.neo4j.server.configuration.ConfigLoader;
-import org.neo4j.server.configuration.ServerSettings;
-import org.neo4j.server.configuration.ServerSettings.HttpConnector;
 
 import static org.neo4j.helpers.collection.Pair.pair;
 
@@ -40,11 +39,13 @@ public class DesktopConfigurator
     private final Installation installation;
 
     private Config config;
+    private final Parameters parameters;
     private File dbDir;
 
-    public DesktopConfigurator( Installation installation, File databaseDirectory )
+    public DesktopConfigurator( Installation installation, Parameters parameters, File databaseDirectory )
     {
         this.installation = installation;
+        this.parameters = parameters;
         this.dbDir = databaseDirectory;
         refresh();
     }
@@ -52,10 +53,16 @@ public class DesktopConfigurator
     public void refresh()
     {
         config = new ConfigLoader( CommunityBootstrapper.settingsClasses).loadConfig(
-                Optional.of( installation.getConfigurationsFile() ),
-                FormattedLog.toOutputStream( System.out ),
-                (settings) -> settings.put( GraphDatabaseSettings.neo4j_home.name(), dbDir.getAbsolutePath() ),
+                Optional.of( dbDir.getAbsoluteFile() ),
+                Optional.of( getConfigurationsFile() ),
                 pair( DatabaseManagementSystemSettings.database_path.name(), dbDir.getAbsolutePath() ) );
+        config.setLogger( FormattedLog.toOutputStream( System.out ) );
+    }
+
+    public File getConfigurationsFile()
+    {
+        return Optional.ofNullable( parameters.getConfigurationsFile() )
+                .orElse( installation.getConfigurationsFile() );
     }
 
     public Config configuration()
@@ -66,6 +73,7 @@ public class DesktopConfigurator
     public void setDatabaseDirectory( File directory )
     {
         dbDir = directory;
+        refresh();
     }
 
     public String getDatabaseDirectory()
@@ -73,8 +81,8 @@ public class DesktopConfigurator
         return dbDir.getAbsolutePath();
     }
 
-    public HostnamePort getServerAddress()
+    public ListenSocketAddress getServerAddress()
     {
-        return ServerSettings.httpConnector( config, HttpConnector.Encryption.NONE ).get().address.from( config );
+        return ClientConnectorSettings.httpConnector( config, ClientConnectorSettings.HttpConnector.Encryption.NONE ).get().address.from( config );
     }
 }

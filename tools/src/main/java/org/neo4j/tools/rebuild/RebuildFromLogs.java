@@ -182,11 +182,10 @@ class RebuildFromLogs
         }
     }
 
-
     private long findLastTransactionId( PhysicalLogFiles logFiles, long highestVersion ) throws IOException
     {
         ReadableLogChannel logChannel = new ReadAheadLogChannel(
-                PhysicalLogFile.openForVersion( logFiles, fs, highestVersion ), NO_MORE_CHANNELS );
+                PhysicalLogFile.openForVersion( logFiles, fs, highestVersion, false ), NO_MORE_CHANNELS );
 
         long lastTransactionId = -1;
 
@@ -233,11 +232,11 @@ class RebuildFromLogs
             PhysicalLogFiles logFiles = new PhysicalLogFiles( sourceDir, fs );
             int startVersion = 0;
             ReaderLogVersionBridge versionBridge = new ReaderLogVersionBridge( fs, logFiles );
-            PhysicalLogVersionedStoreChannel startingChannel = openForVersion( logFiles, fs, startVersion );
+            PhysicalLogVersionedStoreChannel startingChannel = openForVersion( logFiles, fs, startVersion, false );
             ReadableLogChannel channel = new ReadAheadLogChannel( startingChannel, versionBridge );
             long txId = BASE_TX_ID;
             TransactionQueue queue = new TransactionQueue( 10_000,
-                    (tx) -> {commitProcess.commit( tx, NULL, EXTERNAL );} );
+                    (tx, last) -> {commitProcess.commit( tx, NULL, EXTERNAL );} );
             LogEntryReader<ReadableClosablePositionAwareChannel> entryReader = new VersionAwareLogEntryReader<>();
             try ( IOCursor<CommittedTransactionRepresentation> cursor =
                     new PhysicalTransactionCursor<>( channel, entryReader ) )

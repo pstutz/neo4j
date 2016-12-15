@@ -47,7 +47,7 @@ public class TestPlaceboTransaction
     @Before
     public void before() throws Exception
     {
-        ThreadToStatementContextBridge bridge = mock (ThreadToStatementContextBridge.class );
+        ThreadToStatementContextBridge bridge = mock( ThreadToStatementContextBridge.class );
         when( bridge.get() ).thenReturn( mock( Statement.class ) );
         kernelTransaction = spy( KernelTransaction.class );
         Statement statement = mock( Statement.class );
@@ -56,7 +56,7 @@ public class TestPlaceboTransaction
         when( bridge.get() ).thenReturn( statement );
         placeboTx = new PlaceboTransaction( () -> kernelTransaction, bridge );
         resource = mock( Node.class );
-        when( resource.getId() ).thenReturn( 1l );
+        when( resource.getId() ).thenReturn( 1L );
     }
 
     @Test

@@ -25,9 +25,11 @@ import java.io.IOException;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.format.Capability;
+import org.neo4j.kernel.impl.store.format.FormatFamily;
 import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.storemigration.StoreUpgrader.DatabaseNotCleanlyShutDownException;
+import org.neo4j.kernel.impl.storemigration.StoreUpgrader.UnexpectedUpgradingStoreFormatException;
 import org.neo4j.kernel.impl.storemigration.StoreUpgrader.UnexpectedUpgradingStoreVersionException;
 import org.neo4j.kernel.impl.storemigration.StoreUpgrader.UpgradeMissingStoreFilesException;
 import org.neo4j.kernel.impl.storemigration.StoreUpgrader.UpgradingStoreVersionNotFoundException;
@@ -71,6 +73,8 @@ public class UpgradableDatabase
      * version cannot be determined.
      * @throws UnexpectedUpgradingStoreVersionException if store cannot be upgraded due to an unexpected store
      * version found.
+     * @throws UnexpectedUpgradingStoreFormatException if store cannot be upgraded due to an unexpected store
+     * format found.
      * @throws DatabaseNotCleanlyShutDownException if store cannot be upgraded due to not being cleanly shut down.
      */
     public RecordFormats checkUpgradeable( File storeDirectory )
@@ -88,10 +92,18 @@ public class UpgradableDatabase
         try
         {
             fromFormat = RecordFormatSelector.selectForVersion( result.actualVersion );
-            if ( fromFormat.generation() > format.generation() )
+
+            // If we are trying to open an enterprise store when configured to use community format, then inform the user
+            // of the config setting to change since downgrades aren't possible but the store can still be opened.
+            if ( FormatFamily.isLowerFamilyFormat( format, fromFormat ) )
+            {
+                throw new StoreUpgrader.UnexpectedUpgradingStoreFormatException();
+            }
+
+            if ( FormatFamily.isSameFamily( fromFormat, format ) && (fromFormat.generation() > format.generation()) )
             {
                 // Tried to downgrade, that isn't supported
-                result = new Result( Outcome.unexpectedUpgradingStoreVersion, fromFormat.storeVersion(),
+                result = new Result( Outcome.attemptedStoreDowngrade, fromFormat.storeVersion(),
                         new File( storeDirectory, MetaDataStore.DEFAULT_NAME ).getAbsolutePath() );
             }
             else
@@ -107,7 +119,7 @@ public class UpgradableDatabase
         }
         catch ( IllegalArgumentException e )
         {
-            result = new Result( Outcome.unexpectedUpgradingStoreVersion, result.actualVersion, result.storeFilename );
+            result = new Result( Outcome.unexpectedStoreVersion, result.actualVersion, result.storeFilename );
         }
 
         switch ( result.outcome )
@@ -117,9 +129,10 @@ public class UpgradableDatabase
         case storeVersionNotFound:
             throw new StoreUpgrader.UpgradingStoreVersionNotFoundException(
                     getPathToStoreFile( storeDirectory, result ) );
-        case unexpectedUpgradingStoreVersion:
-            throw new StoreUpgrader.UnexpectedUpgradingStoreVersionException(
-                    getPathToStoreFile( storeDirectory, result ), result.actualVersion );
+        case attemptedStoreDowngrade:
+            throw new StoreUpgrader.AttemptedDowngradeException();
+        case unexpectedStoreVersion:
+            throw new StoreUpgrader.UnexpectedUpgradingStoreVersionException( result.actualVersion, format.storeVersion() );
         case storeNotCleanlyShutDown:
             throw new StoreUpgrader.DatabaseNotCleanlyShutDownException();
         default:
@@ -181,7 +194,8 @@ public class UpgradableDatabase
         case missingStoreFile: // let's assume the db is empty
             return true;
         case storeVersionNotFound:
-        case unexpectedUpgradingStoreVersion:
+        case unexpectedStoreVersion:
+        case attemptedStoreDowngrade:
             return false;
         default:
             throw new IllegalArgumentException( "Unknown outcome: " + result.outcome.name() );

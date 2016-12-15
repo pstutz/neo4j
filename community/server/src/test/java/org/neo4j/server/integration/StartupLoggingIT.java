@@ -19,19 +19,19 @@
  */
 package org.neo4j.server.integration;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import org.neo4j.dbms.DatabaseManagementSystemSettings;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
@@ -40,14 +40,13 @@ import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.server.CommunityBootstrapper;
 import org.neo4j.server.ServerTestUtils;
-import org.neo4j.test.SuppressOutput;
+import org.neo4j.server.configuration.ClientConnectorSettings;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.test.server.ExclusiveServerTestBase;
 
 import static java.util.Arrays.asList;
-
 import static org.hamcrest.MatcherAssert.assertThat;
-
-import static org.neo4j.server.configuration.ServerSettings.httpConnector;
 
 public class StartupLoggingIT extends ExclusiveServerTestBase
 {
@@ -60,13 +59,16 @@ public class StartupLoggingIT extends ExclusiveServerTestBase
         FileUtils.deleteRecursively( ServerTestUtils.getRelativeFile( DatabaseManagementSystemSettings.data_directory ) );
     }
 
+    @Rule
+    public TestDirectory homeDir = TestDirectory.testDirectory();
+
     @Test
     public void shouldLogHelpfulStartupMessages() throws Throwable
     {
         CommunityBootstrapper boot = new CommunityBootstrapper();
         Pair[] propertyPairs = getPropertyPairs();
 
-        boot.start( Optional.of( new File( "nonexistent-file.conf" ) ), propertyPairs );
+        boot.start( homeDir.directory(), Optional.of( new File( "nonexistent-file.conf" ) ), propertyPairs );
         boot.stop();
 
         List<String> captured = suppressOutput.getOutputVoice().lines();
@@ -89,8 +91,8 @@ public class StartupLoggingIT extends ExclusiveServerTestBase
             pairs.add( Pair.of( entry.getKey(), entry.getValue() ) );
         }
         pairs.add( Pair.of( GraphDatabaseSettings.allow_store_upgrade.name(), Settings.TRUE) );
-        pairs.add( Pair.of( httpConnector("1").type.name(), "HTTP" ) );
-        pairs.add( Pair.of( httpConnector("1").enabled.name(), "true" ) );
+        pairs.add( Pair.of( ClientConnectorSettings.httpConnector("http").type.name(), "HTTP" ) );
+        pairs.add( Pair.of( ClientConnectorSettings.httpConnector("http").enabled.name(), Settings.TRUE ) );
         return pairs.toArray( new Pair[pairs.size()] );
     }
 

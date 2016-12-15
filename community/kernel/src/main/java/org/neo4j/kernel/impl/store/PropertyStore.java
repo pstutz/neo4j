@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.store;
 
 import java.io.File;
+import java.nio.file.OpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -28,11 +29,11 @@ import java.util.List;
 import org.neo4j.collection.primitive.PrimitiveLongObjectMap;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.helpers.collection.Iterables;
-import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
+import org.neo4j.kernel.impl.store.format.standard.StandardFormatSettings;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
@@ -53,7 +54,7 @@ import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
  */
 public class PropertyStore extends CommonAbstractStore<PropertyRecord,NoStoreHeader>
 {
-    public static abstract class Configuration extends CommonAbstractStore.Configuration
+    public abstract static class Configuration extends CommonAbstractStore.Configuration
     {
     }
 
@@ -72,10 +73,11 @@ public class PropertyStore extends CommonAbstractStore<PropertyRecord,NoStoreHea
             DynamicStringStore stringPropertyStore,
             PropertyKeyTokenStore propertyKeyTokenStore,
             DynamicArrayStore arrayPropertyStore,
-            RecordFormats recordFormats)
+            RecordFormats recordFormats,
+            OpenOption... openOptions )
     {
         super( fileName, configuration, IdType.PROPERTY, idGeneratorFactory, pageCache, logProvider, TYPE_DESCRIPTOR,
-                recordFormats.property(), NO_STORE_HEADER_FORMAT, recordFormats.storeVersion() );
+                recordFormats.property(), NO_STORE_HEADER_FORMAT, recordFormats.storeVersion(), openOptions );
         this.stringStore = stringPropertyStore;
         this.propertyKeyTokenStore = propertyKeyTokenStore;
         this.arrayStore = arrayPropertyStore;
@@ -205,14 +207,13 @@ public class PropertyStore extends CommonAbstractStore<PropertyRecord,NoStoreHea
     public static void allocateStringRecords( Collection<DynamicRecord> target, byte[] chars,
             DynamicRecordAllocator allocator )
     {
-        AbstractDynamicStore.allocateRecordsFromBytes( target, chars,
-                Iterators.<DynamicRecord>emptyIterator(), allocator );
+        AbstractDynamicStore.allocateRecordsFromBytes( target, chars, allocator );
     }
 
     public static void allocateArrayRecords( Collection<DynamicRecord> target, Object array,
             DynamicRecordAllocator allocator )
     {
-        DynamicArrayStore.allocateRecords( target, array, Iterators.<DynamicRecord>emptyIterator(), allocator );
+        DynamicArrayStore.allocateRecords( target, array, allocator );
     }
 
     public void encodeValue( PropertyBlock block, int keyId, Object value )
@@ -256,7 +257,9 @@ public class PropertyStore extends CommonAbstractStore<PropertyRecord,NoStoreHea
         }
         else if ( value instanceof Long )
         {
-            long keyAndType = keyId | (((long) PropertyType.LONG.intValue()) << 24);
+
+            long keyAndType = keyId | (((long) PropertyType.LONG.intValue()) <<
+                                       StandardFormatSettings.PROPERTY_TOKEN_MAXIMUM_ID_BITS);
             if ( ShortArray.LONG.getRequiredBits( (Long) value ) <= 35 )
             {   // We only need one block for this value, special layout compared to, say, an integer
                 block.setSingleBlock( keyAndType | (1L << 28) | ((Long) value << 29) );
@@ -268,8 +271,8 @@ public class PropertyStore extends CommonAbstractStore<PropertyRecord,NoStoreHea
         }
         else if ( value instanceof Double )
         {
-            block.setValueBlocks( new long[]{
-                    keyId | (((long) PropertyType.DOUBLE.intValue()) << 24),
+            block.setValueBlocks( new long[]{ keyId |
+                    (((long) PropertyType.DOUBLE.intValue()) << StandardFormatSettings.PROPERTY_TOKEN_MAXIMUM_ID_BITS),
                     Double.doubleToRawLongBits( (Double) value )} );
         }
         else if ( value instanceof Byte )
@@ -314,7 +317,8 @@ public class PropertyStore extends CommonAbstractStore<PropertyRecord,NoStoreHea
 
     public static long singleBlockLongValue( int keyId, PropertyType type, long longValue )
     {
-        return keyId | (((long) type.intValue()) << 24) | (longValue << 28);
+        return keyId | (((long) type.intValue()) << StandardFormatSettings.PROPERTY_TOKEN_MAXIMUM_ID_BITS) |
+               (longValue << 28);
     }
 
     public static byte[] encodeString( String string )

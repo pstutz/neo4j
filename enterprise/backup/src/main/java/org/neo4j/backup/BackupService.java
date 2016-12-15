@@ -20,8 +20,9 @@
 package org.neo4j.backup;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.ConnectException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -31,6 +32,7 @@ import org.neo4j.com.RequestContext;
 import org.neo4j.com.Response;
 import org.neo4j.com.monitor.RequestMonitor;
 import org.neo4j.com.storecopy.ExternallyManagedPageCache;
+import org.neo4j.com.storecopy.MoveAfterCopy;
 import org.neo4j.com.storecopy.ResponseUnpacker;
 import org.neo4j.com.storecopy.ResponseUnpacker.TxHandler;
 import org.neo4j.com.storecopy.StoreCopyClient;
@@ -42,7 +44,6 @@ import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.CancellationRequest;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.Service;
-import org.neo4j.helpers.progress.ProgressListener;
 import org.neo4j.helpers.progress.ProgressMonitorFactory;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
@@ -56,11 +57,14 @@ import org.neo4j.kernel.impl.logging.StoreLogService;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.MismatchingStoreIdException;
 import org.neo4j.kernel.impl.store.StoreId;
+import org.neo4j.kernel.impl.store.UnexpectedStoreVersionException;
 import org.neo4j.kernel.impl.store.id.IdGeneratorImpl;
+import org.neo4j.kernel.impl.storemigration.UpgradeNotAllowedByConfigurationException;
 import org.neo4j.kernel.impl.transaction.log.MissingLogDataException;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.kernel.lifecycle.Lifespan;
 import org.neo4j.kernel.monitoring.ByteCounterMonitor;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.FormattedLogProvider;
@@ -70,6 +74,7 @@ import org.neo4j.logging.NullLogProvider;
 
 import static org.neo4j.com.RequestContext.anonymous;
 import static org.neo4j.com.storecopy.TransactionCommittingResponseUnpacker.DEFAULT_BATCH_SIZE;
+import static org.neo4j.helpers.Exceptions.rootCause;
 import static org.neo4j.kernel.impl.pagecache.StandalonePageCacheFactory.createPageCache;
 
 /**
@@ -88,7 +93,7 @@ class BackupService
             this.consistent = consistent;
         }
 
-        public long getLastCommittedTx()
+        long getLastCommittedTx()
         {
             return lastCommittedTx;
         }
@@ -110,11 +115,16 @@ class BackupService
     private final LogProvider logProvider;
     private final Log log;
     private final Monitors monitors;
-    private final VersionAwareLogEntryReader entryReader;
 
     BackupService()
     {
-        this( new DefaultFileSystemAbstraction(), FormattedLogProvider.toOutputStream( System.out ), new Monitors() );
+        this( System.out );
+    }
+
+    BackupService( OutputStream logDestination )
+    {
+        this( new DefaultFileSystemAbstraction(), FormattedLogProvider.toOutputStream( logDestination ),
+                new Monitors() );
     }
 
     BackupService( FileSystemAbstraction fileSystem, LogProvider logProvider, Monitors monitors )
@@ -123,7 +133,7 @@ class BackupService
         this.logProvider = logProvider;
         this.log = logProvider.getLog( getClass() );
         this.monitors = monitors;
-        this.entryReader = new VersionAwareLogEntryReader<>();
+        monitors.addMonitorListener( new StoreCopyClientLoggingMonitor( log ), getClass().getName() );
     }
 
     BackupOutcome doFullBackup( final String sourceHostNameOrIp, final int sourcePort, File targetDirectory,
@@ -136,33 +146,19 @@ class BackupService
         }
         long timestamp = System.currentTimeMillis();
         long lastCommittedTx = -1;
-        try ( PageCache pageCache = createPageCache( fileSystem ) )
+        try ( PageCache pageCache = createPageCache( fileSystem, tuningConfiguration ) )
         {
             StoreCopyClient storeCopier = new StoreCopyClient( targetDirectory, tuningConfiguration,
                     loadKernelExtensions(), logProvider, new DefaultFileSystemAbstraction(), pageCache,
                     monitors.newMonitor( StoreCopyClient.Monitor.class, getClass() ), forensics );
-            storeCopier.copyStore( new StoreCopyClient.StoreCopyRequester()
-            {
-                private BackupClient client;
+            FullBackupStoreCopyRequester storeCopyRequester =
+                    new FullBackupStoreCopyRequester( sourceHostNameOrIp, sourcePort, timeout, forensics, monitors );
+            storeCopier.copyStore(
+                    storeCopyRequester,
+                    CancellationRequest.NEVER_CANCELLED,
+                    MoveAfterCopy.moveReplaceExisting() );
 
-                @Override
-                public Response<?> copyStore( StoreWriter writer )
-                {
-                    client = new BackupClient( sourceHostNameOrIp, sourcePort, null, NullLogProvider.getInstance(),
-                            StoreId.DEFAULT, timeout, ResponseUnpacker.NO_OP_RESPONSE_UNPACKER, monitors.newMonitor(
-                            ByteCounterMonitor.class ), monitors.newMonitor( RequestMonitor.class ), entryReader );
-                    client.start();
-                    return client.fullBackup( writer, forensics );
-                }
-
-                @Override
-                public void done()
-                {
-                    client.stop();
-                }
-            }, CancellationRequest.NEVER_CANCELLED );
-
-            bumpMessagesDotLogFile( targetDirectory, timestamp );
+            bumpDebugDotLogFileVersion( targetDirectory, timestamp );
             boolean consistent = false;
             try
             {
@@ -205,7 +201,7 @@ class BackupService
             {
                 targetDb.shutdown();
             }
-            bumpMessagesDotLogFile( targetDirectory, backupStartTime );
+            bumpDebugDotLogFileVersion( targetDirectory, backupStartTime );
             clearIdFiles( targetDirectory );
             return outcome;
         }
@@ -229,11 +225,13 @@ class BackupService
     {
         if ( directoryIsEmpty( targetDirectory ) )
         {
+            log.info( "Previous backup not found, a new full backup will be performed." );
             return doFullBackup( sourceHostNameOrIp, sourcePort, targetDirectory, consistencyCheck, config, timeout,
                     forensics );
         }
         try
         {
+            log.info( "Previous backup found, trying incremental backup." );
             return doIncrementalBackup( sourceHostNameOrIp, sourcePort, targetDirectory, timeout, config );
         }
         catch ( IncrementalBackupNotPossibleException e )
@@ -251,6 +249,16 @@ class BackupService
                 throw new RuntimeException( "Failed to perform incremental backup, fell back to full backup, " +
                         "but that failed as well: '" + fullBackupFailure.getMessage() + "'.", fullBackupFailure );
             }
+        }
+        catch ( RuntimeException e )
+        {
+            if ( rootCause( e ) instanceof UpgradeNotAllowedByConfigurationException )
+            {
+                throw new UnexpectedStoreVersionException( "Failed to perform backup because existing backup is from " +
+                        "a different version.", e );
+            }
+
+            throw e;
         }
     }
 
@@ -272,12 +280,13 @@ class BackupService
         return fileSystem.fileExists( new File( targetDirectory, MetaDataStore.DEFAULT_NAME ) );
     }
 
-    boolean directoryIsEmpty( File targetDirectory )
+    private boolean directoryIsEmpty( File targetDirectory )
     {
         return !fileSystem.isDirectory( targetDirectory ) || 0 == fileSystem.listFiles( targetDirectory ).length;
     }
 
-    static GraphDatabaseAPI startTemporaryDb( File targetDirectory, PageCache pageCache, Map<String,String> config )
+    private static GraphDatabaseAPI startTemporaryDb( File targetDirectory, PageCache pageCache,
+            Map<String,String> config )
     {
         GraphDatabaseFactory factory = ExternallyManagedPageCache.graphDatabaseFactoryWithPageCache( pageCache );
         return (GraphDatabaseAPI) factory.newEmbeddedDatabaseBuilder( targetDirectory ).setConfig( config )
@@ -301,26 +310,20 @@ class BackupService
 
         ProgressTxHandler handler = new ProgressTxHandler();
         TransactionCommittingResponseUnpacker unpacker = new TransactionCommittingResponseUnpacker(
-                resolver, DEFAULT_BATCH_SIZE );
+                resolver, DEFAULT_BATCH_SIZE, 0 );
 
         Monitors monitors = resolver.resolveDependency( Monitors.class );
         LogProvider logProvider = resolver.resolveDependency( LogService.class ).getInternalLogProvider();
         BackupClient client = new BackupClient( sourceHostNameOrIp, sourcePort, null, logProvider, targetDb.storeId(),
                 timeout, unpacker, monitors.newMonitor( ByteCounterMonitor.class, BackupClient.class ),
-                monitors.newMonitor( RequestMonitor.class, BackupClient.class ), entryReader );
+                monitors.newMonitor( RequestMonitor.class, BackupClient.class ), new VersionAwareLogEntryReader<>() );
 
-        boolean consistent = false;
-        try
+        try ( Lifespan lifespan = new Lifespan( unpacker, client ) )
         {
-            client.start();
-            unpacker.start();
-
             try ( Response<Void> response = client.incrementalBackup( context ) )
             {
                 unpacker.unpackResponse( response, handler );
             }
-
-            consistent = true;
         }
         catch ( MismatchingStoreIdException e )
         {
@@ -332,42 +335,24 @@ class BackupService
             {
                 throw new IncrementalBackupNotPossibleException( TOO_OLD_BACKUP, e.getCause() );
             }
+            if ( e.getCause() != null && e.getCause() instanceof ConnectException )
+            {
+                throw new RuntimeException( e.getMessage(), e.getCause() );
+            }
             throw new RuntimeException( "Failed to perform incremental backup.", e );
         }
         catch ( Throwable throwable )
         {
             throw new RuntimeException( "Unexpected error", throwable );
         }
-        finally
-        {
-            try
-            {
-                client.stop();
-                unpacker.stop();
-            }
-            catch ( Throwable throwable )
-            {
-                log.warn( "Unable to stop backup client", throwable );
-            }
-        }
-        return new BackupOutcome( handler.getLastSeenTransactionId(), consistent );
+
+        return new BackupOutcome( handler.getLastSeenTransactionId(), true );
     }
 
-    private static boolean bumpMessagesDotLogFile( File dbDirectory, long toTimestamp )
+    private static boolean bumpDebugDotLogFileVersion( File dbDirectory, long toTimestamp )
     {
-        File[] candidates = dbDirectory.listFiles( new FilenameFilter()
-        {
-            @Override
-            public boolean accept( File dir, String name )
-            {
-                /*
-                 *  Contains ensures that previously timestamped files are
-                 *  picked up as well
-                 */
-                return name.equals( StoreLogService.INTERNAL_LOG_NAME );
-            }
-        } );
-        if ( candidates.length != 1 )
+        File[] candidates = dbDirectory.listFiles( ( dir, name ) -> name.equals( StoreLogService.INTERNAL_LOG_NAME ) );
+        if ( candidates == null || candidates.length != 1 )
         {
             return false;
         }
@@ -403,26 +388,114 @@ class BackupService
 
     private static class ProgressTxHandler implements TxHandler
     {
-        private final ProgressListener progress = ProgressMonitorFactory.textual( System.out ).openEnded(
-                "Transactions applied", 1000 );
         private long lastSeenTransactionId;
 
         @Override
         public void accept( long transactionId )
         {
-            progress.add( 1 );
             lastSeenTransactionId = transactionId;
+        }
+
+        long getLastSeenTransactionId()
+        {
+            return lastSeenTransactionId;
+        }
+    }
+
+    private static class FullBackupStoreCopyRequester implements StoreCopyClient.StoreCopyRequester
+    {
+        private final String sourceHostNameOrIp;
+        private final int sourcePort;
+        private final long timeout;
+        private final boolean forensics;
+        private final Monitors monitors;
+
+        private BackupClient client;
+
+        private FullBackupStoreCopyRequester( String sourceHostNameOrIp, int sourcePort, long timeout,
+                                             boolean forensics, Monitors monitors )
+        {
+            this.sourceHostNameOrIp = sourceHostNameOrIp;
+            this.sourcePort = sourcePort;
+            this.timeout = timeout;
+            this.forensics = forensics;
+            this.monitors = monitors;
+        }
+
+        @Override
+        public Response<?> copyStore( StoreWriter writer )
+        {
+            client = new BackupClient( sourceHostNameOrIp, sourcePort, null, NullLogProvider.getInstance(),
+                    StoreId.DEFAULT, timeout, ResponseUnpacker.NO_OP_RESPONSE_UNPACKER, monitors.newMonitor(
+                    ByteCounterMonitor.class ), monitors.newMonitor( RequestMonitor.class ),
+                    new VersionAwareLogEntryReader<>() );
+            client.start();
+            return client.fullBackup( writer, forensics );
         }
 
         @Override
         public void done()
         {
-            progress.done();
+            client.stop();
+        }
+    }
+
+    private static class StoreCopyClientLoggingMonitor implements StoreCopyClient.Monitor
+    {
+        private final Log log;
+
+        StoreCopyClientLoggingMonitor( Log log )
+        {
+            this.log = log;
         }
 
-        public long getLastSeenTransactionId()
+        @Override
+        public void startReceivingStoreFiles()
         {
-            return lastSeenTransactionId;
+            log.debug( "Start receiving store files" );
+        }
+
+        @Override
+        public void finishReceivingStoreFiles()
+        {
+            log.debug( "Finish receiving store files" );
+
+        }
+
+        @Override
+        public void startReceivingStoreFile( File file )
+        {
+            log.debug( "Start receiving store file %s", file );
+        }
+
+        @Override
+        public void finishReceivingStoreFile( File file )
+        {
+            log.debug( "Finish receiving store file %s", file );
+        }
+
+        @Override
+        public void startReceivingTransactions( long startTxId )
+        {
+            log.info( "Start receiving transactions from %d", startTxId );
+        }
+
+        @Override
+        public void finishReceivingTransactions( long endTxId )
+        {
+            log.info( "Finish receiving transactions at %d", endTxId );
+        }
+
+        @Override
+        public void startRecoveringStore()
+        {
+            log.info( "Start recovering store" );
+        }
+
+        @Override
+        public void finishRecoveringStore()
+        {
+            log.info( "Finish recovering store" );
         }
     }
 }

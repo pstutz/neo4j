@@ -30,9 +30,15 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Writer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Utility to create {@link Map}s.
@@ -170,11 +176,19 @@ public abstract class MapUtil
      * @return the read data as a {@link Map}.
      * @throws IOException if the {@code stream} throws {@link IOException}.
      */
-    public static Map<String, String> load( InputStream stream ) throws IOException
+    public static Map<String,String> load( InputStream stream ) throws IOException
     {
         Properties props = new Properties();
         props.load( stream );
-        return new HashMap<>( (Map) props );
+
+        HashMap<String,String> result = new HashMap<>();
+        for ( Map.Entry<Object,Object> entry : props.entrySet() )
+        {
+            // Properties does not trim whitespace from the right side of values
+            result.put( (String) entry.getKey(), ( (String) entry.getValue() ).trim() );
+        }
+
+        return result;
     }
 
     /**
@@ -433,4 +447,42 @@ public abstract class MapUtil
         }
     }
 
+    /**
+     * Mutates the input map by removing entries which do not have keys in the new backing data, as extracted with
+     * the keyExtractor.
+     * @param map the map to mutate.
+     * @param newBackingData the backing data to retain.
+     * @param keyExtractor the function to extract keys from the backing data.
+     */
+    public static <K, V, T> void trimToList( Map<K,V> map, List<T> newBackingData, Function<T,K> keyExtractor )
+    {
+        Set<K> retainedKeys = newBackingData.stream().map( keyExtractor ).collect( Collectors.toSet() );
+        trimToList( map, retainedKeys );
+    }
+
+    /**
+     * Mutates the input map by removing entries which do not have keys in the new backing data, as extracted with
+     * the keyExtractor.
+     * @param map the map to mutate.
+     * @param newBackingData the backing data to retain.
+     * @param keyExtractor the function to extract keys from the backing data.
+     */
+    public static <K, V, T> void trimToFlattenedList( Map<K,V> map, List<T> newBackingData,
+            Function<T,Stream<K>> keyExtractor )
+    {
+        Set<K> retainedKeys = newBackingData.stream().flatMap( keyExtractor ).collect( Collectors.toSet() );
+        trimToList( map, retainedKeys );
+    }
+
+    /**
+     * Mutates the input map by removing entries which are not in the retained set of keys.
+     * @param map the map to mutate.
+     * @param retainedKeys the keys to retain.
+     */
+    public static <K, V> void trimToList( Map<K,V> map, Set<K> retainedKeys )
+    {
+        Set<K> keysToRemove = new HashSet<>( map.keySet() );
+        keysToRemove.removeAll( retainedKeys );
+        keysToRemove.forEach( map::remove );
+    }
 }

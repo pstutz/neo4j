@@ -21,7 +21,10 @@ package org.neo4j.kernel.impl.coreapi;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.Optional;
 
 import org.neo4j.collection.primitive.Primitive;
 import org.neo4j.collection.primitive.PrimitiveLongObjectMap;
@@ -33,10 +36,14 @@ import org.neo4j.graphdb.event.LabelEntry;
 import org.neo4j.graphdb.event.PropertyEntry;
 import org.neo4j.graphdb.event.TransactionData;
 import org.neo4j.helpers.collection.IterableWrapper;
+import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.LabelNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
 import org.neo4j.kernel.api.properties.DefinedProperty;
+import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.AuthSubject;
+import org.neo4j.kernel.impl.api.KernelTransactionImplementation;
 import org.neo4j.kernel.impl.core.NodeProxy;
 import org.neo4j.kernel.impl.core.RelationshipProxy;
 import org.neo4j.kernel.impl.core.RelationshipProxy.RelationshipActions;
@@ -62,6 +69,7 @@ public class TxStateTransactionDataSnapshot implements TransactionData
     private final StorageStatement storeStatement;
     private final RelationshipActions relationshipActions;
     private final StoreReadLayer store;
+    private KernelTransaction transaction;
 
     private final Collection<PropertyEntry<Node>> assignedNodeProperties = new ArrayList<>();
     private final Collection<PropertyEntry<Relationship>> assignedRelationshipProperties = new ArrayList<>();
@@ -74,14 +82,15 @@ public class TxStateTransactionDataSnapshot implements TransactionData
 
     public TxStateTransactionDataSnapshot(
             ReadableTransactionState state,
-            NodeProxy.NodeActions nodeActions, RelationshipProxy.RelationshipActions relationshipActions,
-            StoreReadLayer storeReadLayer, StorageStatement storageStatement )
+            NodeProxy.NodeActions nodeActions, RelationshipActions relationshipActions,
+            StoreReadLayer storeReadLayer, StorageStatement storageStatement, KernelTransaction transaction )
     {
         this.state = state;
         this.nodeActions = nodeActions;
         this.relationshipActions = relationshipActions;
         this.storeStatement = storageStatement;
         this.store = storeReadLayer;
+        this.transaction = transaction;
 
         // Load changes that require store access eagerly, because we won't have access to the after-state
         // after the tx has been committed.
@@ -149,6 +158,25 @@ public class TxStateTransactionDataSnapshot implements TransactionData
     }
 
     @Override
+    public String username()
+    {
+        return transaction.securityContext().subject().username();
+    }
+
+    @Override
+    public Map<String,Object> metaData()
+    {
+        if ( transaction instanceof KernelTransactionImplementation )
+        {
+            return ((KernelTransactionImplementation) transaction).getMetaData();
+        }
+        else
+        {
+            return Collections.emptyMap();
+        }
+    }
+
+    @Override
     public Iterable<LabelEntry> removedLabels()
     {
         return removedLabels;
@@ -158,6 +186,18 @@ public class TxStateTransactionDataSnapshot implements TransactionData
     public Iterable<LabelEntry> assignedLabels()
     {
         return assignedLabels;
+    }
+
+    @Override
+    public long getTransactionId()
+    {
+        return transaction.getTransactionId();
+    }
+
+    @Override
+    public long getCommitTime()
+    {
+        return transaction.getCommitTime();
     }
 
     private void takeSnapshot()

@@ -24,22 +24,26 @@ import org.junit.Before;
 
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.mockfs.EphemeralFileSystemAbstraction;
-import org.neo4j.kernel.api.security.AccessMode;
-import org.neo4j.kernel.api.dbms.DbmsOperations;
 import org.neo4j.kernel.api.DataWriteOperations;
 import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.ProcedureCallOperations;
 import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.api.SchemaWriteOperations;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.TokenWriteOperations;
+import org.neo4j.kernel.api.dbms.DbmsOperations;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
+import org.neo4j.kernel.api.security.AnonymousContext;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.api.index.IndexingService;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.test.TestGraphDatabaseBuilder;
 import org.neo4j.test.TestGraphDatabaseFactory;
+
+import static org.neo4j.kernel.api.security.SecurityContext.AUTH_DISABLED;
 
 public abstract class KernelIntegrationTest
 {
@@ -56,28 +60,35 @@ public abstract class KernelIntegrationTest
 
     protected TokenWriteOperations tokenWriteOperationsInNewTransaction() throws KernelException
     {
-        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.WRITE );
+        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.write() );
         statement = transaction.acquireStatement();
         return statement.tokenWriteOperations();
     }
 
     protected DataWriteOperations dataWriteOperationsInNewTransaction() throws KernelException
     {
-        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.WRITE );
+        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.write() );
         statement = transaction.acquireStatement();
         return statement.dataWriteOperations();
     }
 
     protected SchemaWriteOperations schemaWriteOperationsInNewTransaction() throws KernelException
     {
-        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.FULL );
+        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
         statement = transaction.acquireStatement();
         return statement.schemaWriteOperations();
     }
 
+    protected ProcedureCallOperations procedureCallOpsInNewTx() throws TransactionFailureException
+    {
+        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.read() );
+        statement = transaction.acquireStatement();
+        return statement.procedureCallOperations();
+    }
+
     protected ReadOperations readOperationsInNewTransaction() throws TransactionFailureException
     {
-        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AccessMode.Static.READ );
+        transaction = kernel.newTransaction( KernelTransaction.Type.implicit, AnonymousContext.read() );
         statement = transaction.acquireStatement();
         return statement.readOperations();
     }
@@ -142,10 +153,15 @@ public abstract class KernelIntegrationTest
 
     protected GraphDatabaseService createGraphDatabase( EphemeralFileSystemAbstraction fs )
     {
-        TestGraphDatabaseBuilder graphDatabaseFactory = (TestGraphDatabaseBuilder) new TestGraphDatabaseFactory()
+        TestGraphDatabaseBuilder graphDatabaseBuilder = (TestGraphDatabaseBuilder) new TestGraphDatabaseFactory()
                 .setFileSystem( fs )
                 .newImpermanentDatabaseBuilder();
-        return graphDatabaseFactory.newGraphDatabase();
+        return configure( graphDatabaseBuilder ).newGraphDatabase();
+    }
+
+    protected TestGraphDatabaseBuilder configure( TestGraphDatabaseBuilder graphDatabaseBuilder )
+    {
+        return graphDatabaseBuilder;
     }
 
     protected void dbWithNoCache() throws TransactionFailureException

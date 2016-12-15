@@ -379,7 +379,7 @@ class FullTxData extends TxData
             IndexReader newReader = this.reader == null ?
                                     DirectoryReader.open( this.writer ) :
                                     DirectoryReader.openIfChanged( (DirectoryReader) this.reader );
-            if ( newReader == this.reader )
+            if ( newReader == null )
             {
                 return this.searcher;
             }
@@ -400,30 +400,6 @@ class FullTxData extends TxData
             }
         }
         return this.searcher;
-    }
-
-    private static void safeClose( Object object )
-    {
-        if ( object == null )
-        {
-            return;
-        }
-
-        try
-        {
-            if ( object instanceof IndexWriter )
-            {
-                ( ( IndexWriter ) object ).close();
-            }
-            else if ( object instanceof IndexReader )
-            {
-                ( ( IndexReader ) object ).close();
-            }
-        }
-        catch ( IOException e )
-        {
-            // Ok
-        }
     }
 
     @Override

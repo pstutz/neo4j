@@ -23,12 +23,12 @@ import org.junit.Rule;
 
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.pagecache.impl.muninn.MuninnPageCache;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
-public class MuninnPageCacheHarnessWithRealFileSystemIT extends MunninPageCacheHarnessTest
+public class MuninnPageCacheHarnessWithRealFileSystemIT extends MuninnPageCacheHarnessTest
 {
     @Rule
-    public TargetDirectory.TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory directory = TestDirectory.testDirectory( MuninnPageCacheHarnessWithRealFileSystemIT.class );
 
     @Override
     protected Fixture<MuninnPageCache> createFixture()

@@ -22,12 +22,13 @@ package org.neo4j.io.pagecache.impl;
 import java.io.File;
 import java.io.IOException;
 
+import org.neo4j.io.pagecache.CursorException;
 import org.neo4j.io.pagecache.PageCursor;
 
 /**
  * A {@link PageCursor} implementation that delegates all calls to a given delegate PageCursor.
  */
-public class DelegatingPageCursor implements PageCursor
+public class DelegatingPageCursor extends PageCursor
 {
     private final PageCursor delegate;
 
@@ -137,9 +138,27 @@ public class DelegatingPageCursor implements PageCursor
     }
 
     @Override
+    public void checkAndClearCursorException() throws CursorException
+    {
+        delegate.checkAndClearCursorException();
+    }
+
+    @Override
     public void raiseOutOfBounds()
     {
         delegate.raiseOutOfBounds();
+    }
+
+    @Override
+    public void setCursorException( String message )
+    {
+        delegate.setCursorException( message );
+    }
+
+    @Override
+    public void clearCursorException()
+    {
+        delegate.clearCursorException();
     }
 
     @Override

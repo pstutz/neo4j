@@ -202,6 +202,11 @@ public enum StoreFile
         return fileName( StoreFileType.STORE );
     }
 
+    public String fileNamePart()
+    {
+        return storeFileNamePart;
+    }
+
     public boolean isRecordStore()
     {
         return recordStore;
@@ -283,7 +288,7 @@ public enum StoreFile
     {
         if ( !fs.fileExists( file ) )
         {
-            return -1l;
+            return -1L;
         }
 
         try ( StoreChannel channel = fs.open( file, "rw" ) )
@@ -300,7 +305,7 @@ public enum StoreFile
                     int read = channel.read( buffer );
                     if ( read == -1 )
                     {
-                        return -1l;
+                        return -1L;
                     }
                     totalRead += read;
                 }

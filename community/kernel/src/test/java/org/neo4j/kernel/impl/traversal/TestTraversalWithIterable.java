@@ -19,10 +19,10 @@
  */
 package org.neo4j.kernel.impl.traversal;
 
+import org.junit.Test;
+
 import java.util.ArrayList;
 import java.util.Collection;
-
-import org.junit.Test;
 
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
@@ -42,7 +42,7 @@ public class TestTraversalWithIterable extends TraversalTestBase
          * (d)-->(e)-->(f)
          *
          */
-        
+
         createGraph( "a TO b", "b TO c", "d TO e", "e TO f" );
 
         try (Transaction tx = beginTx())
@@ -54,7 +54,6 @@ public class TestTraversalWithIterable extends TraversalTestBase
             startNodes.add( getNodeWithName( "d" ) );
 
             Iterable<Node> iterableStartNodes = startNodes;
-
 
             expectPaths( basicTraverser.traverse( iterableStartNodes ), "a,b,c", "d,e,f");
             tx.success();

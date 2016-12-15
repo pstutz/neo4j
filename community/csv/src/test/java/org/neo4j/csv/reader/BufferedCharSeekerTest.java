@@ -20,34 +20,33 @@
 package org.neo4j.csv.reader;
 
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import java.io.IOException;
+import java.io.Reader;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
 
+import static java.lang.String.format;
+import static java.util.Arrays.asList;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-
-import static java.lang.String.format;
-import static java.util.Arrays.asList;
-
 import static org.neo4j.csv.reader.CharSeekers.charSeeker;
 import static org.neo4j.csv.reader.Readables.wrap;
 
 @RunWith( Parameterized.class )
 public class BufferedCharSeekerTest
 {
+    private static final String TEST_SOURCE = "TestSource";
     private final boolean useThreadAhead;
 
     @Parameters( name = "{1}" )
@@ -319,13 +318,16 @@ public class BufferedCharSeekerTest
         assertArrayEquals( new String[] {"four", "five", "six"}, nextLineOfAllStrings( seeker, mark ) );
     }
 
-    @Ignore( "TODO add test for characters with surrogate code points or whatever they are called," +
-             " basically consisting of two char values instead of one. Add such a test when adding " +
-             "support for reading such characters in the BufferedCharSeeker" )
     @Test
-    public void shouldHandleDoubleCharValues()
+    public void shouldHandleDoubleCharValues() throws IOException
     {
-        fail( "Test not implemented" );
+        seeker = seeker( "v\uD800\uDC00lue one\t\"v\uD801\uDC01lue two\"\tv\uD804\uDC03lue three" );
+        assertTrue( seeker.seek( mark, TAB ) );
+        assertEquals( "v𐀀lue one", seeker.extract( mark, extractors.string() ).value() );
+        assertTrue( seeker.seek( mark, TAB ) );
+        assertEquals( "v𐐁lue two", seeker.extract( mark, extractors.string() ).value() );
+        assertTrue( seeker.seek( mark, TAB ) );
+        assertEquals( "v𑀃lue three", seeker.extract( mark, extractors.string() ).value() );
     }
 
     @Test
@@ -560,6 +562,42 @@ public class BufferedCharSeekerTest
         shouldParseMultilineFieldWhereEndQuoteIsOnItsOwnLine( "%n" );
     }
 
+    @Test
+    public void shouldFailOnReadingFieldLargerThanBufferSize() throws Exception
+    {
+        // GIVEN
+        String data = lines( "\n",
+                "a,b,c",
+                "d,e,f",
+                "\"g,h,i",
+                "abcdefghijlkmopqrstuvwxyz,l,m" );
+        seeker = seeker( data, config( 20, true ) );
+
+        // WHEN
+        assertNextValue( seeker, mark, COMMA, "a" );
+        assertNextValue( seeker, mark, COMMA, "b" );
+        assertNextValue( seeker, mark, COMMA, "c" );
+        assertTrue( mark.isEndOfLine() );
+        assertNextValue( seeker, mark, COMMA, "d" );
+        assertNextValue( seeker, mark, COMMA, "e" );
+        assertNextValue( seeker, mark, COMMA, "f" );
+        assertTrue( mark.isEndOfLine() );
+
+        // THEN
+        try
+        {
+            seeker.seek( mark, COMMA );
+            fail( "Should have failed" );
+        }
+        catch ( IllegalStateException e )
+        {
+            // Good
+            String source = seeker.sourceDescription();
+            assertTrue( e.getMessage().contains( "Tried to read" ) );
+            assertTrue( e.getMessage().contains( source + ":3" ) );
+        }
+    }
+
     private void shouldParseMultilineFieldWhereEndQuoteIsOnItsOwnLine( String newline ) throws Exception
     {
         // GIVEN
@@ -712,7 +750,19 @@ public class BufferedCharSeekerTest
 
     private CharSeeker seeker( String data, Configuration config )
     {
-        return seeker( wrap( new StringReader( data ) ), config );
+        return seeker( wrap( stringReaderWithName( data, TEST_SOURCE ) ), config );
+    }
+
+    private Reader stringReaderWithName( String data, final String name )
+    {
+        return new StringReader( data )
+        {
+            @Override
+            public String toString()
+            {
+                return name;
+            }
+        };
     }
 
     private static Configuration config( final int bufferSize )
@@ -773,6 +823,12 @@ public class BufferedCharSeekerTest
             buffer.compact( buffer, from );
             buffer.readFrom( reader, maxBytesPerRead );
             return buffer;
+        }
+
+        @Override
+        public int read( char[] into, int offset, int length ) throws IOException
+        {
+            throw new UnsupportedOperationException();
         }
 
         @Override

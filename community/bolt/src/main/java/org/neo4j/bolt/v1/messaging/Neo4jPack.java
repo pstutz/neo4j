@@ -25,6 +25,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import org.neo4j.bolt.v1.messaging.infrastructure.ValueNode;
 import org.neo4j.bolt.v1.messaging.infrastructure.ValueRelationship;
@@ -32,9 +33,11 @@ import org.neo4j.bolt.v1.packstream.PackInput;
 import org.neo4j.bolt.v1.packstream.PackOutput;
 import org.neo4j.bolt.v1.packstream.PackStream;
 import org.neo4j.bolt.v1.packstream.PackType;
+import org.neo4j.bolt.v1.runtime.Neo4jError;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Relationship;
+import org.neo4j.graphdb.spatial.Point;
 import org.neo4j.kernel.api.exceptions.Status;
 
 import static org.neo4j.bolt.v1.packstream.PackStream.UNKNOWN_SIZE;
@@ -56,12 +59,14 @@ public class Neo4jPack
     public static class Packer extends PackStream.Packer
     {
         private PathPack.Packer pathPacker = new PathPack.Packer();
+        private Optional<Error> error = Optional.empty();
 
         public Packer( PackOutput output )
         {
             super( output );
         }
 
+        @SuppressWarnings( "unchecked" )
         public void pack( Object obj ) throws IOException
         {
             // Note: below uses instanceof for quick implementation, this should be swapped over
@@ -90,6 +95,10 @@ public class Neo4jPack
             {
                 pack( (String) obj );
             }
+            else if (obj instanceof Character )
+            {
+                pack( (char) obj );
+            }
             else if ( obj instanceof Map )
             {
                 Map<Object, Object> map = (Map<Object, Object>) obj;
@@ -97,8 +106,19 @@ public class Neo4jPack
                 packMapHeader( map.size() );
                 for ( Map.Entry<?, ?> entry : map.entrySet() )
                 {
-                    pack( entry.getKey().toString() );
-                    pack( entry.getValue() );
+                    Object key = entry.getKey();
+                    if ( key == null )
+                    {
+                        error = Optional.of( new Error( Status.Request.Invalid,
+                                "Value `null` is not supported as key in maps, must be a non-nullable string." ) );
+                        packNull();
+                        pack( entry.getValue() );
+                    }
+                    else
+                    {
+                        pack( key.toString() );
+                        pack( entry.getValue() );
+                    }
                 }
             }
             else if ( obj instanceof Collection )
@@ -112,8 +132,18 @@ public class Neo4jPack
             }
             else if ( obj instanceof byte[] )
             {
-                // Pending decision
-                throw new UnsupportedOperationException( "Binary values cannot be packed." );
+                error = Optional.of(new Error( Status.Request.Invalid,
+                        "Byte array is not yet supported in Bolt"));
+                packNull();
+            }
+            else if ( obj instanceof char[] )
+            {
+                char[] array = (char[]) obj;
+                packListHeader( array.length );
+                for ( char item : array )
+                {
+                    pack( item );
+                }
             }
             else if ( obj instanceof short[] )
             {
@@ -190,10 +220,18 @@ public class Neo4jPack
             {
                 pathPacker.pack( this, (Path) obj );
             }
+            else if ( obj instanceof Point)
+            {
+                error = Optional.of(new Error( Status.Request.Invalid,
+                        "Point is not yet supported as a return type in Bolt"));
+                packNull();
+
+            }
             else
             {
-                throw new BoltIOException( Status.General.UnknownError,
-                        "Unpackable value " + obj + " of type " + obj.getClass().getName() );
+                error = Optional.of(new Error( Status.Request.Invalid,
+                        "Unpackable value " + obj + " of type " + obj.getClass().getName() ));
+                packNull();
             }
         }
 
@@ -206,11 +244,27 @@ public class Neo4jPack
                 pack( entry.getValue() );
             }
         }
+
+        public void consumeError( ) throws BoltIOException
+        {
+            if (error.isPresent())
+            {
+                Error e = error.get();
+                error = Optional.empty();
+                throw new BoltIOException( e.status(), e.msg() );
+            }
+        }
+
+        public boolean hasErrors()
+        {
+            return error.isPresent();
+        }
     }
 
     public static class Unpacker extends PackStream.Unpacker
     {
-        private PathPack.Unpacker pathUnpacker = new PathPack.Unpacker();
+
+        private List<Neo4jError> errors = new ArrayList<>( 2 );
 
         public Unpacker( PackInput input )
         {
@@ -331,6 +385,8 @@ public class Neo4jPack
                 while ( more )
                 {
                     PackType keyType = peekNextType();
+                    String key;
+                    Object val;
                     switch ( keyType )
                     {
                         case END_OF_STREAM:
@@ -338,12 +394,20 @@ public class Neo4jPack
                             more = false;
                             break;
                         case STRING:
-                            String key = unpackString();
-                            Object val = unpack();
+                            key = unpackString();
+                            val = unpack();
                             if( map.put( key, val ) != null )
                             {
-                                throw new BoltIOException( Status.Request.Invalid, "Duplicate map key `" + key + "`." );
+                                errors.add(
+                                        Neo4jError.from( Status.Request.Invalid, "Duplicate map key `" + key + "`." ) );
                             }
+                            break;
+                        case NULL:
+                            errors.add( Neo4jError.from( Status.Request.Invalid,
+                                    "Value `null` is not supported as key in maps, must be a non-nullable string." ) );
+                            unpackNull();
+                            val = unpack();
+                            map.put( null, val );
                             break;
                         default:
                             throw new PackStream.PackStreamException( "Bad key type" );
@@ -355,15 +419,67 @@ public class Neo4jPack
                 map = new HashMap<>( size, 1 );
                 for ( int i = 0; i < size; i++ )
                 {
-                    String key = unpackString();
+                    PackType type = peekNextType();
+                    String key;
+                    switch ( type )
+                    {
+                    case NULL:
+                        errors.add( Neo4jError.from( Status.Request.Invalid,
+                                "Value `null` is not supported as key in maps, must be a non-nullable string." ) );
+                        unpackNull();
+                        key = null;
+                        break;
+                    case STRING:
+                        key = unpackString();
+                        break;
+                    default:
+                        throw new PackStream.PackStreamException( "Bad key type: " + type );
+                    }
+
                     Object val = unpack();
                     if( map.put( key, val ) != null )
                     {
-                        throw new BoltIOException( Status.Request.Invalid, "Duplicate map key `" + key + "`." );
+                        errors.add( Neo4jError.from( Status.Request.Invalid, "Duplicate map key `" + key + "`." ));
                     }
                 }
             }
             return map;
+        }
+
+        public Optional<Neo4jError> consumeError()
+        {
+            if ( errors.isEmpty() )
+            {
+                return Optional.empty();
+            }
+            else
+            {
+                Neo4jError combined = Neo4jError.combine( errors );
+                errors.clear();
+                return Optional.of( combined );
+            }
+        }
+    }
+
+    private static class Error
+    {
+        private final Status status;
+        private final String msg;
+
+        private Error( Status status, String msg )
+        {
+            this.status = status;
+            this.msg = msg;
+        }
+
+        Status status()
+        {
+            return status;
+        }
+
+        String msg()
+        {
+            return msg;
         }
     }
 }

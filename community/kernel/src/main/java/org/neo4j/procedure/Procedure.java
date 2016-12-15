@@ -32,8 +32,11 @@ import java.lang.annotation.Target;
  * {@link java.util.stream.Stream} of {@code Records}. The work performed usually
  * involves one or more resources, such as a {@link org.neo4j.graphdb.GraphDatabaseService}.
  * <p>
- * By default, procedures are read-only. If you want to perform writes to the
- * database, you need to add the {@link PerformsWrites} annotation to your method as well.
+ * A procedure is associated with one of the following modes
+ *      READ    allows only reading the graph (default mode)
+ *      WRITE   allows reading and writing the graph
+ *      SCHEMA  allows reading the graphs and performing schema operations
+ *      DBMS    allows managing the database (i.e. change password)
  *
  * <h2>Input declaration</h2>
  * A procedure can accept input arguments, which is defined in the arguments to the
@@ -48,13 +51,16 @@ import java.lang.annotation.Target;
  *     <li>{@link Double} or {@code double}</li>
  *     <li>{@link Number}</li>
  *     <li>{@link Boolean} or {@code boolean}</li>
- *     <li>{@link java.util.Map} with key {@link String} and value {@link Object}</li>
+ *     <li>{@link org.neo4j.graphdb.Node}</li>
+ *     <li>{@link org.neo4j.graphdb.Relationship}</li>
+ *     <li>{@link org.neo4j.graphdb.Path}</li>
+ *     <li>{@link java.util.Map} with key {@link String} and value of any type in this list, including {@link java.util.Map}</li>
  *     <li>{@link java.util.List} with element type of any type in this list, including {@link java.util.List}</li>
  *     <li>{@link Object}, meaning any valid input types</li>
  * </ul>
  *
  * <h2>Output declaration</h2>
- * A procedure must always return a {@link java.util.stream.Stream} of {@code Records}.
+ * A procedure must always return a {@link java.util.stream.Stream} of {@code Records}, or nothing.
  * The record is defined per procedure, as a class with only public, non-final fields.
  * The types, order and names of the fields in this class define the format of the returned records.
  * <p>
@@ -69,7 +75,7 @@ import java.lang.annotation.Target;
  *     <li>{@link org.neo4j.graphdb.Node}</li>
  *     <li>{@link org.neo4j.graphdb.Relationship}</li>
  *     <li>{@link org.neo4j.graphdb.Path}</li>
- *     <li>{@link java.util.Map} with key {@link String} and value {@link Object}</li>
+ *     <li>{@link java.util.Map} with key {@link String} and value of any type in this list, including {@link java.util.Map}</li>
  *     <li>{@link java.util.List} of elements of any valid field type, including {@link java.util.List}</li>
  *     <li>{@link Object}, meaning any of the valid field types</li>
  * </ul>
@@ -112,4 +118,24 @@ public @interface Procedure
      * @return the namespace and procedure name
      */
     String value() default "";
+
+    /**
+     * Synonym for {@link #value()}
+     */
+    String name() default "";
+
+    /**
+     * A procedure is associated with one of the following modes
+     *      READ    allows only reading the graph (default mode)
+     *      WRITE   allows reading and writing the graph
+     *      SCHEMA  allows reading the graphs and performing schema operations
+     *      DBMS    allows managing the database (i.e. change password)
+     */
+    Mode mode() default Mode.DEFAULT;
+
+    /**
+     * When deprecating a procedure it is useful to indicate a possible
+     * replacement procedure that clients might show in warnings
+     */
+    String deprecatedBy() default "";
 }

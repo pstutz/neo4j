@@ -28,9 +28,9 @@ import org.neo4j.unsafe.impl.batchimport.input.Input;
 /**
  * A {@link ResourceIterator} with added methods suitable for {@link Input} into a {@link BatchImporter}.
  */
-public interface InputIterator<T> extends ResourceIterator<T>, SourceTraceability
+public interface InputIterator<T> extends ResourceIterator<T>, SourceTraceability, Parallelizable
 {
-    public static abstract class Adapter<T> extends PrefetchingIterator<T> implements InputIterator<T>
+    public abstract static class Adapter<T> extends PrefetchingIterator<T> implements InputIterator<T>
     {
         private final SourceTraceability defaults = new SourceTraceability.Adapter()
         {
@@ -62,6 +62,52 @@ public interface InputIterator<T> extends ResourceIterator<T>, SourceTraceabilit
         @Override
         public void close()
         {   // Nothing to close
+        }
+    }
+
+    public static class Delegate<T> extends PrefetchingIterator<T> implements InputIterator<T>
+    {
+        protected final InputIterator<T> actual;
+
+        public Delegate( InputIterator<T> actual )
+        {
+            this.actual = actual;
+        }
+
+        @Override
+        public void close()
+        {
+            actual.close();
+        }
+
+        @Override
+        protected T fetchNextOrNull()
+        {
+            return actual.hasNext() ? actual.next() : null;
+        }
+
+        @Override
+        public String sourceDescription()
+        {
+            return actual.sourceDescription();
+        }
+
+        @Override
+        public long lineNumber()
+        {
+            return actual.lineNumber();
+        }
+
+        @Override
+        public long position()
+        {
+            return actual.position();
+        }
+
+        @Override
+        public int processors( int delta )
+        {
+            return actual.processors( delta );
         }
     }
 

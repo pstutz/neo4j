@@ -31,8 +31,8 @@ import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.api.index.ControlledPopulationSchemaIndexProvider;
 import org.neo4j.test.DoubleLatch;
-import org.neo4j.test.ImpermanentDatabaseRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertThat;
@@ -50,8 +50,7 @@ public class SchemaIndexWaitingAcceptanceTest
         protected void configure( GraphDatabaseFactory databaseFactory )
         {
             List<KernelExtensionFactory<?>> extensions;
-            extensions = Collections.<KernelExtensionFactory<?>>singletonList( singleInstanceSchemaIndexProviderFactory(
-                    "test", provider ) );
+            extensions = Collections.singletonList( singleInstanceSchemaIndexProviderFactory( "test", provider ) );
             ((TestGraphDatabaseFactory) databaseFactory).addKernelExtensions( extensions );
         }
     };
@@ -70,7 +69,7 @@ public class SchemaIndexWaitingAcceptanceTest
             tx.success();
         }
 
-        latch.awaitStart();
+        latch.waitForAllToStart();
 
         // when
         try ( Transaction tx = db.beginTx() )
@@ -104,7 +103,7 @@ public class SchemaIndexWaitingAcceptanceTest
             tx.success();
         }
 
-        latch.awaitStart();
+        latch.waitForAllToStart();
 
         // when
         try ( Transaction tx = db.beginTx() )

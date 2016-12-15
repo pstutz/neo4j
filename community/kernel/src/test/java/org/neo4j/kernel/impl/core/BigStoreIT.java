@@ -21,7 +21,6 @@ package org.neo4j.kernel.impl.core;
 
 import org.apache.commons.lang3.SystemUtils;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
@@ -45,7 +44,7 @@ import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
 import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
-import org.neo4j.test.EmbeddedDatabaseRule;
+import org.neo4j.test.rule.EmbeddedDatabaseRule;
 
 import static java.lang.Math.pow;
 import static java.util.Arrays.asList;
@@ -72,7 +71,6 @@ public class BigStoreIT implements RelationshipType
     };
     @Rule
     public EmbeddedDatabaseRule dbRule = new EmbeddedDatabaseRule( BigStoreIT.class );
-
 
     @Before
     public void doBefore()
@@ -110,13 +108,6 @@ public class BigStoreIT implements RelationshipType
     public void createAndVerify33BitGraph() throws Exception
     {
         createAndVerifyGraphStartingWithId( (long) pow( 2, 33 ), 1000 );
-    }
-
-    @Ignore("Blows up with a FileTooLarge error")
-    @Test
-    public void createAndVerify34BitGraph() throws Exception
-    {
-        createAndVerifyGraphStartingWithId( (long) pow( 2, 34 ), 1600 );
     }
 
     private void createAndVerifyGraphStartingWithId( long startId, int requiredHeapMb ) throws Exception

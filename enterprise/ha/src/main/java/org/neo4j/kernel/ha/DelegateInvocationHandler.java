@@ -66,12 +66,16 @@ public class DelegateInvocationHandler<T> implements InvocationHandler
      * such that future calls to {@link #harden()} cannot affect any reference received
      * from {@link #cement()} prior to this call.
      * @param delegate the new delegate to set.
+     *
+     * @return the old delegate
      */
-    public void setDelegate( T delegate )
+    public T setDelegate( T delegate )
     {
+        T oldDelegate = this.delegate;
         this.delegate = delegate;
         harden();
         concrete.invalidate();
+        return oldDelegate;
     }
 
     /**
@@ -144,8 +148,9 @@ public class DelegateInvocationHandler<T> implements InvocationHandler
             if ( delegate == null )
             {
                 throw new TransientDatabaseFailureException(
-                        "Transaction state is not valid. Perhaps a state change of" +
-                        "the database has happened while this transaction was running?" );
+                        "Instance state is not valid. There is no master currently available. Possible causes " +
+                                "include unavailability of a majority of the cluster members or network failure " +
+                                "that caused this instance to be partitioned away from the cluster" );
             }
 
             return proxyInvoke( delegate, method, args );

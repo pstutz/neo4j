@@ -20,14 +20,16 @@
 package org.neo4j.kernel.impl.store;
 
 import java.io.IOException;
+import java.util.Optional;
 
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
+import org.neo4j.kernel.impl.store.id.IdType;
+import org.neo4j.kernel.impl.storemigration.StoreFile;
 
 public enum StoreType
 {
-    NODE_LABEL( StoreFactory.NODE_LABELS_STORE_NAME )
+    NODE_LABEL( StoreFile.NODE_LABEL_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -36,7 +38,7 @@ public enum StoreType
                             GraphDatabaseSettings.label_block_size );
                 }
             },
-    NODE( StoreFactory.NODE_STORE_NAME )
+    NODE( StoreFile.NODE_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -44,7 +46,7 @@ public enum StoreType
                     return neoStores.createNodeStore( getStoreName() );
                 }
             },
-    PROPERTY_KEY_TOKEN_NAME( StoreFactory.PROPERTY_KEY_TOKEN_NAMES_STORE_NAME )
+    PROPERTY_KEY_TOKEN_NAME( StoreFile.PROPERTY_KEY_TOKEN_NAMES_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -53,7 +55,7 @@ public enum StoreType
                             TokenStore.NAME_STORE_BLOCK_SIZE );
                 }
             },
-    PROPERTY_KEY_TOKEN( StoreFactory.PROPERTY_KEY_TOKEN_STORE_NAME )
+    PROPERTY_KEY_TOKEN( StoreFile.PROPERTY_KEY_TOKEN_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -61,7 +63,7 @@ public enum StoreType
                     return neoStores.createPropertyKeyTokenStore( getStoreName() );
                 }
             },
-    PROPERTY_STRING( StoreFactory.PROPERTY_STRINGS_STORE_NAME )
+    PROPERTY_STRING( StoreFile.PROPERTY_STRING_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -70,7 +72,7 @@ public enum StoreType
                             GraphDatabaseSettings.string_block_size );
                 }
             },
-    PROPERTY_ARRAY( StoreFactory.PROPERTY_ARRAYS_STORE_NAME )
+    PROPERTY_ARRAY( StoreFile.PROPERTY_ARRAY_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -79,7 +81,7 @@ public enum StoreType
                             GraphDatabaseSettings.array_block_size );
                 }
             },
-    PROPERTY( StoreFactory.PROPERTY_STORE_NAME )
+    PROPERTY( StoreFile.PROPERTY_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -87,7 +89,7 @@ public enum StoreType
                     return neoStores.createPropertyStore( getStoreName() );
                 }
             },
-    RELATIONSHIP( StoreFactory.RELATIONSHIP_STORE_NAME )
+    RELATIONSHIP( StoreFile.RELATIONSHIP_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -95,7 +97,7 @@ public enum StoreType
                     return neoStores.createRelationshipStore( getStoreName() );
                 }
             },
-    RELATIONSHIP_TYPE_TOKEN_NAME( StoreFactory.RELATIONSHIP_TYPE_TOKEN_NAMES_STORE_NAME )
+    RELATIONSHIP_TYPE_TOKEN_NAME( StoreFile.RELATIONSHIP_TYPE_TOKEN_NAMES_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -104,7 +106,7 @@ public enum StoreType
                             TokenStore.NAME_STORE_BLOCK_SIZE );
                 }
             },
-    RELATIONSHIP_TYPE_TOKEN( StoreFactory.RELATIONSHIP_TYPE_TOKEN_STORE_NAME )
+    RELATIONSHIP_TYPE_TOKEN( StoreFile.RELATIONSHIP_TYPE_TOKEN_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -112,7 +114,7 @@ public enum StoreType
                     return neoStores.createRelationshipTypeTokenStore( getStoreName() );
                 }
             },
-    LABEL_TOKEN_NAME( StoreFactory.LABEL_TOKEN_NAMES_STORE_NAME )
+    LABEL_TOKEN_NAME( StoreFile.LABEL_TOKEN_NAMES_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -121,7 +123,7 @@ public enum StoreType
                             TokenStore.NAME_STORE_BLOCK_SIZE );
                 }
             },
-    LABEL_TOKEN( StoreFactory.LABEL_TOKEN_STORE_NAME )
+    LABEL_TOKEN( StoreFile.LABEL_TOKEN_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -129,7 +131,7 @@ public enum StoreType
                     return neoStores.createLabelTokenStore( getStoreName() );
                 }
             },
-    SCHEMA( StoreFactory.SCHEMA_STORE_NAME )
+    SCHEMA( StoreFile.SCHEMA_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -137,7 +139,7 @@ public enum StoreType
                     return neoStores.createSchemaStore( getStoreName() );
                 }
             },
-    RELATIONSHIP_GROUP( StoreFactory.RELATIONSHIP_GROUP_STORE_NAME )
+    RELATIONSHIP_GROUP( StoreFile.RELATIONSHIP_GROUP_STORE )
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -145,12 +147,12 @@ public enum StoreType
                     return neoStores.createRelationshipGroupStore( getStoreName() );
                 }
             },
-    COUNTS( StoreFactory.COUNTS_STORE, false )
+    COUNTS( null, false )
             {
                 @Override
                 public CountsTracker open( final NeoStores neoStores )
                 {
-                    return neoStores.createCountStore( getStoreName() );
+                    return neoStores.createCountStore( StoreFactory.COUNTS_STORE );
                 }
 
                 @Override
@@ -165,8 +167,14 @@ public enum StoreType
                         throw new UnderlyingStorageException( e );
                     }
                 }
+
+                @Override
+                public String getStoreName()
+                {
+                    return StoreFactory.COUNTS_STORE;
+                }
             },
-    META_DATA( MetaDataStore.DEFAULT_NAME ) // Make sure this META store is last
+    META_DATA( StoreFile.NEO_STORE ) // Make sure this META store is last
             {
                 @Override
                 public CommonAbstractStore open( NeoStores neoStores )
@@ -176,16 +184,16 @@ public enum StoreType
             };
 
     private final boolean recordStore;
-    private final String storeName;
+    private final StoreFile storeFile;
 
-    StoreType( String storeName )
+    StoreType( StoreFile storeFile )
     {
-        this( storeName, true );
+        this( storeFile, true );
     }
 
-    StoreType( String storeName, boolean recordStore )
+    StoreType( StoreFile storeFile, boolean recordStore )
     {
-        this.storeName = storeName;
+        this.storeFile = storeFile;
         this.recordStore = recordStore;
     }
 
@@ -198,7 +206,12 @@ public enum StoreType
 
     public String getStoreName()
     {
-        return storeName;
+        return storeFile.fileNamePart();
+    }
+
+    public StoreFile getStoreFile()
+    {
+        return storeFile;
     }
 
     void close( NeoStores me, Object object )
@@ -209,20 +222,20 @@ public enum StoreType
     /**
      * Determine type of a store base on a store file name.
      *
-     * @param storeFileName - name of the store to map
-     * @return store type of specified file
-     * @throws IllegalStateException if can't determine store type for specified file
+     * @param fileName - exact file name of the store to map
+     * @return an {@link Optional} that wraps the matching store type of the specified file,
+     * or {@link Optional#empty()} if the given file name does not match any store file name.
      */
-    public static StoreType typeOf( String storeFileName )
+    public static Optional<StoreType> typeOf( String fileName )
     {
         StoreType[] values = StoreType.values();
         for ( StoreType value : values )
         {
-            if ( storeFileName.equals( MetaDataStore.DEFAULT_NAME + value.getStoreName() ) )
+            if ( fileName.equals( MetaDataStore.DEFAULT_NAME + value.getStoreName() ) )
             {
-                return value;
+                return Optional.of( value );
             }
         }
-        throw new IllegalArgumentException( "No enum constant for " + storeFileName + " file." );
+        return Optional.empty();
     }
 }

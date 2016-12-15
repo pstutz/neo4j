@@ -25,10 +25,14 @@ import org.neo4j.cursor.IOCursor;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntry;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
 
+/**
+ * {@link IOCursor} abstraction on top of a {@link LogEntryReader}
+ */
 public class LogEntryCursor implements IOCursor<LogEntry>
 {
     private final LogEntryReader<ReadableClosablePositionAwareChannel> logEntryReader;
     private final ReadableClosablePositionAwareChannel channel;
+    private final LogPositionMarker position = new LogPositionMarker();
     private LogEntry entry;
 
     public LogEntryCursor( LogEntryReader<ReadableClosablePositionAwareChannel> logEntryReader,
@@ -56,5 +60,17 @@ public class LogEntryCursor implements IOCursor<LogEntry>
     public void close() throws IOException
     {
         channel.close();
+    }
+
+    /**
+     * Reading {@link LogEntry log entries} may have the source move over physically multiple log files.
+     * This accessor returns the log version of the most recent call to {@link #next()}.
+     *
+     * @return the log version of the most recent {@link LogEntry} returned from {@link #next().
+     */
+    public long getCurrentLogVersion() throws IOException
+    {
+        channel.getCurrentPosition( position );
+        return position.getLogVersion();
     }
 }

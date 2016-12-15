@@ -29,8 +29,8 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import javax.transaction.Transaction;
 
+import org.neo4j.graphdb.Transaction;
 import org.neo4j.kernel.DeadlockDetectedException;
 import org.neo4j.kernel.impl.locking.ResourceTypes;
 
@@ -40,7 +40,6 @@ import static org.mockito.Mockito.mock;
 
 public class RWLockTest
 {
-
     private static ExecutorService executor;
 
     @BeforeClass
@@ -324,6 +323,10 @@ public class RWLockTest
         // Deadlock should occur
         Assert.assertTrue( "Deadlock was detected as expected.",
                 deadLockDetector.await( 1000, TimeUnit.MILLISECONDS ) );
+
+        lockNode3.releaseWriteLock( client3Transaction );
+        lockNode2.releaseWriteLock( client2Transaction );
+        lockNode1.releaseWriteLock( client1Transaction );
     }
 
     @Test( timeout = 1000 )
@@ -359,7 +362,6 @@ public class RWLockTest
 
         readerCompletedLatch.await();
         writerCompletedLatch.await();
-
 
         // expect only main write lock counters and elements present
         // all the rest should be cleaned up
@@ -433,5 +435,4 @@ public class RWLockTest
             Thread.sleep( 20 );
         }
     }
-
 }

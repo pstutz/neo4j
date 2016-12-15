@@ -22,9 +22,11 @@ package org.neo4j.kernel.impl.api.dbms;
 import org.neo4j.collection.RawIterator;
 import org.neo4j.kernel.api.dbms.DbmsOperations;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
-import org.neo4j.kernel.api.proc.CallableProcedure;
-import org.neo4j.kernel.api.proc.ProcedureSignature;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.proc.BasicContext;
+import org.neo4j.kernel.api.proc.Context;
+import org.neo4j.kernel.api.proc.QualifiedName;
+import org.neo4j.kernel.api.security.AuthSubject;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.proc.Procedures;
 
 public class NonTransactionalDbmsOperations implements DbmsOperations
@@ -38,12 +40,26 @@ public class NonTransactionalDbmsOperations implements DbmsOperations
     }
 
     @Override
-    public RawIterator<Object[],ProcedureException> procedureCallDbms( ProcedureSignature.ProcedureName name,
-            Object[] input, AccessMode accessMode ) throws ProcedureException
+    public RawIterator<Object[],ProcedureException> procedureCallDbms(
+            QualifiedName name,
+            Object[] input,
+            SecurityContext securityContext
+    ) throws ProcedureException
     {
-        CallableProcedure.BasicContext ctx = new CallableProcedure.BasicContext();
-        ctx.put( CallableProcedure.Context.ACCESS_MODE, accessMode );
-        return procedures.call( ctx, name, input );
+        BasicContext ctx = new BasicContext();
+        ctx.put( Context.SECURITY_CONTEXT, securityContext );
+        return procedures.callProcedure( ctx, name, input );
     }
 
+    @Override
+    public Object functionCallDbms(
+            QualifiedName name,
+            Object[] input,
+            SecurityContext securityContext
+    ) throws ProcedureException
+    {
+        BasicContext ctx = new BasicContext();
+        ctx.put( Context.SECURITY_CONTEXT, securityContext );
+        return procedures.callFunction( ctx, name, input );
+    }
 }

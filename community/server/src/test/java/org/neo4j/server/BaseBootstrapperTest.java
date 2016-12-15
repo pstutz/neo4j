@@ -46,7 +46,7 @@ import static org.neo4j.helpers.collection.MapUtil.store;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.server.configuration.ServerSettings.tls_certificate_file;
 import static org.neo4j.server.configuration.ServerSettings.tls_key_file;
-import static org.neo4j.test.Assert.assertEventually;
+import static org.neo4j.test.assertion.Assert.assertEventually;
 
 public abstract class BaseBootstrapperTest extends ExclusiveServerTestBase
 {
@@ -72,22 +72,19 @@ public abstract class BaseBootstrapperTest extends ExclusiveServerTestBase
 
     protected abstract ServerBootstrapper newBootstrapper() throws IOException;
 
-    protected abstract void start( String[] args );
-
-    protected abstract void stop( String[] args );
-
     @Test
-    public void shouldStartStopNeoServerWithoutAnyConfigFiles() throws IOException
+    public void shouldStartStopNeoServerWithoutAnyConfigFiles() throws Throwable
     {
         // When
         int resultCode = ServerBootstrapper.start( bootstrapper,
+                "--home-dir", tempDir.newFolder( "home-dir" ).getAbsolutePath(),
                 "-c", configOption( data_directory, tempDir.getRoot().getAbsolutePath() ),
                 "-c", configOption( logs_directory, tempDir.getRoot().getAbsolutePath() ),
                 "-c", configOption( tls_certificate_file,
                         new File( tempDir.getRoot(), "cert.cert" ).getAbsolutePath() ),
                 "-c", configOption( tls_key_file, new File( tempDir.getRoot(), "key.key" ).getAbsolutePath() ),
-                "-c", "dbms.connector.1.type=HTTP",
-                "-c", "dbms.connector.1.enabled=true"
+                "-c", "dbms.connector.http.type=HTTP",
+                "-c", "dbms.connector.http.enabled=true"
         );
 
         // Then
@@ -103,12 +100,14 @@ public abstract class BaseBootstrapperTest extends ExclusiveServerTestBase
 
         Map<String, String> properties = stringMap( forced_kernel_id.name(), "ourcustomvalue" );
         properties.putAll( ServerTestUtils.getDefaultRelativeProperties() );
-        properties.put( "dbms.connector.1.type", "HTTP" );
-        properties.put( "dbms.connector.1.enabled", "true" );
+        properties.put( "dbms.connector.http.type", "HTTP" );
+        properties.put( "dbms.connector.http.enabled", "true" );
         store( properties, configFile );
 
         // When
-        ServerBootstrapper.start( bootstrapper, "--config-dir", configFile.getParentFile().getAbsolutePath() );
+        ServerBootstrapper.start( bootstrapper,
+                "--home-dir", tempDir.newFolder( "home-dir" ).getAbsolutePath(),
+                "--config-dir", configFile.getParentFile().getAbsolutePath() );
 
         // Then
         assertThat( bootstrapper.getServer().getConfig().get( forced_kernel_id ), equalTo( "ourcustomvalue" ) );
@@ -122,12 +121,13 @@ public abstract class BaseBootstrapperTest extends ExclusiveServerTestBase
 
         Map<String, String> properties = stringMap( forced_kernel_id.name(), "thisshouldnotshowup" );
         properties.putAll( ServerTestUtils.getDefaultRelativeProperties() );
-        properties.put( "dbms.connector.1.type", "HTTP" );
-        properties.put( "dbms.connector.1.enabled", "true" );
+        properties.put( "dbms.connector.http.type", "HTTP" );
+        properties.put( "dbms.connector.http.enabled", "true" );
         store( properties, configFile );
 
         // When
         ServerBootstrapper.start( bootstrapper,
+                "--home-dir", tempDir.newFolder( "home-dir" ).getAbsolutePath(),
                 "--config-dir", configFile.getParentFile().getAbsolutePath(),
                 "-c", configOption( forced_kernel_id, "mycustomvalue" ) );
 

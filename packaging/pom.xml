@@ -3,7 +3,7 @@
   <parent>
     <groupId>org.neo4j</groupId>
     <artifactId>parent</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
 
     <relativePath>..</relativePath>
   </parent>
@@ -11,7 +11,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.neo4j.build</groupId>
   <artifactId>packaging-build</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.1.0-SNAPSHOT</version>
 
   <name>Neo4j Packaging Build</name>
   <packaging>pom</packaging>
@@ -30,7 +30,6 @@
 
   <modules>
     <module>standalone</module>
-    <module>neo4j-desktop</module>
   </modules>
 
   <licenses>
@@ -54,6 +53,20 @@ terms of the relevant Commercial Agreement.
   </licenses>
 
   <profiles>
+    <!-- Only include desktop installer in full build -->
+    <profile>
+      <id>neo-full-build</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>fullBuild</name>
+        </property>
+      </activation>
+      <modules>
+        <module>neo4j-desktop</module>
+        <module>installer-linux</module>
+      </modules>
+    </profile>
     <profile>
       <id>freeze</id>
       <activation>
@@ -81,18 +94,6 @@ terms of the relevant Commercial Agreement.
           <version>${project.version}</version>
           <type>pom</type>
         </dependency>
-        <dependency>
-          <groupId>org.neo4j.doc</groupId>
-          <artifactId>neo4j-manual-parent</artifactId>
-          <version>${project.version}</version>
-          <type>pom</type>
-        </dependency>
-        <dependency>
-          <groupId>org.neo4j.doc</groupId>
-          <artifactId>neo4j-manual</artifactId>
-          <version>${project.version}</version>
-          <type>pom</type>
-        </dependency>
       </dependencies>
       <build>
         <plugins>
@@ -111,10 +112,8 @@ terms of the relevant Commercial Agreement.
                     <include>org.neo4j:*</include>
                     <include>org.neo4j.app:*</include>
                     <include>org.neo4j.build:*</include>
-                    <include>org.neo4j.doc:*</include>
                     <include>org.neo4j.drivers:*</include>
                     <include>org.neo4j.server.plugin:*</include>
-                    <include>org.neo4j.examples:*</include>
                   </includes>
                   <excludes>
                     <exclude>org.neo4j:neo4j-cypher-compiler-1.9</exclude>
@@ -132,19 +131,6 @@ terms of the relevant Commercial Agreement.
         </plugins>
       </build>
     </profile>
-    <profile>
-      <id>installer-qa</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-        <property>
-          <name>installerQA</name>
-        </property>
-      </activation>
-      <modules>
-        <module>installer-qa</module>
-      </modules>
-    </profile>
   </profiles>
 
 </project>
-

@@ -188,7 +188,7 @@ public class StartClient
         if ( version )
         {
             String edition = StringUtils.capitalize( factory.getEdition().toLowerCase() );
-            out.printf( "Neo4j %s, version %s", edition, Version.getKernelVersion() );
+            out.printf( "Neo4j %s, version %s", edition, Version.getNeo4jVersion() );
         }
         else if ( (path != null && (port != null || name != null || host != null || pid != null))
              || (pid != null && host != null) )
@@ -554,6 +554,7 @@ public class StartClient
 
         ShellExecutionFailureException( Throwable cause, Args args )
         {
+            super(cause);
             this.cause = cause;
             this.args = args;
         }

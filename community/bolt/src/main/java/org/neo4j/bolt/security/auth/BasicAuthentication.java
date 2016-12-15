@@ -21,118 +21,94 @@ package org.neo4j.bolt.security.auth;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.function.Supplier;
 
 import org.neo4j.graphdb.security.AuthorizationViolationException;
 import org.neo4j.kernel.api.exceptions.Status;
-import org.neo4j.logging.Log;
-import org.neo4j.logging.LogProvider;
-import org.neo4j.server.security.auth.AuthSubject;
-import org.neo4j.server.security.auth.BasicAuthManager;
-import org.neo4j.server.security.auth.exception.IllegalCredentialsException;
+import org.neo4j.kernel.api.security.AuthManager;
+import org.neo4j.kernel.api.security.AuthToken;
+import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
+import org.neo4j.kernel.api.security.SecurityContext;
+import org.neo4j.kernel.api.security.exception.InvalidAuthTokenException;
+
+import static org.neo4j.kernel.api.security.AuthToken.NEW_CREDENTIALS;
 
 /**
  * Performs basic authentication with user name and password.
  */
 public class BasicAuthentication implements Authentication
 {
-    private final BasicAuthManager authManager;
-    private final static String SCHEME = "basic";
-    private final Log log;
-    private final Supplier<String> identifier;
-    private AuthSubject authSubject;
+    private final AuthManager authManager;
 
-
-    public BasicAuthentication( BasicAuthManager authManager, LogProvider logProvider, Supplier<String> identifier )
+    public BasicAuthentication( AuthManager authManager )
     {
         this.authManager = authManager;
-        this.log = logProvider.getLog( getClass() );
-        this.identifier = identifier;
     }
 
     @Override
     public AuthenticationResult authenticate( Map<String,Object> authToken ) throws AuthenticationException
     {
-        if ( !SCHEME.equals( authToken.get( SCHEME_KEY ) ) )
-        {
-            throw new AuthenticationException( Status.Security.Unauthorized, identifier.get(),
-                    "Authentication token must contain: '" + SCHEME_KEY + " : " + SCHEME + "'" );
-        }
-
-        String user = safeCast( PRINCIPAL, authToken );
-        String password = safeCast( CREDENTIALS, authToken );
         if ( authToken.containsKey( NEW_CREDENTIALS ) )
         {
-            return update( user, password, safeCast( NEW_CREDENTIALS, authToken ) );
+            return update( authToken, false );
         }
         else
         {
-            return authenticate( user, password );
+            return doAuthenticate( authToken );
         }
     }
 
-    private AuthenticationResult authenticate( String user, String password ) throws AuthenticationException
+    private AuthenticationResult doAuthenticate( Map<String,Object> authToken ) throws AuthenticationException
     {
-        authSubject = authManager.login( user, password );
-        boolean credentialsExpired = false;
-        switch ( authSubject.getAuthenticationResult() )
+        try
         {
-        case SUCCESS:
-            break;
-        case PASSWORD_CHANGE_REQUIRED:
-            credentialsExpired = true;
-            break;
-        case TOO_MANY_ATTEMPTS:
-            throw new AuthenticationException( Status.Security.AuthenticationRateLimit, identifier.get() );
-        default:
-            log.warn( "Failed authentication attempt for '%s'", user);
-            throw new AuthenticationException( Status.Security.Unauthorized, identifier.get() );
+            SecurityContext securityContext = authManager.login( authToken );
+
+            switch ( securityContext.subject().getAuthenticationResult() )
+            {
+            case SUCCESS:
+            case PASSWORD_CHANGE_REQUIRED:
+                break;
+            case TOO_MANY_ATTEMPTS:
+                throw new AuthenticationException( Status.Security.AuthenticationRateLimit );
+            default:
+                throw new AuthenticationException( Status.Security.Unauthorized );
+            }
+
+            return new BasicAuthenticationResult( securityContext );
         }
-        return new BasicAuthenticationResult( authSubject, credentialsExpired );
+        catch ( InvalidAuthTokenException e )
+        {
+            throw new AuthenticationException( e.status(), e.getMessage() );
+        }
     }
 
-    private AuthenticationResult update( String user, String password, String newPassword ) throws AuthenticationException
+    private AuthenticationResult update( Map<String,Object> authToken, boolean requiresPasswordChange )
+            throws AuthenticationException
     {
-        authSubject = authManager.login( user, password );
-        switch ( authSubject.getAuthenticationResult() )
+        try
         {
-        case SUCCESS:
-        case PASSWORD_CHANGE_REQUIRED:
-            try
-            {
-                authSubject.setPassword( newPassword );
-                //re-authenticate user
-                authSubject = authManager.login( user, newPassword );
-            }
-            catch ( AuthorizationViolationException e )
-            {
-                throw new AuthenticationException( Status.Security.Forbidden, identifier.get(), e.getMessage(), e );
-            }
-            catch ( IOException e )
-            {
-                throw new AuthenticationException( Status.Security.Unauthorized, identifier.get(), e.getMessage(), e );
-            }
-            catch ( IllegalCredentialsException e )
-            {
-                throw new AuthenticationException(e.status(), identifier.get(), e.getMessage(), e );
-            }
-            break;
-        default:
-            throw new AuthenticationException( Status.Security.Unauthorized, identifier.get() );
-        }
-        return new BasicAuthenticationResult( authSubject, false );
-    }
+            SecurityContext securityContext = authManager.login( authToken );
 
-    private String safeCast( String key, Map<String,Object> authToken ) throws AuthenticationException
-    {
-        Object value = authToken.get( key );
-        if ( value == null || !(value instanceof String) )
+            switch ( securityContext.subject().getAuthenticationResult() )
+            {
+            case SUCCESS:
+            case PASSWORD_CHANGE_REQUIRED:
+                String newPassword = AuthToken.safeCast( NEW_CREDENTIALS, authToken );
+                securityContext.subject().setPassword( newPassword, requiresPasswordChange );
+                break;
+            default:
+                throw new AuthenticationException( Status.Security.Unauthorized );
+            }
+
+            return new BasicAuthenticationResult( securityContext );
+        }
+        catch ( AuthorizationViolationException | InvalidArgumentsException | InvalidAuthTokenException e )
         {
-            throw new AuthenticationException( Status.Security.Unauthorized, identifier.get(),
-                    "The value associated with the key `" + key + "` must be a String but was: " +
-                    (value == null ? "null" : value.getClass().getSimpleName()));
+            throw new AuthenticationException( e.status(), e.getMessage(), e );
         }
-
-        return (String) value;
+        catch ( IOException e )
+        {
+            throw new AuthenticationException( Status.Security.Unauthorized, e.getMessage(), e );
+        }
     }
 }

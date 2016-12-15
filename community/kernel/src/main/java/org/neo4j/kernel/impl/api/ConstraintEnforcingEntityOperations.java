@@ -36,6 +36,7 @@ import org.neo4j.kernel.api.constraints.RelationshipPropertyExistenceConstraint;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
+import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
 import org.neo4j.kernel.api.exceptions.schema.AlreadyConstrainedException;
@@ -153,7 +154,7 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations, Sc
         {
             IndexDescriptor indexDescriptor = new IndexDescriptor( labelId, propertyKeyId );
             assertIndexOnline( state, indexDescriptor );
-            state.locks().acquireExclusive( INDEX_ENTRY,
+            state.locks().optimistic().acquireExclusive( INDEX_ENTRY,
                     indexEntryResourceId( labelId, propertyKeyId, Strings.prettyPrint( value ) ) );
 
             long existing = entityReadOperations.nodeGetFromUniqueIndexSeek( state, indexDescriptor, value );
@@ -192,6 +193,13 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations, Sc
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         entityWriteOperations.nodeDelete( state, nodeId );
+    }
+
+    @Override
+    public int nodeDetachDelete( KernelStatement state, long nodeId ) throws EntityNotFoundException,
+            AutoIndexingKernelException, InvalidTransactionTypeKernelException, KernelException
+    {
+        return entityWriteOperations.nodeDetachDelete( state, nodeId );
     }
 
     @Override
@@ -321,7 +329,8 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations, Sc
         }
 
         // If we find the node - hold a shared lock. If we don't find a node - hold an exclusive lock.
-        Locks.Client locks = state.locks();
+        // If locks are deferred than both shared and exclusive locks will be taken only at commit time.
+        Locks.Client locks = state.locks().optimistic();
         long indexEntryId = indexEntryResourceId( labelId, propertyKeyId, stringVal );
 
         locks.acquireShared( INDEX_ENTRY, indexEntryId );

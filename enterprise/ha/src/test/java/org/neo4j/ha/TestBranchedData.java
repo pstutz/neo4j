@@ -35,7 +35,6 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.factory.TestHighlyAvailableGraphDatabaseFactory;
 import org.neo4j.graphdb.index.Index;
 import org.neo4j.helpers.collection.Iterables;
@@ -47,13 +46,12 @@ import org.neo4j.kernel.impl.ha.ClusterManager;
 import org.neo4j.kernel.impl.ha.ClusterManager.ManagedCluster;
 import org.neo4j.kernel.impl.ha.ClusterManager.RepairKit;
 import org.neo4j.kernel.impl.logging.StoreLogService;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.util.Listener;
-import org.neo4j.kernel.impl.util.StoreUtil;
+import org.neo4j.com.storecopy.StoreUtil;
 import org.neo4j.kernel.lifecycle.LifeRule;
-import org.neo4j.test.TargetDirectory;
-import org.neo4j.test.TargetDirectory.TestDirectory;
+import org.neo4j.storageengine.api.StoreFileMetadata;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.String.format;
 import static org.junit.Assert.assertFalse;
@@ -65,7 +63,7 @@ import static org.neo4j.kernel.impl.ha.ClusterManager.clusterOfSize;
 public class TestBranchedData
 {
     private final LifeRule life = new LifeRule( true );
-    private final TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    private final TestDirectory directory = TestDirectory.testDirectory();
 
     @Rule
     public final RuleChain ruleChain = RuleChain.outerRule( directory )
@@ -201,11 +199,11 @@ public class TestBranchedData
     {
         Collection<File> result = new ArrayList<>();
         NeoStoreDataSource ds = db.getDependencyResolver().resolveDependency( NeoStoreDataSource.class );
-        try ( ResourceIterator<File> files = ds.listStoreFiles( false ) )
+        try ( ResourceIterator<StoreFileMetadata> files = ds.listStoreFiles( false ) )
         {
             while ( files.hasNext() )
             {
-                File file = files.next();
+                File file = files.next().file();
                 if ( file.getPath().contains( indexName ) )
                 {
                     result.add( file );
@@ -309,7 +307,7 @@ public class TestBranchedData
             String fileName = file.getName();
             if ( !fileName.equals( StoreLogService.INTERNAL_LOG_NAME ) && !file.getName().startsWith( "branched-" ) )
             {
-                assertTrue( FileUtils.renameFile( file, new File( branchDir, file.getName() ) ) );
+                FileUtils.renameFile( file, new File( branchDir, file.getName() ) );
             }
         }
         return timestamp;
@@ -331,9 +329,6 @@ public class TestBranchedData
 
     private GraphDatabaseService startGraphDatabaseService( File storeDir )
     {
-        return new TestGraphDatabaseFactory()
-                .newEmbeddedDatabaseBuilder(  storeDir )
-                .setConfig( GraphDatabaseSettings.record_format, StandardV3_0.NAME )
-                .newGraphDatabase();
+        return new TestGraphDatabaseFactory().newEmbeddedDatabase( storeDir );
     }
 }

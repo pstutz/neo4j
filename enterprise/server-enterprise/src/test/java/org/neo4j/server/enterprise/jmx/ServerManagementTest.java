@@ -23,23 +23,23 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.RuleChain;
 
+import java.util.Optional;
+
 import org.neo4j.dbms.DatabaseManagementSystemSettings;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.kernel.GraphDatabaseDependencies;
 import org.neo4j.kernel.configuration.Config;
-import org.neo4j.logging.NullLog;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.server.CommunityBootstrapper;
 import org.neo4j.server.NeoServer;
 import org.neo4j.server.configuration.ConfigLoader;
 import org.neo4j.server.enterprise.EnterpriseNeoServer;
 import org.neo4j.server.enterprise.helpers.EnterpriseServerBuilder;
-import org.neo4j.test.CleanupRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.CleanupRule;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.helpers.collection.Pair.pair;
 
@@ -47,7 +47,7 @@ public class ServerManagementTest
 {
 
     private final CleanupRule cleanup = new CleanupRule();
-    private final TargetDirectory.TestDirectory baseDir = TargetDirectory.testDirForTest( getClass() );
+    private final TestDirectory baseDir = TestDirectory.testDirectory();
 
     @Rule
     public RuleChain ruleChain = RuleChain.outerRule( baseDir )
@@ -61,13 +61,13 @@ public class ServerManagementTest
         String dataDirectory2 = baseDir.directory( "data2" ).getAbsolutePath();
 
         Config config = new ConfigLoader( CommunityBootstrapper.settingsClasses ).loadConfig(
+                Optional.of( baseDir.directory() ),
                 EnterpriseServerBuilder
                         .server()
                         .withDefaultDatabaseTuning()
                         .usingDataDir( dataDirectory1 )
-                        .createConfigFiles(), NullLog.getInstance(),
-                pair( GraphDatabaseSettings.logs_directory.name(), baseDir.directory( "logs" ).getPath() )
-                );
+                        .createConfigFiles(),
+                pair( GraphDatabaseSettings.logs_directory.name(), baseDir.directory( "logs" ).getPath() ) );
 
         // When
         NeoServer server = cleanup.add( new EnterpriseNeoServer( config, graphDbDependencies(), NullLogProvider

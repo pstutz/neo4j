@@ -26,14 +26,14 @@ import org.junit.Test;
 import java.io.File;
 import java.io.IOException;
 
-import org.neo4j.test.LimitedFileSystemGraphDatabase;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.transaction.log.LogVersionRepository;
-import org.neo4j.test.CleanupRule;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.LimitedFileSystemGraphDatabase;
+import org.neo4j.test.rule.CleanupRule;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -41,7 +41,8 @@ import static org.junit.Assert.fail;
 
 public class RunOutOfDiskSpaceIT
 {
-    public final @Rule CleanupRule cleanup = new CleanupRule();
+    @Rule
+    public final CleanupRule cleanup = new CleanupRule();
 
     @Test
     public void shouldPropagateIOExceptions() throws Exception
@@ -97,7 +98,6 @@ public class RunOutOfDiskSpaceIT
         File storeDir = testDirectory.absolutePath();
         LimitedFileSystemGraphDatabase db = cleanup.add( new LimitedFileSystemGraphDatabase( storeDir ) );
 
-
         try ( Transaction tx = db.beginTx() )
         {
             db.createNode();
@@ -149,7 +149,7 @@ public class RunOutOfDiskSpaceIT
     }
 
     @Rule
-    public final TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public final TestDirectory testDirectory = TestDirectory.testDirectory();
     @Rule
     public final PageCacheRule pageCacheRule = new PageCacheRule();
 }

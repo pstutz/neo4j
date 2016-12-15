@@ -34,30 +34,37 @@ import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.legacyindex.AutoIndexing;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.coreapi.CoreAPIAvailabilityGuard;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.kernel.impl.query.QueryExecutionKernelException;
-import org.neo4j.kernel.impl.query.QuerySession;
+import org.neo4j.kernel.impl.query.TransactionalContext;
 import org.neo4j.kernel.impl.store.StoreId;
 
 class ProcedureGDBFacadeSPI implements GraphDatabaseFacade.SPI
 {
     private final Thread transactionThread;
     private final KernelTransaction transaction;
+
     private final Supplier<QueryExecutionEngine> queryExecutor;
 
+    private final File storeDir;
     private final DependencyResolver resolver;
     private final AutoIndexing autoIndexing;
     private final Supplier<StoreId> storeId;
     private final CoreAPIAvailabilityGuard availability;
     private final ThrowingFunction<URL,URL,URLAccessValidationError> urlValidator;
-    private final File storeDir;
 
-    public ProcedureGDBFacadeSPI( Thread transactionThread,  KernelTransaction transaction, Supplier<QueryExecutionEngine> queryExecutor,
-            File storeDir, DependencyResolver resolver, AutoIndexing autoIndexing,
-            Supplier<StoreId> storeId, CoreAPIAvailabilityGuard availability,
+    public ProcedureGDBFacadeSPI(
+            Thread transactionThread,
+            KernelTransaction transaction,
+            Supplier<QueryExecutionEngine> queryExecutor,
+            File storeDir,
+            DependencyResolver resolver,
+            AutoIndexing autoIndexing,
+            Supplier<StoreId> storeId,
+            CoreAPIAvailabilityGuard availability,
             ThrowingFunction<URL,URL,URLAccessValidationError> urlValidator )
     {
         this.transactionThread = transactionThread;
@@ -133,13 +140,13 @@ class ProcedureGDBFacadeSPI implements GraphDatabaseFacade.SPI
     }
 
     @Override
-    public Result executeQuery( String query, Map<String,Object> parameters, QuerySession querySession )
+    public Result executeQuery( String query, Map<String,Object> parameters, TransactionalContext tc )
     {
         try
         {
             availability.assertDatabaseAvailable();
             assertSameThread();
-            return queryExecutor.get().executeQuery( query, parameters, querySession );
+            return queryExecutor.get().executeQuery( query, parameters, tc );
         }
         catch ( QueryExecutionKernelException e )
         {
@@ -186,7 +193,7 @@ class ProcedureGDBFacadeSPI implements GraphDatabaseFacade.SPI
     @Override
     public GraphDatabaseQueryService queryService()
     {
-        return queryExecutor.get().queryService();
+        return resolver.resolveDependency( GraphDatabaseQueryService.class );
     }
 
     @Override
@@ -196,7 +203,7 @@ class ProcedureGDBFacadeSPI implements GraphDatabaseFacade.SPI
     }
 
     @Override
-    public KernelTransaction beginTransaction( KernelTransaction.Type type, AccessMode accessMode )
+    public KernelTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext, long timeout )
     {
         throw new UnsupportedOperationException();
     }

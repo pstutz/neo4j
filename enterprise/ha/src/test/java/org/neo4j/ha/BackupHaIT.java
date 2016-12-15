@@ -19,8 +19,7 @@
  */
 package org.neo4j.ha;
 
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
+import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -29,15 +28,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.neo4j.backup.OnlineBackupSettings;
-import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.helpers.collection.MapUtil;
-import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.kernel.impl.ha.ClusterManager.ManagedCluster;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.test.DbRepresentation;
-import org.neo4j.test.SuppressOutput;
 import org.neo4j.test.ha.ClusterRule;
+import org.neo4j.test.rule.SuppressOutput;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -46,17 +41,17 @@ import static org.neo4j.backup.BackupEmbeddedIT.runBackupToolFromOtherJvmToGetEx
 
 public class BackupHaIT
 {
-    @ClassRule
-    public static ClusterRule clusterRule = new ClusterRule( BackupHaIT.class )
+    @Rule
+    public ClusterRule clusterRule = new ClusterRule( getClass() )
             .withSharedSetting( OnlineBackupSettings.online_backup_enabled, Settings.TRUE )
             .withInstanceSetting( OnlineBackupSettings.online_backup_server, serverId -> (":" + (4444 + serverId)) );
     @Rule
     public final SuppressOutput suppressOutput = SuppressOutput.suppressAll();
 
-    private static File backupPath;
+    private File backupPath;
 
-    @BeforeClass
-    public static void setup() throws Exception
+    @Before
+    public void setup() throws Exception
     {
         backupPath = clusterRule.cleanDirectory( "backup-db" );
         createSomeData( clusterRule.startCluster().getMaster() );
@@ -83,7 +78,7 @@ public class BackupHaIT
         cluster.sync();
 
         // Verify that backed up database can be started and compare representation
-        DbRepresentation backupRepresentation = DbRepresentation.of( backupPath, getConfig() );
+        DbRepresentation backupRepresentation = DbRepresentation.of( backupPath );
         assertEquals( beforeChange, backupRepresentation );
         assertNotEquals( backupRepresentation, afterChange );
     }
@@ -106,7 +101,7 @@ public class BackupHaIT
             cluster.sync();
 
             // Verify that old data is back
-            DbRepresentation backupRepresentation = DbRepresentation.of( backupPath, getConfig() );
+            DbRepresentation backupRepresentation = DbRepresentation.of( backupPath );
             assertEquals( beforeChange, backupRepresentation );
             assertNotEquals( backupRepresentation, afterChange );
         }
@@ -125,11 +120,5 @@ public class BackupHaIT
             args.add( clusterName );
         }
         return args.toArray( new String[args.size()] );
-    }
-
-    private Config getConfig()
-    {
-        return new Config( MapUtil.stringMap( GraphDatabaseSettings.record_format.name(),
-                StandardV3_0.NAME ) );
     }
 }

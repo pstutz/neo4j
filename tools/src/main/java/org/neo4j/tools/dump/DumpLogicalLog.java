@@ -21,35 +21,47 @@ package org.neo4j.tools.dump;
 
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.ByteBuffer;
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.TimeZone;
-import java.util.TreeSet;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
+import org.neo4j.collection.primitive.Primitive;
+import org.neo4j.collection.primitive.PrimitiveLongSet;
 import org.neo4j.cursor.IOCursor;
 import org.neo4j.helpers.Args;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
+import org.neo4j.kernel.impl.transaction.command.Command.NodeCommand;
+import org.neo4j.kernel.impl.transaction.command.Command.PropertyCommand;
+import org.neo4j.kernel.impl.transaction.command.Command.RelationshipCommand;
+import org.neo4j.kernel.impl.transaction.command.Command.RelationshipGroupCommand;
+import org.neo4j.kernel.impl.transaction.log.FilteringIOCursor;
 import org.neo4j.kernel.impl.transaction.log.LogEntryCursor;
-import org.neo4j.kernel.impl.transaction.log.PhysicalLogFile;
+import org.neo4j.kernel.impl.transaction.log.LogVersionBridge;
+import org.neo4j.kernel.impl.transaction.log.LogVersionedStoreChannel;
+import org.neo4j.kernel.impl.transaction.log.PhysicalLogFiles;
 import org.neo4j.kernel.impl.transaction.log.PhysicalLogVersionedStoreChannel;
 import org.neo4j.kernel.impl.transaction.log.ReadAheadLogChannel;
 import org.neo4j.kernel.impl.transaction.log.ReadableClosablePositionAwareChannel;
-import org.neo4j.kernel.impl.transaction.log.ReadableLogChannel;
+import org.neo4j.kernel.impl.transaction.log.ReaderLogVersionBridge;
+import org.neo4j.kernel.impl.transaction.log.TransactionLogEntryCursor;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntry;
+import org.neo4j.kernel.impl.transaction.log.entry.LogEntryCommand;
 import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
 import org.neo4j.kernel.impl.transaction.log.entry.LogHeader;
 import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
+import org.neo4j.storageengine.api.StorageCommand;
+import org.neo4j.tools.dump.InconsistencyReportReader.Inconsistencies;
 
 import static java.util.TimeZone.getTimeZone;
 import static org.neo4j.helpers.Format.DEFAULT_TIME_ZONE;
 import static org.neo4j.kernel.impl.transaction.log.LogVersionBridge.NO_MORE_CHANNELS;
-import static org.neo4j.kernel.impl.transaction.log.PhysicalLogFiles.getLogVersion;
+import static org.neo4j.kernel.impl.transaction.log.ReadAheadChannel.DEFAULT_READ_AHEAD_SIZE;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeader.LOG_HEADER_SIZE;
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeaderReader.readLogHeader;
 
@@ -59,6 +71,8 @@ import static org.neo4j.kernel.impl.transaction.log.entry.LogHeaderReader.readLo
 public class DumpLogicalLog
 {
     private static final String TO_FILE = "tofile";
+    private static final String TX_FILTER = "txfilter";
+    private static final String CC_FILTER = "ccfilter";
 
     private final FileSystemAbstraction fileSystem;
 
@@ -67,59 +81,258 @@ public class DumpLogicalLog
         this.fileSystem = fileSystem;
     }
 
-    public int dump( String filenameOrDirectory, String logPrefix, PrintStream out,
-                     TimeZone timeZone ) throws IOException
+    public void dump( String filenameOrDirectory, PrintStream out,
+            Predicate<LogEntry[]> filter, Function<LogEntry,String> serializer ) throws IOException
     {
-        int logsFound = 0;
-        for ( String fileName : filenamesOf( filenameOrDirectory, logPrefix ) )
+        File file = new File( filenameOrDirectory );
+        printFile( file, out );
+        File firstFile;
+        LogVersionBridge bridge;
+        if ( file.isDirectory() )
         {
-            logsFound++;
-            out.println( "=== " + fileName + " ===" );
-            StoreChannel fileChannel = fileSystem.open( new File( fileName ), "r" );
-
-            LogHeader logHeader;
-            try
+            // Use natural log version bridging if a directory is supplied
+            final PhysicalLogFiles logFiles = new PhysicalLogFiles( file, fileSystem );
+            bridge = new ReaderLogVersionBridge( fileSystem, logFiles )
             {
-                logHeader = readLogHeader( ByteBuffer.allocateDirect( LOG_HEADER_SIZE ), fileChannel, false );
-            }
-            catch ( IOException ex )
-            {
-                out.println( "Unable to read timestamp information, no records in logical log." );
-                out.println( ex.getMessage() );
-                fileChannel.close();
-                throw ex;
-            }
-            out.println( "Logical log format:" + logHeader.logFormatVersion + "version: " + logHeader.logVersion +
-                    " with prev committed tx[" + logHeader.lastCommittedTxId + "]" );
-
-            PhysicalLogVersionedStoreChannel channel = new PhysicalLogVersionedStoreChannel(
-                    fileChannel, logHeader.logVersion, logHeader.logFormatVersion );
-            ReadableLogChannel logChannel = new ReadAheadLogChannel( channel, NO_MORE_CHANNELS );
-            LogEntryReader<ReadableClosablePositionAwareChannel> entryReader = new VersionAwareLogEntryReader<>();
-
-            try ( IOCursor<LogEntry> cursor = new LogEntryCursor( entryReader, logChannel ) )
-            {
-                while (cursor.next())
+                @Override
+                public LogVersionedStoreChannel next( LogVersionedStoreChannel channel ) throws IOException
                 {
-                    out.println( cursor.get().toString( timeZone ) );
+                    LogVersionedStoreChannel next = super.next( channel );
+                    if ( next != channel )
+                    {
+                        printFile( logFiles.getLogFileForVersion( next.getVersion() ), out );
+                    }
+                    return next;
+                }
+            };
+            firstFile = logFiles.getLogFileForVersion( logFiles.getLowestLogVersion() );
+        }
+        else
+        {
+            // Use no bridging, simple reading this single log file if a file is supplied
+            firstFile = file;
+            bridge = NO_MORE_CHANNELS;
+        }
+
+        StoreChannel fileChannel = fileSystem.open( firstFile, "r" );
+        ByteBuffer buffer = ByteBuffer.allocateDirect( LOG_HEADER_SIZE );
+
+        LogHeader logHeader;
+        try
+        {
+            logHeader = readLogHeader( buffer, fileChannel, false, firstFile );
+        }
+        catch ( IOException ex )
+        {
+            out.println( "Unable to read timestamp information, no records in logical log." );
+            out.println( ex.getMessage() );
+            fileChannel.close();
+            throw ex;
+        }
+        out.println( "Logical log format: " + logHeader.logFormatVersion + " version: " + logHeader.logVersion +
+                " with prev committed tx[" + logHeader.lastCommittedTxId + "]" );
+
+        PhysicalLogVersionedStoreChannel channel = new PhysicalLogVersionedStoreChannel(
+                fileChannel, logHeader.logVersion, logHeader.logFormatVersion );
+        ReadableClosablePositionAwareChannel logChannel = new ReadAheadLogChannel( channel, bridge, DEFAULT_READ_AHEAD_SIZE );
+        LogEntryReader<ReadableClosablePositionAwareChannel> entryReader = new VersionAwareLogEntryReader<>();
+
+        IOCursor<LogEntry> entryCursor = new LogEntryCursor( entryReader, logChannel );
+        TransactionLogEntryCursor transactionCursor = new TransactionLogEntryCursor( entryCursor );
+        try ( IOCursor<LogEntry[]> cursor = filter == null ? transactionCursor
+                                                           : new FilteringIOCursor<>( transactionCursor, filter ) )
+        {
+            while ( cursor.next() )
+            {
+                for ( LogEntry entry : cursor.get() )
+                {
+                    out.println( serializer.apply( entry ) );
                 }
             }
         }
-        return logsFound;
     }
 
-    public static void main( String args[] ) throws IOException
+    private static void printFile( File file, PrintStream out )
+    {
+        out.println( "=== " + file.getAbsolutePath() + " ===" );
+    }
+
+    private static class TransactionRegexCriteria implements Predicate<LogEntry[]>
+    {
+        private final Pattern pattern;
+        private final TimeZone timeZone;
+
+        TransactionRegexCriteria( String regex, TimeZone timeZone )
+        {
+            this.pattern = Pattern.compile( regex );
+            this.timeZone = timeZone;
+        }
+
+        @Override
+        public boolean test( LogEntry[] transaction )
+        {
+            for ( LogEntry entry : transaction )
+            {
+                if ( pattern.matcher( entry.toString( timeZone ) ).find() )
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    public static class ConsistencyCheckOutputCriteria implements Predicate<LogEntry[]>, Function<LogEntry,String>
+    {
+        private final TimeZone timeZone;
+        private final PrimitiveLongSet relationshipIds = Primitive.longSet();
+        private final PrimitiveLongSet nodeIds = Primitive.longSet();
+        private final PrimitiveLongSet propertyIds = Primitive.longSet();
+        private final PrimitiveLongSet relationshipGroupIds = Primitive.longSet();
+
+        public ConsistencyCheckOutputCriteria( String ccFile, TimeZone timeZone ) throws IOException
+        {
+            this.timeZone = timeZone;
+            new InconsistencyReportReader( new Inconsistencies()
+            {
+                @Override
+                public void relationshipGroup( long id )
+                {
+                    relationshipGroupIds.add( id );
+                }
+
+                @Override
+                public void relationship( long id )
+                {
+                    relationshipIds.add( id );
+                }
+
+                @Override
+                public void property( long id )
+                {
+                    propertyIds.add( id );
+                }
+
+                @Override
+                public void node( long id )
+                {
+                    nodeIds.add( id );
+                }
+            } ).read( new File( ccFile ) );
+        }
+
+        @Override
+        public boolean test( LogEntry[] transaction )
+        {
+            for ( LogEntry logEntry : transaction )
+            {
+                if ( matches( logEntry ) )
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean matches( LogEntry logEntry )
+        {
+            if ( logEntry instanceof LogEntryCommand )
+            {
+                if ( matches( ((LogEntryCommand)logEntry).getXaCommand() ) )
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private boolean matches( StorageCommand command )
+        {
+            if ( command instanceof NodeCommand )
+            {
+                return nodeIds.contains( ((NodeCommand) command).getKey() );
+            }
+            if ( command instanceof RelationshipCommand )
+            {
+                return relationshipIds.contains( ((RelationshipCommand) command).getKey() );
+            }
+            if ( command instanceof PropertyCommand )
+            {
+                return propertyIds.contains( ((PropertyCommand) command).getKey() );
+            }
+            if ( command instanceof RelationshipGroupCommand )
+            {
+                return relationshipGroupIds.contains( ((RelationshipGroupCommand) command).getKey() );
+            }
+            return false;
+        }
+
+        @Override
+        public String apply( LogEntry logEntry )
+        {
+            String result = logEntry.toString( timeZone );
+            if ( matches( logEntry ) )
+            {
+                result += "  <----";
+            }
+            return result;
+        }
+    }
+
+    /**
+     * Usage: [--txfilter "regex"] [--ccfilter cc-report-file] [--tofile] storeDirOrFile1 storeDirOrFile2 ...
+     *
+     * --txfilter
+     * Will match regex against each {@link LogEntry} and if there is a match,
+     * include transaction containing the LogEntry in the dump.
+     * regex matching is done with {@link Pattern}
+     *
+     * --ccfilter
+     * Will look at an inconsistency report file from consistency checker and
+     * include transactions that are relevant to them
+     *
+     * --tofile
+     * Redirects output to dump-logical-log.txt in the store directory
+     */
+    public static void main( String[] args ) throws IOException
     {
         Args arguments = Args.withFlags( TO_FILE ).parse( args );
         TimeZone timeZone = parseTimeZoneConfig( arguments );
+        Predicate<LogEntry[]> filter = parseFilter( arguments, timeZone );
+        Function<LogEntry,String> serializer = parseSerializer( filter, timeZone );
         try ( Printer printer = getPrinter( arguments ) )
         {
             for ( String fileAsString : arguments.orphans() )
             {
                 new DumpLogicalLog( new DefaultFileSystemAbstraction() )
-                        .dump( fileAsString, PhysicalLogFile.DEFAULT_NAME, printer.getFor( fileAsString ), timeZone );
+                        .dump( fileAsString, printer.getFor( fileAsString ), filter, serializer );
             }
         }
+    }
+
+    @SuppressWarnings( "unchecked" )
+    private static Function<LogEntry,String> parseSerializer( Predicate<LogEntry[]> filter, TimeZone timeZone )
+    {
+        if ( filter instanceof Function )
+        {
+            return (Function<LogEntry,String>) filter;
+        }
+        return logEntry -> logEntry.toString( timeZone );
+    }
+
+    private static Predicate<LogEntry[]> parseFilter( Args arguments, TimeZone timeZone ) throws IOException
+    {
+        String regex = arguments.get( TX_FILTER );
+        if ( regex != null )
+        {
+            return new TransactionRegexCriteria( regex, timeZone );
+        }
+        String cc = arguments.get( CC_FILTER );
+        if ( cc != null )
+        {
+            return new ConsistencyCheckOutputCriteria( cc, timeZone );
+        }
+        return null;
     }
 
     public static Printer getPrinter( Args args )
@@ -162,7 +375,7 @@ public class DumpLogicalLog
             File dir = absoluteFile.isDirectory() ? absoluteFile : absoluteFile.getParentFile();
             if ( !dir.equals( directory ) )
             {
-                safeClose();
+                close();
                 File dumpFile = new File( dir, "dump-logical-log.txt" );
                 System.out.println( "Redirecting the output to " + dumpFile.getPath() );
                 out = new PrintStream( dumpFile );
@@ -171,75 +384,18 @@ public class DumpLogicalLog
             return out;
         }
 
-        private void safeClose()
+        @Override
+        public void close()
         {
             if ( out != null )
             {
                 out.close();
             }
         }
-
-        @Override
-        public void close()
-        {
-            safeClose();
-        }
     }
 
     public static TimeZone parseTimeZoneConfig( Args arguments )
     {
         return getTimeZone( arguments.get( "timezone", DEFAULT_TIME_ZONE.getID() ) );
-    }
-
-    protected String[] filenamesOf( String filenameOrDirectory, final String prefix )
-    {
-
-        File file = new File( filenameOrDirectory );
-        if ( fileSystem.isDirectory(file) )
-        {
-            File[] files = fileSystem.listFiles( file , new FilenameFilter()
-            {
-                @Override
-                public boolean accept( File dir, String name )
-                {
-                    return name.contains( prefix ) && !name.contains( "active" );
-                }
-            } );
-            Collection<String> result = new TreeSet<String>( sequentialComparator() );
-            for ( int i = 0; i < files.length; i++ )
-            {
-                result.add( files[i].getPath() );
-            }
-            return result.toArray( new String[result.size()] );
-        }
-        else
-        {
-            return new String[] { filenameOrDirectory };
-        }
-    }
-
-    private static Comparator<? super String> sequentialComparator()
-
-    {
-        return new Comparator<String>()
-        {
-            @Override
-            public int compare( String o1, String o2 )
-            {
-                return versionOf( o1 ).compareTo( versionOf( o2 ) );
-            }
-
-            private Long versionOf( String string )
-            {
-                try
-                {
-                    return getLogVersion( string );
-                }
-                catch ( RuntimeException ignored )
-                {
-                    return Long.MAX_VALUE;
-                }
-            }
-        };
     }
 }

@@ -19,10 +19,10 @@
  */
 package org.neo4j.kernel.impl.core;
 
+import org.junit.Test;
+
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.Test;
 
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.PropertyContainer;
@@ -31,7 +31,7 @@ import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.kernel.impl.AbstractNeo4jTestCase;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
 
 public class TestIsolationBasic extends AbstractNeo4jTestCase
 {
@@ -142,7 +142,6 @@ public class TestIsolationBasic extends AbstractNeo4jTestCase
             throw t1Exception.get();
         }
 
-
         try (Transaction tx = getGraphDb().beginTx())
         {
             for ( Relationship rel : node1.getRelationships() )
@@ -154,8 +153,8 @@ public class TestIsolationBasic extends AbstractNeo4jTestCase
             tx.success();
         }
     }
-    
-    private void assertPropertyEqual( PropertyContainer primitive, String key, 
+
+    private void assertPropertyEqual( PropertyContainer primitive, String key,
         String value )
     {
         try ( Transaction tx = getGraphDb().beginTx() )
@@ -163,7 +162,7 @@ public class TestIsolationBasic extends AbstractNeo4jTestCase
             assertEquals( value, primitive.getProperty( key ) );
         }
     }
-    
+
     private void assertRelationshipCount( Node node, int count )
     {
 

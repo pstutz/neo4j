@@ -19,18 +19,31 @@
  */
 package org.neo4j.graphdb;
 
+import org.neo4j.kernel.api.exceptions.Status;
+
 /**
  * Signals that the transaction within which the failed operations ran
  * has been terminated with {@link Transaction#terminate()}.
  */
-public class TransactionTerminatedException extends TransactionFailureException
+public class TransactionTerminatedException extends TransactionFailureException implements Status.HasStatus
 {
-    public TransactionTerminatedException()
+    private final Status status;
+
+    public TransactionTerminatedException( Status status )
     {
-        super( "The transaction has been terminated, no new operations in it " +
-               "are allowed. This normally happens because a client explicitly asks to terminate the transaction, " +
-               "for instance to stop a long-running operation. It may also happen because an operator has asked the " +
-               "database to be shut down, or because the current instance is about to perform a cluster role change. " +
-               "Simply retry your operation in a new transaction, and you should see a successful result." );
+        this( status, "" );
+    }
+
+    protected TransactionTerminatedException( Status status, String additionalInfo )
+    {
+        super( "The transaction has been terminated. Retry your operation in a new transaction, " +
+               "and you should see a successful result. " + status.code().description() + " " + additionalInfo );
+        this.status = status;
+    }
+
+    @Override
+    public Status status()
+    {
+        return status;
     }
 }

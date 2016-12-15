@@ -42,7 +42,6 @@ import org.neo4j.graphdb.index.AutoIndexer;
 
 import static java.util.Arrays.asList;
 import static java.util.Arrays.copyOfRange;
-
 import static org.neo4j.graphdb.Label.label;
 import static org.neo4j.test.GraphDescription.PropType.ERROR;
 import static org.neo4j.test.GraphDescription.PropType.STRING;
@@ -59,9 +58,9 @@ public class GraphDescription implements GraphDefinition
         NODE[] nodes() default {};
 
         REL[] relationships() default {};
-        
+
         boolean autoIndexNodes() default false;
-        
+
         boolean autoIndexRelationships() default false;
     }
 
@@ -71,7 +70,7 @@ public class GraphDescription implements GraphDefinition
         String name();
 
         PROP[] properties() default {};
-        
+
         LABEL[] labels() default {};
 
         boolean setNameProperty() default false;
@@ -104,7 +103,7 @@ public class GraphDescription implements GraphDefinition
 
         PropType componentType() default ERROR;
     }
-    
+
     @Target( {} )
     public @interface LABEL
     {
@@ -117,7 +116,8 @@ public class GraphDescription implements GraphDefinition
 
         ARRAY
         {
-            @Override Object convert( PropType componentType, String value )
+            @Override
+            Object convert( PropType componentType, String value )
             {
                 String[] items  = value.split( " *, *" );
                 Object[] result = (Object[]) Array.newInstance( componentType.componentClass(), items.length );
@@ -136,7 +136,8 @@ public class GraphDescription implements GraphDefinition
                 return value;
             }
 
-            @Override Class<?> componentClass()
+            @Override
+            Class<?> componentClass()
             {
                 return String.class;
             }
@@ -149,7 +150,8 @@ public class GraphDescription implements GraphDefinition
                 return Long.parseLong( value );
             }
 
-            @Override Class<?> componentClass()
+            @Override
+            Class<?> componentClass()
             {
                 return Long.class;
             }
@@ -162,7 +164,8 @@ public class GraphDescription implements GraphDefinition
                 return Double.parseDouble( value );
             }
 
-            @Override Class<?> componentClass()
+            @Override
+            Class<?> componentClass()
             {
                 return Double.class;
             }
@@ -175,7 +178,8 @@ public class GraphDescription implements GraphDefinition
                 return Boolean.parseBoolean( value );
             }
 
-            @Override Class<?> componentClass()
+            @Override
+            Class<?> componentClass()
             {
                 return Boolean.class;
             }
@@ -271,7 +275,7 @@ public class GraphDescription implements GraphDefinition
             }
             entity.setProperty( "name", name );
         }
-        
+
         return entity;
     }
 
@@ -575,6 +579,5 @@ public class GraphDescription implements GraphDefinition
             return name;
         }
     }
-
 
 }

@@ -21,6 +21,7 @@ package org.neo4j.unsafe.impl.batchimport.store;
 
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 
 import java.io.File;
 
@@ -30,10 +31,13 @@ import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.MyRelTypes;
 import org.neo4j.kernel.impl.logging.NullLogService;
+import org.neo4j.kernel.impl.store.format.RecordFormatSelector;
+import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
+import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
@@ -44,10 +48,17 @@ import static org.neo4j.io.ByteUnit.kibiBytes;
 import static org.neo4j.io.ByteUnit.mebiBytes;
 import static org.neo4j.unsafe.impl.batchimport.AdditionalInitialIds.EMPTY;
 import static org.neo4j.unsafe.impl.batchimport.Configuration.DEFAULT;
-import static org.neo4j.unsafe.impl.batchimport.store.BatchingNeoStores.calculateOptimalPageSize;
 
 public class BatchingNeoStoresTest
 {
+    private final EphemeralFileSystemRule fsr = new EphemeralFileSystemRule();
+    private final PageCacheRule pageCacheRule = new PageCacheRule();
+
+    @Rule
+    public final RuleChain ruleChain = RuleChain.outerRule( fsr ).around( pageCacheRule );
+
+    private final File storeDir = new File( "dir" ).getAbsoluteFile();
+
     @Test
     public void shouldNotOpenStoreWithNodesOrRelationshipsInIt() throws Exception
     {
@@ -57,7 +68,10 @@ public class BatchingNeoStoresTest
         // WHEN
         try
         {
-            new BatchingNeoStores( fsr.get(), storeDir, DEFAULT, NullLogService.getInstance(), EMPTY, Config.empty() );
+            RecordFormats recordFormats = RecordFormatSelector.selectForConfig( Config.empty(),
+                    NullLogProvider.getInstance() );
+            new BatchingNeoStores( fsr.get(), storeDir, recordFormats, DEFAULT, NullLogService.getInstance(), EMPTY,
+                    Config.empty() );
             fail( "Should fail on existing data" );
         }
         catch ( IllegalStateException e )
@@ -77,66 +91,15 @@ public class BatchingNeoStoresTest
                 GraphDatabaseSettings.string_block_size.name(), String.valueOf( size ) ) );
 
         // WHEN
-        int headerSize = StandardV3_0.RECORD_FORMATS.dynamic().getRecordHeaderSize();
-        try ( BatchingNeoStores store =
-                new BatchingNeoStores( fsr.get(), storeDir, DEFAULT, NullLogService.getInstance(), EMPTY, config ) )
+        RecordFormats recordFormats = StandardV3_0.RECORD_FORMATS;
+        int headerSize = recordFormats.dynamic().getRecordHeaderSize();
+        try ( BatchingNeoStores store = new BatchingNeoStores( fsr.get(), storeDir, recordFormats, DEFAULT,
+                NullLogService.getInstance(), EMPTY, config ) )
         {
             // THEN
             assertEquals( size + headerSize, store.getPropertyStore().getArrayStore().getRecordSize() );
             assertEquals( size + headerSize, store.getPropertyStore().getStringStore().getRecordSize() );
         }
-    }
-
-    @Test
-    public void shouldCalculateBigPageSizeForBiggerMemory() throws Exception
-    {
-        // GIVEN
-        long memorySize = mebiBytes( 240 );
-
-        // WHEN
-        int pageSize = calculateOptimalPageSize( memorySize, 60 );
-
-        // THEN
-        assertEquals( mebiBytes( 4 ), pageSize );
-    }
-
-    @Test
-    public void shouldCalculateSmallPageSizeForSmallerMemory() throws Exception
-    {
-        // GIVEN
-        long memorySize = mebiBytes( 100 );
-
-        // WHEN
-        int pageSize = calculateOptimalPageSize( memorySize, 60 );
-
-        // THEN
-        assertEquals( mebiBytes( 1 ), pageSize );
-    }
-
-    @Test
-    public void shouldNotGoLowerThan8kPageSizeForSmallMemory() throws Exception
-    {
-        // GIVEN
-        long memorySize = kibiBytes( 8*30 );
-
-        // WHEN
-        int pageSize = calculateOptimalPageSize( memorySize, 60 );
-
-        // THEN
-        assertEquals( kibiBytes( 8 ), pageSize );
-    }
-
-    @Test
-    public void shouldNotGoHigherThan8mPageSizeForBigMemory() throws Exception
-    {
-        // GIVEN
-        long memorySize = mebiBytes( 700 );
-
-        // WHEN
-        int pageSize = calculateOptimalPageSize( memorySize, 60 );
-
-        // THEN
-        assertEquals( mebiBytes( 8 ), pageSize );
     }
 
     private void someDataInTheDatabase()
@@ -153,8 +116,4 @@ public class BatchingNeoStoresTest
             db.shutdown();
         }
     }
-
-    public final @Rule EphemeralFileSystemRule fsr = new EphemeralFileSystemRule();
-    public final @Rule PageCacheRule pageCacheRule = new PageCacheRule();
-    private final File storeDir = new File( "dir" ).getAbsoluteFile();
 }

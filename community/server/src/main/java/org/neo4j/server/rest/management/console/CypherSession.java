@@ -19,6 +19,8 @@
  */
 package org.neo4j.server.rest.management.console;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.util.Collections;
 import javax.servlet.http.HttpServletRequest;
 
@@ -26,10 +28,12 @@ import org.neo4j.cypher.SyntaxException;
 import org.neo4j.cypher.internal.javacompat.ExecutionEngine;
 import org.neo4j.graphdb.Result;
 import org.neo4j.helpers.collection.Pair;
-import org.neo4j.kernel.impl.query.QuerySession;
+import org.neo4j.kernel.impl.query.TransactionalContext;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.server.database.CypherExecutor;
+
+import static java.util.Collections.emptyMap;
 
 public class CypherSession implements ScriptSession
 {
@@ -47,17 +51,17 @@ public class CypherSession implements ScriptSession
     @Override
     public Pair<String, String> evaluate( String script )
     {
-        if ( script.trim().equals( "" ) )
+        if ( StringUtils.EMPTY.equals( script.trim() ) )
         {
-            return Pair.of( "", null );
+            return Pair.of( StringUtils.EMPTY, null );
         }
 
         String resultString;
         try
         {
-            QuerySession querySession = cypherExecutor.createSession( request );
+            TransactionalContext tc = cypherExecutor.createTransactionContext( script, emptyMap(), request );
             ExecutionEngine engine = cypherExecutor.getExecutionEngine();
-            Result result = engine.executeQuery( script, Collections.<String,Object>emptyMap(), querySession );
+            Result result = engine.executeQuery( script, emptyMap(), tc );
             resultString = result.resultAsString();
         }
         catch ( SyntaxException error )

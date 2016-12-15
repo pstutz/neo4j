@@ -19,16 +19,17 @@
  */
 package org.neo4j.cypher.internal.codegen;
 
-import org.neo4j.cypher.internal.frontend.v3_0.ArithmeticException;
-import org.neo4j.cypher.internal.frontend.v3_0.CypherTypeException;
-
 import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.neo4j.cypher.internal.frontend.v3_1.ArithmeticException;
+import org.neo4j.cypher.internal.frontend.v3_1.CypherTypeException;
+
 /**
  * This is a helper class used by compiled plans for doing basic math operations
  */
+@SuppressWarnings( "unused" )
 public final class CompiledMathHelper
 {
     private static final double EPSILON = Math.pow( 1, -10 );
@@ -184,7 +185,16 @@ public final class CompiledMathHelper
                  lhs instanceof Short || rhs instanceof Short ||
                  lhs instanceof Byte || rhs instanceof Byte )
             {
-                return ((Number) lhs).longValue() * ((Number) rhs).longValue();
+                try
+                {
+                    return Math.multiplyExact( ((Number) lhs).longValue(), ((Number) rhs).longValue() );
+                }
+                catch ( java.lang.ArithmeticException e )
+                {
+                    throw new ArithmeticException(
+                            String.format( "result of %d * %d cannot be represented as an integer",
+                                    ((Number) lhs).longValue(), ((Number) rhs).longValue() ), e);
+                }
             }
             // other numbers we cannot multiply
         }
@@ -242,7 +252,18 @@ public final class CompiledMathHelper
 
         if ( lhs instanceof Number && rhs instanceof Number )
         {
-            return ((Number) lhs).doubleValue() % ((Number) rhs).doubleValue();
+            if ( lhs instanceof Double || rhs instanceof Double)
+            {
+                return ((Number) lhs).doubleValue() % ((Number) rhs).doubleValue();
+            }
+            else if (lhs instanceof Float || rhs instanceof Float )
+            {
+                return ((Number) lhs).floatValue() % ((Number) rhs).floatValue();
+            }
+            else
+            {
+                return ((Number) lhs).longValue() % ((Number) rhs).longValue();
+            }
         }
 
         throw new CypherTypeException( "Cannot modulo " + lhs.getClass().getSimpleName() +
@@ -263,6 +284,20 @@ public final class CompiledMathHelper
                 throw new CypherTypeException( value.toString() + " is too large to cast to an int32", null );
             }
             return number.intValue();
+        }
+        throw new CypherTypeException( String.format( "Expected a numeric value but got %s", value.toString() ), null );
+    }
+
+    public static long transformToLong( Object value )
+    {
+        if ( value == null )
+        {
+            throw new CypherTypeException( "Expected a numeric value but got null", null );
+        }
+        if ( value instanceof Number )
+        {
+            Number number = (Number) value;
+            return number.longValue();
         }
         throw new CypherTypeException( String.format( "Expected a numeric value but got %s", value.toString() ), null );
     }

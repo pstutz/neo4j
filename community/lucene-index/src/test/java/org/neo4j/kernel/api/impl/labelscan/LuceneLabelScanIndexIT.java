@@ -34,7 +34,7 @@ import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.kernel.api.labelscan.LabelScanWriter;
 import org.neo4j.kernel.api.labelscan.NodeLabelUpdate;
 import org.neo4j.storageengine.api.schema.LabelScanReader;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 
@@ -43,7 +43,7 @@ public class LuceneLabelScanIndexIT
 {
 
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
     private int affectedNodes;
 
     @Before
@@ -57,7 +57,6 @@ public class LuceneLabelScanIndexIT
     {
         System.setProperty( "labelScanStore.maxPartitionSize", "" );
     }
-
 
     @Parameterized.Parameters( name = "{0}" )
     public static List<Integer> affectedNodes()
@@ -73,7 +72,7 @@ public class LuceneLabelScanIndexIT
     @Test
     public void readFromPartitionedIndex() throws IOException
     {
-        try ( LuceneLabelScanIndex labelScanIndex = LuceneLabelScanIndexBuilder.create()
+        try ( LabelScanIndex labelScanIndex = LuceneLabelScanIndexBuilder.create()
                 .withIndexIdentifier( "partitionedIndex" + affectedNodes )
                 .withIndexRootFolder( testDir.directory( "partitionedIndexFolder" + affectedNodes ) )
                 .build() )
@@ -108,7 +107,7 @@ public class LuceneLabelScanIndexIT
         }
     }
 
-    private void generateLabelChanges( LuceneLabelScanIndex labelScanIndex, int numberOfUpdates ) throws IOException
+    private void generateLabelChanges( LabelScanIndex labelScanIndex, int numberOfUpdates ) throws IOException
     {
         try ( LabelScanWriter scanWriter = labelScanIndex.getLabelScanWriter() )
         {

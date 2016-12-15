@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
@@ -48,14 +50,16 @@ public abstract class AbstractKeyValueStore<Key> extends LifecycleAdapter
     private final Format format;
     final RotationStrategy rotationStrategy;
     private RotationTimerFactory rotationTimerFactory;
-    private volatile ProgressiveState<Key> state;
+    volatile ProgressiveState<Key> state;
     private DataInitializer<EntryUpdater<Key>> stateInitializer;
+    private final FileSystemAbstraction fs;
     final int keySize;
     final int valueSize;
 
     public AbstractKeyValueStore( FileSystemAbstraction fs, PageCache pages, File base, RotationMonitor monitor,
             RotationTimerFactory timerFactory, int keySize, int valueSize, HeaderField<?>... headerFields )
     {
+        this.fs = fs;
         this.keySize = keySize;
         this.valueSize = valueSize;
         Rotation rotation = getClass().getAnnotation( Rotation.class );
@@ -83,7 +87,21 @@ public abstract class AbstractKeyValueStore<Key> extends LifecycleAdapter
     protected final <Value> Value lookup( Key key, Reader<Value> reader ) throws IOException
     {
         ValueLookup<Value> lookup = new ValueLookup<>( reader );
-        return lookup.value( !state.lookup( key, lookup ) );
+        while ( true )
+        {
+            ProgressiveState<Key> originalState = this.state;
+            try
+            {
+                return lookup.value( !originalState.lookup( key, lookup ) );
+            }
+            catch ( IllegalStateException e )
+            {
+                if ( originalState == this.state )
+                {
+                    throw e;
+                }
+            }
+        }
     }
 
     /** Introspective feature, not thread safe. */
@@ -243,6 +261,13 @@ public abstract class AbstractKeyValueStore<Key> extends LifecycleAdapter
         return true;
     }
 
+    public Iterable<File> allFiles()
+    {
+        return StreamSupport.stream( rotationStrategy.candidateFiles().spliterator(), false )
+                .filter( fs::fileExists )
+                .collect( Collectors.toList() );
+    }
+
     private class RotationTask implements PreparedRotation, Runnable
     {
         private final RotationState<Key> rotation;
@@ -273,22 +298,21 @@ public abstract class AbstractKeyValueStore<Key> extends LifecycleAdapter
 
         private long rotate( boolean force ) throws IOException
         {
-            final long version = rotation.rotationVersion();
-            ProgressiveState<Key> next = rotation.rotate( force, rotationStrategy, rotationTimerFactory,
-                    value -> updateHeaders( value, version ) );
-            try ( LockWrapper ignored = writeLock( updateLock ) )
+            try( RotationState<Key> rotation = this.rotation )
             {
-                state = next;
+                final long version = rotation.rotationVersion();
+                ProgressiveState<Key> next = rotation.rotate( force, rotationStrategy, rotationTimerFactory,
+                        value -> updateHeaders( value, version ) );
+                try ( LockWrapper ignored = writeLock( updateLock ) )
+                {
+                    state = next;
+                }
+                return version;
             }
-            finally
-            {
-                rotation.close();
-            }
-            return version;
         }
     }
 
-    public static abstract class Reader<Value>
+    public abstract static class Reader<Value>
     {
         protected abstract Value parseValue( ReadableBuffer value );
 

@@ -32,19 +32,17 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 
-import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.util.Bits;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.string.UTF8;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
@@ -54,7 +52,7 @@ public class TestArrayStore
     @ClassRule
     public static PageCacheRule pageCacheRule = new PageCacheRule();
     @Rule
-    public TargetDirectory.TestDirectory testDirectory = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDirectory = TestDirectory.testDirectory();
 
     private DynamicArrayStore arrayStore;
     private NeoStores neoStores;
@@ -67,7 +65,7 @@ public class TestArrayStore
         DefaultIdGeneratorFactory idGeneratorFactory = new DefaultIdGeneratorFactory( fs );
         PageCache pageCache = pageCacheRule.getPageCache( fs );
         StoreFactory factory = new StoreFactory( dir, Config.empty(), idGeneratorFactory, pageCache, fs,
-                StandardV3_0.RECORD_FORMATS, NullLogProvider.getInstance() );
+                NullLogProvider.getInstance() );
         neoStores = factory.openAllNeoStores( true );
         arrayStore = neoStores.getPropertyStore().getArrayStore();
     }
@@ -112,7 +110,7 @@ public class TestArrayStore
     {
         String[] array = new String[] { "first", "second" };
         Collection<DynamicRecord> records = new ArrayList<>();
-        arrayStore.allocateRecords( records, array, Iterators.<DynamicRecord>emptyIterator() );
+        arrayStore.allocateRecords( records, array );
         Pair<byte[], byte[]> loaded = loadArray( records );
         assertStringHeader( loaded.first(), array.length );
         ByteBuffer buffer = ByteBuffer.wrap( loaded.other() );
@@ -155,7 +153,7 @@ public class TestArrayStore
     private Collection<DynamicRecord> storeArray( Object array )
     {
         Collection<DynamicRecord> records = new ArrayList<>();
-        arrayStore.allocateRecords( records, array, Iterators.<DynamicRecord>emptyIterator() );
+        arrayStore.allocateRecords( records, array );
         for ( DynamicRecord record : records )
         {
             arrayStore.updateRecord( record );

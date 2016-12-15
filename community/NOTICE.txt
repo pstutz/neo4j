@@ -38,4 +38,3 @@ BSD - Scala License
 
 BSD License
   Scala Compiler
-

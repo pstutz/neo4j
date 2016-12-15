@@ -24,12 +24,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Supplier;
 
-import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.security.URLAccessRule;
-import org.neo4j.helpers.Clock;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
@@ -39,6 +36,7 @@ import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.extension.KernelExtensions;
 import org.neo4j.kernel.extension.UnsatisfiedDependencyStrategies;
+import org.neo4j.kernel.impl.api.LogRotationMonitor;
 import org.neo4j.kernel.impl.logging.LogService;
 import org.neo4j.kernel.impl.logging.StoreLogService;
 import org.neo4j.kernel.impl.pagecache.ConfiguringPageCacheFactory;
@@ -46,6 +44,7 @@ import org.neo4j.kernel.impl.pagecache.PageCacheLifecycle;
 import org.neo4j.kernel.impl.security.URLAccessRules;
 import org.neo4j.kernel.impl.spi.SimpleKernelContext;
 import org.neo4j.kernel.impl.transaction.TransactionStats;
+import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointerMonitor;
 import org.neo4j.kernel.impl.transaction.state.DataSourceManager;
 import org.neo4j.kernel.impl.util.JobScheduler;
 import org.neo4j.kernel.impl.util.Neo4jJobScheduler;
@@ -61,6 +60,7 @@ import org.neo4j.kernel.monitoring.tracing.Tracers;
 import org.neo4j.logging.Level;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
+import org.neo4j.time.Clocks;
 import org.neo4j.udc.UsageData;
 import org.neo4j.udc.UsageDataKeys;
 
@@ -110,14 +110,10 @@ public class PlatformModule
             GraphDatabaseFacadeFactory.Dependencies externalDependencies, GraphDatabaseFacade graphDatabaseFacade )
     {
         this.databaseInfo = databaseInfo;
-        dependencies = new org.neo4j.kernel.impl.util.Dependencies( new Supplier<DependencyResolver>()
-        {
-            @Override
-            public DependencyResolver get()
-            {
-                return dataSourceManager.getDataSource().getDependencyResolver();
-            }
-        } );
+        this.dataSourceManager = new DataSourceManager();
+        dependencies = new org.neo4j.kernel.impl.util.Dependencies(
+                new DataSourceManager.DependencyResolverSupplier( dataSourceManager ) );
+
         life = dependencies.satisfyDependency( createLife() );
         this.graphDatabaseFacade = dependencies.satisfyDependency( graphDatabaseFacade );
 
@@ -132,7 +128,6 @@ public class PlatformModule
                 externalDependencies.settingsClasses(), externalDependencies.kernelExtensions() ) ) );
 
         this.storeDir = providedStoreDir.getAbsoluteFile();
-
 
         fileSystem = dependencies.satisfyDependency( createFileSystemAbstraction() );
 
@@ -160,41 +155,54 @@ public class PlatformModule
         tracers = dependencies.satisfyDependency( new Tracers( desiredImplementationName,
                 logging.getInternalLog( Tracers.class ), monitors, jobScheduler ) );
         dependencies.satisfyDependency( tracers.pageCacheTracer );
-        dependencies.satisfyDependency( tracers.transactionTracer );
-        dependencies.satisfyDependency( tracers.checkPointTracer );
+        dependencies.satisfyDependency( firstImplementor(
+                LogRotationMonitor.class, tracers.transactionTracer, LogRotationMonitor.NULL ) );
+        dependencies.satisfyDependency( firstImplementor(
+                CheckPointerMonitor.class, tracers.checkPointTracer, CheckPointerMonitor.NULL ) );
 
         pageCache = dependencies.satisfyDependency( createPageCache( fileSystem, config, logging, tracers ) );
         life.add( new PageCacheLifecycle( pageCache ) );
 
-        diagnosticsManager = life.add( dependencies.satisfyDependency( new DiagnosticsManager( logging.getInternalLog(
-                DiagnosticsManager.class ) ) ) );
+        diagnosticsManager = life.add( dependencies
+                .satisfyDependency( new DiagnosticsManager( logging.getInternalLog( DiagnosticsManager.class ) ) ) );
 
-        // TODO please fix the bad dependencies instead of doing this. Before the removal of JTA
+        // TODO please fix the bad dependencies instead of doing this.
         // this was the place of the XaDataSourceManager. NeoStoreXaDataSource is create further down than
         // (specifically) KernelExtensions, which creates an interesting out-of-order issue with #doAfterRecovery().
         // Anyways please fix this.
-        dataSourceManager = dependencies.satisfyDependency( new DataSourceManager() );
+        dependencies.satisfyDependency( dataSourceManager );
 
-        availabilityGuard = new AvailabilityGuard( Clock.SYSTEM_CLOCK, logging.getInternalLog(
-                AvailabilityGuard.class ) );
+        availabilityGuard = dependencies.satisfyDependency(
+                new AvailabilityGuard( Clocks.systemClock(), logging.getInternalLog( AvailabilityGuard.class ) ) );
 
         transactionMonitor = dependencies.satisfyDependency( createTransactionStats() );
 
         kernelExtensions = dependencies.satisfyDependency( new KernelExtensions(
                 new SimpleKernelContext( fileSystem, storeDir, databaseInfo, dependencies ),
-                externalDependencies.kernelExtensions(),
-                dependencies,
-                UnsatisfiedDependencyStrategies.fail() ) );
+                externalDependencies.kernelExtensions(), dependencies, UnsatisfiedDependencyStrategies.fail() ) );
 
         urlAccessRule = dependencies.satisfyDependency( URLAccessRules.combined( externalDependencies.urlAccessRules() ) );
 
         publishPlatformInfo( dependencies.resolveDependency( UsageData.class ) );
     }
 
+    @SuppressWarnings( "unchecked" )
+    private <T> T firstImplementor( Class<T> type, Object... candidates )
+    {
+        for ( Object candidate : candidates )
+        {
+            if ( type.isInstance( candidate ) )
+            {
+                return (T) candidate;
+            }
+        }
+        return null;
+    }
+
     private void publishPlatformInfo( UsageData sysInfo )
     {
-        sysInfo.set( UsageDataKeys.version, Version.getKernel().getReleaseVersion() );
-        sysInfo.set( UsageDataKeys.revision, Version.getKernel().getVersion() );
+        sysInfo.set( UsageDataKeys.version, Version.getNeo4jVersion() );
+        sysInfo.set( UsageDataKeys.revision, Version.getKernelVersion() );
     }
 
     public LifeSupport createLife()

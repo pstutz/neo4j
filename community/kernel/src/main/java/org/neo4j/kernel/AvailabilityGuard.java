@@ -19,19 +19,17 @@
  */
 package org.neo4j.kernel;
 
+import java.time.Clock;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-import org.neo4j.helpers.Clock;
 import org.neo4j.helpers.Format;
 import org.neo4j.helpers.Listeners;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.logging.Log;
-
-import static org.neo4j.helpers.Listeners.notifyListeners;
 
 /**
  * The availability guard ensures that the database will only take calls when it is in an ok state.
@@ -42,7 +40,6 @@ import static org.neo4j.helpers.Listeners.notifyListeners;
  */
 public class AvailabilityGuard
 {
-
     public static final String DATABASE_AVAILABLE_MSG = "Fulfilling of requirement makes database available: ";
     public static final String DATABASE_UNAVAILABLE_MSG = "Requirement makes database unavailable: ";
 
@@ -111,7 +108,7 @@ public class AvailabilityGuard
     private final AtomicInteger requirementCount = new AtomicInteger( 0 );
     private final Set<AvailabilityRequirement> blockingRequirements = new CopyOnWriteArraySet<>();
     private final AtomicBoolean isShutdown = new AtomicBoolean( false );
-    private Iterable<AvailabilityListener> listeners = Listeners.newListeners();
+    private final Listeners<AvailabilityListener> listeners = new Listeners<>();
     private final Clock clock;
     private final Log log;
 
@@ -138,14 +135,7 @@ public class AvailabilityGuard
             if ( requirementCount.getAndIncrement() == 0 && !isShutdown.get() )
             {
                 log.info( DATABASE_UNAVAILABLE_MSG + requirement.description() );
-                notifyListeners( listeners, new Listeners.Notification<AvailabilityListener>()
-                {
-                    @Override
-                    public void notify( AvailabilityListener listener )
-                    {
-                        listener.unavailable();
-                    }
-                } );
+                listeners.notify( AvailabilityListener::unavailable );
             }
         }
     }
@@ -167,14 +157,7 @@ public class AvailabilityGuard
             if ( requirementCount.getAndDecrement() == 1 && !isShutdown.get() )
             {
                 log.info( DATABASE_AVAILABLE_MSG + requirement.description() );
-                notifyListeners( listeners, new Listeners.Notification<AvailabilityListener>()
-                {
-                    @Override
-                    public void notify( AvailabilityListener listener )
-                    {
-                        listener.available();
-                    }
-                } );
+                listeners.notify( AvailabilityListener::available );
             }
         }
     }
@@ -193,14 +176,7 @@ public class AvailabilityGuard
 
             if ( requirementCount.get() == 0 )
             {
-                notifyListeners( listeners, new Listeners.Notification<AvailabilityListener>()
-                {
-                    @Override
-                    public void notify( AvailabilityListener listener )
-                    {
-                        listener.unavailable();
-                    }
-                } );
+                listeners.notify( AvailabilityListener::unavailable );
             }
         }
     }
@@ -221,7 +197,6 @@ public class AvailabilityGuard
     {
         return availability() == Availability.AVAILABLE;
     }
-
 
     /**
      * Check if the database has been shut down.
@@ -300,7 +275,7 @@ public class AvailabilityGuard
             return availability;
         }
 
-        long timeout = clock.currentTimeMillis() + millis;
+        long timeout = clock.millis() + millis;
         do
         {
             try
@@ -313,7 +288,7 @@ public class AvailabilityGuard
                 break;
             }
             availability = availability();
-        } while ( availability == Availability.UNAVAILABLE && clock.currentTimeMillis() < timeout );
+        } while ( availability == Availability.UNAVAILABLE && clock.millis() < timeout );
 
         return availability;
     }
@@ -325,7 +300,7 @@ public class AvailabilityGuard
      */
     public void addListener( AvailabilityListener listener )
     {
-        listeners = Listeners.addListener( listener, listeners );
+        listeners.add( listener );
     }
 
     /**
@@ -335,7 +310,7 @@ public class AvailabilityGuard
      */
     public void removeListener( AvailabilityListener listener )
     {
-        listeners = Listeners.removeListener( listener, listeners );
+        listeners.remove( listener );
     }
 
     /**

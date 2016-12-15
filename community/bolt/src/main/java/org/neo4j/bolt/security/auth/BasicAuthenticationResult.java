@@ -19,28 +19,28 @@
  */
 package org.neo4j.bolt.security.auth;
 
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.AuthSubject;
+import org.neo4j.kernel.api.security.SecurityContext;
 
 public class BasicAuthenticationResult implements AuthenticationResult
 {
-    private AccessMode accessMode;
-    private boolean credentialsExpired;
+    private SecurityContext securityContext;
 
-    public BasicAuthenticationResult( AccessMode accessMode, boolean credentialsExpired )
+    public BasicAuthenticationResult( SecurityContext securityContext )
     {
-        this.accessMode = accessMode;
-        this.credentialsExpired = credentialsExpired;
+        this.securityContext = securityContext;
     }
 
     @Override
-    public AccessMode getAccessMode()
+    public SecurityContext getSecurityContext()
     {
-        return accessMode;
+        return securityContext;
     }
 
     @Override
     public boolean credentialsExpired()
     {
-        return credentialsExpired;
+        return securityContext.subject().getAuthenticationResult() ==
+                org.neo4j.kernel.api.security.AuthenticationResult.PASSWORD_CHANGE_REQUIRED;
     }
 }

@@ -20,6 +20,7 @@
 package org.neo4j.unsafe.impl.batchimport.cache;
 
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 import static java.lang.Math.toIntExact;
 
@@ -29,6 +30,7 @@ public class HeapByteArray extends HeapNumberArray<ByteArray> implements ByteArr
     private final byte[] array;
     private final ByteBuffer buffer;
     private final byte[] defaultValue;
+    private final boolean defaultValueIsUniform;
 
     public HeapByteArray( int length, byte[] defaultValue, int base )
     {
@@ -37,6 +39,7 @@ public class HeapByteArray extends HeapNumberArray<ByteArray> implements ByteArr
         this.defaultValue = defaultValue;
         this.array = new byte[itemSize * length];
         this.buffer = ByteBuffer.wrap( array );
+        this.defaultValueIsUniform = isUniform( defaultValue );
         clear();
     }
 
@@ -58,10 +61,30 @@ public class HeapByteArray extends HeapNumberArray<ByteArray> implements ByteArr
     @Override
     public void clear()
     {
-        for ( int i = 0; i < length; i++ )
+        if ( defaultValueIsUniform )
         {
-            System.arraycopy( defaultValue, 0, array, i * itemSize, itemSize );
+            Arrays.fill( array, defaultValue[0] );
         }
+        else
+        {
+            for ( int i = 0; i < length; i++ )
+            {
+                System.arraycopy( defaultValue, 0, array, i * itemSize, itemSize );
+            }
+        }
+    }
+
+    private static boolean isUniform( byte[] value )
+    {
+        byte reference = value[0];
+        for ( int i = 1; i < value.length; i++ )
+        {
+            if ( reference != value[i] )
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -89,9 +112,23 @@ public class HeapByteArray extends HeapNumberArray<ByteArray> implements ByteArr
     }
 
     @Override
+    public int get3ByteInt( long index, int offset )
+    {
+        int address = index( index, offset );
+        return get3ByteIntFromByteBuffer( buffer, address );
+    }
+
+    @Override
     public long get6ByteLong( long index, int offset )
     {
         return get6BLongFromByteBuffer( buffer, index( index, offset ) );
+    }
+
+    protected static int get3ByteIntFromByteBuffer( ByteBuffer buffer, int address )
+    {
+        int lowWord = buffer.getShort( address ) & 0xFFFF;
+        int highByte = buffer.get( address + Short.BYTES );
+        return lowWord | (highByte << Short.SIZE);
     }
 
     protected static long get6BLongFromByteBuffer( ByteBuffer buffer, int startOffset )
@@ -143,6 +180,14 @@ public class HeapByteArray extends HeapNumberArray<ByteArray> implements ByteArr
     public void setLong( long index, int offset, long value )
     {
         buffer.putLong( index( index, offset ), value );
+    }
+
+    @Override
+    public void set3ByteInt( long index, int offset, int value )
+    {
+        int address = index( index, offset );
+        buffer.putShort( address, (short) value );
+        buffer.put( address + Short.BYTES, (byte) (value >>> Short.SIZE) );
     }
 
     private int index( long index, int offset )

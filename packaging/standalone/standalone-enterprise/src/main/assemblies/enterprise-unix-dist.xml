@@ -30,7 +30,7 @@
     <!-- filter plain text -->
     <fileSet>
       <directory>src/main/distribution/text/enterprise</directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory/>
       <lineEnding>keep</lineEnding>
       <filtered>true</filtered>
       <excludes>
@@ -43,7 +43,7 @@
     <!-- password files -->
     <fileSet>
       <directory>src/main/distribution/text/enterprise</directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory/>
       <lineEnding>unix</lineEnding>
       <filtered>true</filtered>
       <includes>
@@ -54,7 +54,7 @@
     <!-- non-maven jars -->
     <fileSet>
       <directory>src/main/distribution/binary</directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory/>
       <includes>
         <include>lib/*.jar</include>
       </includes>
@@ -63,7 +63,7 @@
     <!-- filter and chmod 755 shell scripts -->
     <fileSet>
       <directory>${project.parent.basedir}/src/main/distribution/shell-scripts</directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory/>
       <lineEnding>unix</lineEnding>
       <fileMode>0755</fileMode>
       <excludes>
@@ -73,25 +73,34 @@
         <exclude>**/*.ps1</exclude>
         <exclude>**/Neo4j-Management</exclude>
         <exclude>**/*.exe</exclude>
-        <exclude>**/config-migrator.jar</exclude>
+        <exclude>**/2.x-config-migrator.jar</exclude>
       </excludes>
       <filtered>true</filtered>
     </fileSet>
     <!-- configuration migrator -->
     <fileSet>
       <directory>${project.parent.basedir}/src/main/distribution/shell-scripts</directory>
-      <outputDirectory></outputDirectory>
+      <outputDirectory/>
       <includes>
-        <include>**/config-migrator.jar</include>
+        <include>**/2.x-config-migrator.jar</include>
       </includes>
     </fileSet>
-    <!-- upgrade text file -->
+    <!-- filter and chmod 755 cypher-shell -->
     <fileSet>
-      <directory>target/upgrade</directory>
-      <outputDirectory></outputDirectory>
-      <fileMode>0644</fileMode>
+      <directory>${project.parent.basedir}/src/main/distribution/cypher-shell</directory>
+      <outputDirectory>bin</outputDirectory>
+      <lineEnding>keep</lineEnding>
+      <fileMode>0755</fileMode>
+      <excludes>
+        <exclude>**/*.bat</exclude>
+        <exclude>**/*.jar</exclude>
+      </excludes>
+    </fileSet>
+    <fileSet>
+      <directory>${project.parent.basedir}/src/main/distribution/cypher-shell</directory>
+      <outputDirectory>bin/tools</outputDirectory>
       <includes>
-        <include>UPGRADE.txt</include>
+        <include>**/*.jar</include>
       </includes>
     </fileSet>
   </fileSets>
@@ -135,7 +144,6 @@
       <useStrictFiltering>true</useStrictFiltering>
       <excludes>
         <exclude>org.neo4j:*</exclude>
-        <exclude>org.neo4j.doc:*</exclude>
         <exclude>jline:jline</exclude>
         <exclude>org.apache.lucene:*</exclude>
         <exclude>io.netty:netty</exclude>

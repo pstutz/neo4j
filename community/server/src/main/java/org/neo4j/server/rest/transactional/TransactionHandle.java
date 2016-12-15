@@ -29,15 +29,17 @@ import org.neo4j.cypher.CypherException;
 import org.neo4j.cypher.InvalidSemanticsException;
 import org.neo4j.graphdb.Result;
 import org.neo4j.graphdb.security.AuthorizationViolationException;
+import org.neo4j.graphdb.security.WriteOperationsNotAllowedException;
 import org.neo4j.kernel.DeadlockDetectedException;
+import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.api.KernelTransaction.Type;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.kernel.impl.query.QueryExecutionKernelException;
-import org.neo4j.kernel.impl.query.QuerySession;
+import org.neo4j.kernel.impl.query.TransactionalContext;
 import org.neo4j.logging.Log;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.server.rest.transactional.error.InternalBeginTransactionError;
@@ -72,21 +74,26 @@ public class TransactionHandle implements TransactionTerminationHandle
     private final TransactionRegistry registry;
     private final TransactionUriScheme uriScheme;
     private final Type type;
-    private final AccessMode mode;
+    private final SecurityContext securityContext;
+    private long customTransactionTimeout;
     private final Log log;
     private final long id;
     private TransitionalTxManagementKernelTransaction context;
+    private GraphDatabaseQueryService queryService;
 
     TransactionHandle( TransitionalPeriodTransactionMessContainer txManagerFacade, QueryExecutionEngine engine,
-            TransactionRegistry registry, TransactionUriScheme uriScheme, boolean implicitTransaction, AccessMode mode,
+            GraphDatabaseQueryService queryService, TransactionRegistry registry, TransactionUriScheme uriScheme,
+            boolean implicitTransaction, SecurityContext securityContext, long customTransactionTimeout,
             LogProvider logProvider )
     {
         this.txManagerFacade = txManagerFacade;
         this.engine = engine;
+        this.queryService = queryService;
         this.registry = registry;
         this.uriScheme = uriScheme;
         this.type = implicitTransaction ? Type.implicit : Type.explicit;
-        this.mode = mode;
+        this.securityContext = securityContext;
+        this.customTransactionTimeout = customTransactionTimeout;
         this.log = logProvider.getLog( getClass() );
         this.id = registry.begin( this );
     }
@@ -203,7 +210,7 @@ public class TransactionHandle implements TransactionTerminationHandle
         {
             try
             {
-                context = txManagerFacade.newTransaction( type, mode );
+                context = txManagerFacade.newTransaction( type, securityContext, customTransactionTimeout );
             }
             catch ( RuntimeException e )
             {
@@ -311,12 +318,14 @@ public class TransactionHandle implements TransactionTerminationHandle
                     }
 
                     hasPrevious = true;
-                    QuerySession querySession = txManagerFacade.create( engine.queryService(), type, mode, request );
-                    Result result = safelyExecute( statement, hasPeriodicCommit, querySession );
+                    TransactionalContext tc = txManagerFacade.create( request, queryService, type, securityContext,
+                            statement.statement(), statement.parameters() );
+                    Result result = safelyExecute( statement, hasPeriodicCommit, tc );
                     output.statementResult( result, statement.includeStats(), statement.resultDataContents() );
                     output.notifications( result.getNotifications() );
                 }
-                catch ( KernelException | CypherException | AuthorizationViolationException e )
+                catch ( KernelException | CypherException | AuthorizationViolationException |
+                        WriteOperationsNotAllowedException e )
                 {
                     errors.add( new Neo4jError( e.status(), e ) );
                     break;
@@ -354,12 +363,12 @@ public class TransactionHandle implements TransactionTerminationHandle
         }
     }
 
-    private Result safelyExecute( Statement statement, boolean hasPeriodicCommit, QuerySession querySession )
+    private Result safelyExecute( Statement statement, boolean hasPeriodicCommit, TransactionalContext tc )
             throws QueryExecutionKernelException
     {
         try
         {
-            return engine.executeQuery( statement.statement(), statement.parameters(), querySession );
+            return engine.executeQuery( statement.statement(), statement.parameters(), tc );
         }
         finally
         {

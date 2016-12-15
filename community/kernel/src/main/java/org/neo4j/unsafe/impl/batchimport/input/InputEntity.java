@@ -39,8 +39,8 @@ public abstract class InputEntity implements SourceTraceability
     private Object[] properties;
     private Long firstPropertyId;
     private final String sourceDescription;
-    private final long lineNumber;
-    private final long position;
+    private long lineNumber;
+    private long position;
 
     public InputEntity( String sourceDescription, long sourceLineNumber, long sourcePosition,
             Object[] properties, Long firstPropertyId )
@@ -55,6 +55,10 @@ public abstract class InputEntity implements SourceTraceability
         this.firstPropertyId = firstPropertyId;
     }
 
+    /**
+     * @return properties on this entity. Properties sits in one array with alternating keys (even indexes)
+     * and values (odd indexes).
+     */
     public Object[] properties()
     {
         return properties;
@@ -161,6 +165,12 @@ public abstract class InputEntity implements SourceTraceability
     public long position()
     {
         return position;
+    }
+
+    public void rebase( long baseLineNumber, long basePosition )
+    {
+        lineNumber += baseLineNumber;
+        position += basePosition;
     }
 
     @Override

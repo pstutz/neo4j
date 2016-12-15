@@ -29,11 +29,13 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.neo4j.desktop.Parameters;
 import org.neo4j.desktop.config.Installation;
 import org.neo4j.desktop.model.exceptions.UnsuitableDirectoryException;
 import org.neo4j.desktop.runtime.DesktopConfigurator;
 import org.neo4j.desktop.ui.DesktopModelListener;
-import org.neo4j.helpers.HostnamePort;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
+import org.neo4j.helpers.ListenSocketAddress;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.internal.Version;
 
@@ -45,10 +47,11 @@ public class DesktopModel
     private final DesktopConfigurator serverConfigurator;
     private final List<DesktopModelListener> listeners = new ArrayList<>();
 
-    public DesktopModel( Installation installation )
+    public DesktopModel( Installation installation, Parameters parameters )
     {
         this.installation = installation;
-        this.serverConfigurator = new DesktopConfigurator( installation, installation.getDatabaseDirectory() );
+        this.serverConfigurator = new DesktopConfigurator( installation, parameters,
+                installation.getDatabaseDirectory() );
     }
 
     public Config getConfig()
@@ -65,10 +68,10 @@ public class DesktopModel
 
     public String getNeo4jVersion()
     {
-        return format( "%s", Version.getKernel().getReleaseVersion() );
+        return format( "%s", Version.getNeo4jVersion() );
     }
 
-    public HostnamePort getServerAddress()
+    public ListenSocketAddress getServerAddress()
     {
         return serverConfigurator.getServerAddress();
     }
@@ -84,7 +87,6 @@ public class DesktopModel
         serverConfigurator.setDatabaseDirectory( databaseDirectory );
     }
 
-
     public File getVmOptionsFile()
     {
         return installation.getVmOptionsFile();
@@ -92,7 +94,7 @@ public class DesktopModel
 
     public File getDatabaseConfigurationFile()
     {
-        return installation.getConfigurationsFile();
+        return serverConfigurator.getConfigurationsFile();
     }
 
     @SuppressWarnings("ResultOfMethodCallIgnored")
@@ -191,7 +193,7 @@ public class DesktopModel
 
     public File getPluginsDirectory()
     {
-        return installation.getPluginsDirectory();
+        return serverConfigurator.configuration().get( GraphDatabaseSettings.plugin_dir );
     }
 
     public void openDirectory( File directory ) throws IOException

@@ -35,7 +35,7 @@ import org.neo4j.cypher.internal.compiler.v2_3.helpers.JavaConversionSupport._
 import org.neo4j.cypher.internal.compiler.v2_3.pipes.matching.PatternNode
 import org.neo4j.cypher.internal.compiler.v2_3.spi._
 import org.neo4j.cypher.internal.frontend.v2_3.{Bound, EntityNotFoundException, FailedIndexException, SemanticDirection}
-import org.neo4j.cypher.internal.spi.{BeansAPIRelationshipIterator, TransactionalContextWrapper}
+import org.neo4j.cypher.internal.spi.{BeansAPIRelationshipIterator, TransactionalContextWrapperv3_1}
 import org.neo4j.cypher.javacompat.internal.GraphDatabaseCypherService
 import org.neo4j.graphalgo.impl.path.ShortestPath
 import org.neo4j.graphalgo.impl.path.ShortestPath.ShortestPathPredicate
@@ -44,16 +44,16 @@ import org.neo4j.graphdb._
 import org.neo4j.graphdb.security.URLAccessValidationError
 import org.neo4j.graphdb.traversal.{Evaluators, TraversalDescription, Uniqueness}
 import org.neo4j.kernel.GraphDatabaseQueryService
-import org.neo4j.kernel.api._
 import org.neo4j.kernel.api.constraints.{NodePropertyExistenceConstraint, RelationshipPropertyExistenceConstraint, UniquenessConstraint}
 import org.neo4j.kernel.api.exceptions.schema.{AlreadyConstrainedException, AlreadyIndexedException}
 import org.neo4j.kernel.api.index.{IndexDescriptor, InternalIndexState}
+import org.neo4j.kernel.api.{exceptions, _}
 import org.neo4j.kernel.impl.core.NodeManager
 
 import scala.collection.JavaConverters._
 import scala.collection.{Iterator, mutable}
 
-final class TransactionBoundQueryContext(tc: TransactionalContextWrapper)
+final class TransactionBoundQueryContext(tc: TransactionalContextWrapperv3_1)
   extends TransactionBoundTokenContext(tc.statement) with QueryContext {
 
   override val nodeOps = new NodeOperations
@@ -74,7 +74,7 @@ final class TransactionBoundQueryContext(tc: TransactionalContextWrapper)
     if (tc.isOpen) {
       work(this)
     } else {
-      val context = tc.provideContext()
+      val context = tc.getOrBeginNewIfClosed()
       var success = false
       try {
         val result = work(new TransactionBoundQueryContext(context))
@@ -275,27 +275,62 @@ final class TransactionBoundQueryContext(tc: TransactionalContextWrapper)
 
   class NodeOperations extends BaseOperations[Node] {
     def delete(obj: Node) {
-      tc.statement.dataWriteOperations().nodeDelete(obj.getId)
+      try {
+        tc.statement.dataWriteOperations().nodeDelete(obj.getId)
+      } catch {
+        case _: exceptions.EntityNotFoundException => // node has been deleted by another transaction, oh well...
+      }
     }
 
-    def propertyKeyIds(id: Long): Iterator[Int] =
-      JavaConversionSupport.asScala(tc.statement.readOperations().nodeGetPropertyKeys(id))
+    def detachDelete(obj: Node): Int = {
+      try {
+        tc.statement.dataWriteOperations().nodeDetachDelete(obj.getId)
+      } catch {
+        case _: exceptions.EntityNotFoundException => // the node has been deleted by another transaction, oh well...
+          0
+      }
+    }
+
+    def propertyKeyIds(id: Long): Iterator[Int] = try {
+      // use the following when bumping 2.3.x dependency
+      // JavaConversionSupport.asScalaENFXSafe(tc.statement.readOperations().nodeGetPropertyKeys(id))
+      new Iterator[Int] {
+        val inner = tc.statement.readOperations().nodeGetPropertyKeys(id)
+
+        override def hasNext: Boolean = inner.hasNext
+
+        override def next(): Int = try {
+          inner.next()
+        } catch {
+          case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => null.asInstanceOf[Int]
+        }
+      }
+    } catch {
+      case _: exceptions.EntityNotFoundException => Iterator.empty
+    }
 
     def getProperty(id: Long, propertyKeyId: Int): Any = try {
       tc.statement.readOperations().nodeGetProperty(id, propertyKeyId)
     } catch {
-      case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => null
+      case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => null.asInstanceOf[Int]
     }
 
-    def hasProperty(id: Long, propertyKey: Int) =
+    def hasProperty(id: Long, propertyKey: Int) = try {
       tc.statement.readOperations().nodeHasProperty(id, propertyKey)
-
-    def removeProperty(id: Long, propertyKeyId: Int) {
-      tc.statement.dataWriteOperations().nodeRemoveProperty(id, propertyKeyId)
+    } catch {
+      case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => false
     }
 
-    override def setProperty(id: Long, propertyKeyId: Int, value: Any) {
-      tc.statement.dataWriteOperations().nodeSetProperty(id, properties.Property.property(propertyKeyId, value))
+    def removeProperty(id: Long, propertyKeyId: Int) = try {
+      tc.statement.dataWriteOperations().nodeRemoveProperty(id, propertyKeyId)
+    } catch {
+      case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => //ignore
+    }
+
+    def setProperty(id: Long, propertyKeyId: Int, value: Any) = try {
+      tc.statement.dataWriteOperations().nodeSetProperty(id, properties.Property.property(propertyKeyId, value) )
+    } catch {
+      case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => //ignore
     }
 
     override def getById(id: Long) = try {
@@ -304,39 +339,68 @@ final class TransactionBoundQueryContext(tc: TransactionalContextWrapper)
       case e: NotFoundException => throw new EntityNotFoundException(s"Node with id $id", e)
     }
 
-    override def all: Iterator[Node] =
+    def all: Iterator[Node] =
       JavaConversionSupport.mapToScalaENFXSafe(tc.statement.readOperations().nodesGetAll())(getById)
 
-    override def indexGet(name: String, key: String, value: Any): Iterator[Node] =
+    def indexGet(name: String, key: String, value: Any): Iterator[Node] =
       JavaConversionSupport.mapToScalaENFXSafe(tc.statement.readOperations().nodeLegacyIndexGet(name, key, value))(getById)
 
-    override def indexQuery(name: String, query: Any): Iterator[Node] =
+    def indexQuery(name: String, query: Any): Iterator[Node] =
       JavaConversionSupport.mapToScalaENFXSafe(tc.statement.readOperations().nodeLegacyIndexQuery(name, query))(getById)
 
-    override def isDeleted(n: Node): Boolean =
+    def isDeleted(n: Node): Boolean =
       tc.stateView.hasTxStateWithChanges && tc.stateView.txState().nodeIsDeletedInThisTx(n.getId)
   }
 
   class RelationshipOperations extends BaseOperations[Relationship] {
     override def delete(obj: Relationship) {
-      tc.statement.dataWriteOperations().relationshipDelete(obj.getId)
+      try {
+        tc.statement.dataWriteOperations().relationshipDelete(obj.getId)
+      } catch {
+        case _: exceptions.EntityNotFoundException => // node has been deleted by another transaction, oh well...
+      }
     }
 
-    override def propertyKeyIds(id: Long): Iterator[Int] =
-      asScala(tc.statement.readOperations().relationshipGetPropertyKeys(id))
+    override def propertyKeyIds(id: Long): Iterator[Int] = try {
+      // use the following when bumping the cypher 2.3.x version
+      //JavaConversionSupport.asScalaENFXSafe(statement.readOperations().relationshipGetPropertyKeys(id))
+        new Iterator[Int] {
+          val inner = tc.statement.readOperations().relationshipGetPropertyKeys(id)
 
-    override def getProperty(id: Long, propertyKeyId: Int): Any =
+          override def hasNext: Boolean = inner.hasNext
+
+          override def next(): Int = try {
+            inner.next()
+          } catch {
+            case _: org.neo4j.kernel.api.exceptions.EntityNotFoundException => null.asInstanceOf[Int]
+          }
+        }
+      } catch {
+        case _: exceptions.EntityNotFoundException => Iterator.empty
+      }
+
+    override def getProperty(id: Long, propertyKeyId: Int): Any = try {
       tc.statement.readOperations().relationshipGetProperty(id, propertyKeyId)
-
-    override def hasProperty(id: Long, propertyKey: Int) =
-      tc.statement.readOperations().relationshipHasProperty(id, propertyKey)
-
-    override def removeProperty(id: Long, propertyKeyId: Int) {
-      tc.statement.dataWriteOperations().relationshipRemoveProperty(id, propertyKeyId)
+    } catch {
+      case _: exceptions.EntityNotFoundException => null
     }
 
-    override def setProperty(id: Long, propertyKeyId: Int, value: Any) {
+    override def hasProperty(id: Long, propertyKey: Int) = try {
+      tc.statement.readOperations().relationshipHasProperty(id, propertyKey)
+    } catch {
+      case _: exceptions.EntityNotFoundException => false
+    }
+
+    override def removeProperty(id: Long, propertyKeyId: Int) = try {
+      tc.statement.dataWriteOperations().relationshipRemoveProperty(id, propertyKeyId)
+    } catch {
+      case _: exceptions.EntityNotFoundException => //ignore
+    }
+
+    override def setProperty(id: Long, propertyKeyId: Int, value: Any) = try {
       tc.statement.dataWriteOperations().relationshipSetProperty(id, properties.Property.property(propertyKeyId, value))
+    } catch {
+      case _: exceptions.EntityNotFoundException => //ignore
     }
 
     override def getById(id: Long) = try {
@@ -538,5 +602,14 @@ final class TransactionBoundQueryContext(tc: TransactionalContextWrapper)
 
   def relationshipCountByCountStore(startLabelId: Int, typeId: Int, endLabelId: Int): Long = {
     tc.statement.readOperations().countsForRelationship(startLabelId, typeId, endLabelId)
+  }
+
+  override def detachDeleteNode(node: Node): Int = {
+    try {
+      tc.statement.dataWriteOperations().nodeDetachDelete(node.getId)
+    } catch {
+      case _: exceptions.EntityNotFoundException => // the node has been deleted by another transaction, oh well...
+        0
+    }
   }
 }

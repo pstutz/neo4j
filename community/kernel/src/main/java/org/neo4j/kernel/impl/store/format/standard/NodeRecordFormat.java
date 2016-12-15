@@ -22,7 +22,6 @@ package org.neo4j.kernel.impl.store.format.standard;
 import java.io.IOException;
 
 import org.neo4j.io.pagecache.PageCursor;
-import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.kernel.impl.store.format.BaseOneByteHeaderRecordFormat;
 import org.neo4j.kernel.impl.store.format.BaseRecordFormat;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
@@ -45,11 +44,12 @@ public class NodeRecordFormat extends BaseOneByteHeaderRecordFormat<NodeRecord>
         return new NodeRecord( -1 );
     }
 
-    public void read( NodeRecord record, PageCursor cursor, RecordLoad mode, int recordSize, PagedFile storeFile )
+    public void read( NodeRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
             throws IOException
     {
         byte headerByte = cursor.getByte();
         boolean inUse = isInUse( headerByte );
+        record.setInUse( inUse );
         if ( mode.shouldLoad( inUse ) )
         {
             long nextRel = cursor.getInt() & 0xFFFFFFFFL;
@@ -71,7 +71,7 @@ public class NodeRecordFormat extends BaseOneByteHeaderRecordFormat<NodeRecord>
     }
 
     @Override
-    public void write( NodeRecord record, PageCursor cursor, int recordSize, PagedFile storeFile ) throws IOException
+    public void write( NodeRecord record, PageCursor cursor, int recordSize ) throws IOException
     {
         if ( record.inUse() )
         {

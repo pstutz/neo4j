@@ -32,19 +32,23 @@ import org.neo4j.graphdb.QueryExecutionException;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.graphdb.Result;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.graphdb.spatial.Point;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.coreapi.TopLevelTransaction;
 import org.neo4j.kernel.impl.query.QueryExecutionKernelException;
-import org.neo4j.test.ImpermanentDatabaseRule;
+import org.neo4j.test.rule.ImpermanentDatabaseRule;
 
+import static java.util.Arrays.asList;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.core.IsNull.notNullValue;
 import static org.hamcrest.core.IsNull.nullValue;
+import static org.neo4j.helpers.collection.MapUtil.map;
 
 public class ExecutionResultTest
 {
@@ -117,7 +121,7 @@ public class ExecutionResultTest
 
         // When
         List<Map<String,Object>> listResult;
-        try ( Result result = db.execute( "CYPHER runtime=compiled MATCH (n) RETURN n" ) )
+        try ( Result result = db.execute( "CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n" ) )
         {
             listResult = Iterators.asList( result );
         }
@@ -135,7 +139,7 @@ public class ExecutionResultTest
 
         // When
         Map<String,Object> firstRow = null;
-        try ( Result result = db.execute( "CYPHER runtime=compiled MATCH (n) RETURN n" ) )
+        try ( Result result = db.execute( "CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n" ) )
         {
             if ( result.hasNext() )
             {
@@ -156,7 +160,7 @@ public class ExecutionResultTest
 
         // When
         final List<Result.ResultRow> listResult = new ArrayList<>();
-        try ( Result result = db.execute( "CYPHER runtime=compiled MATCH (n) RETURN n" ) )
+        try ( Result result = db.execute( "CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n" ) )
         {
             result.accept( row -> {
                 listResult.add( row );
@@ -177,7 +181,7 @@ public class ExecutionResultTest
 
         // When
         final List<Result.ResultRow> listResult = new ArrayList<>();
-        try ( Result result = db.execute( "CYPHER runtime=compiled MATCH (n) RETURN n" ) )
+        try ( Result result = db.execute( "CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n" ) )
         {
             result.accept( row -> {
                 listResult.add( row );
@@ -197,7 +201,7 @@ public class ExecutionResultTest
         createNode();
 
         // When
-        try ( Result ignore = db.execute( "CYPHER runtime=compiled MATCH (n) RETURN n" ) )
+        try ( Result ignore = db.execute( "CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n" ) )
         {
             // Then
             // just close result without consuming it
@@ -211,6 +215,36 @@ public class ExecutionResultTest
             db.createNode();
             tx.success();
         }
+    }
+
+    @Test
+    public void shouldHandleListsOfPointsAsInput()
+    {
+        // Given
+        Point point1 =
+                (Point) db.execute( "RETURN point({latitude: 12.78, longitude: 56.7}) as point" ).next().get( "point" );
+        Point point2 =
+                (Point) db.execute( "RETURN point({latitude: 12.18, longitude: 56.2}) as point" ).next().get( "point" );
+
+        // When
+        double distance = (double) db.execute( "RETURN distance({points}[0], {points}[1]) as dist",
+                map( "points", asList( point1, point2 ) ) ).next().get( "dist" );
+        // Then
+        assertThat( Math.round( distance ), equalTo( 86107L ) );
+    }
+
+    @Test
+    public void shouldHandleMapWithPointsAsInput()
+    {
+        // Given
+        Point point1 = (Point) db.execute( "RETURN point({latitude: 12.78, longitude: 56.7}) as point"  ).next().get( "point" );
+        Point point2 = (Point) db.execute( "RETURN point({latitude: 12.18, longitude: 56.2}) as point"  ).next().get( "point" );
+
+        // When
+        double distance = (double) db.execute( "RETURN distance({points}['p1'], {points}['p2']) as dist",
+                map( "points", map("p1", point1, "p2", point2) ) ).next().get( "dist" );
+        // Then
+        assertThat(Math.round( distance ), equalTo(86107L));
     }
 
     private TopLevelTransaction activeTransaction()

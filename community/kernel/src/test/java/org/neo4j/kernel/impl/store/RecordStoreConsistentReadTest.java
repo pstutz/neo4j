@@ -34,7 +34,7 @@ import org.neo4j.graphdb.mockfs.EphemeralFileSystemAbstraction;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
+import org.neo4j.kernel.impl.store.allocator.ReusableRecordsAllocator;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.LabelTokenRecord;
@@ -44,7 +44,7 @@ import org.neo4j.kernel.impl.store.record.RecordLoad;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.string.UTF8;
-import org.neo4j.test.PageCacheRule;
+import org.neo4j.test.rule.PageCacheRule;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertNotNull;
@@ -74,8 +74,7 @@ public abstract class RecordStoreConsistentReadTest<R extends AbstractBaseRecord
         PageCache pageCache = pageCacheRule.getPageCache( fs );
         pageCache = pageCacheRule.withInconsistentReads( pageCache, nextReadIsInconsistent );
         File storeDir = new File( "stores" );
-        StoreFactory factory = new StoreFactory( fs, storeDir, pageCache, StandardV3_0.RECORD_FORMATS,
-                NullLogProvider.getInstance() );
+        StoreFactory factory = new StoreFactory( storeDir, pageCache, fs, NullLogProvider.getInstance() );
         NeoStores neoStores = factory.openAllNeoStores( true );
         S store = initialiseStore( neoStores );
 
@@ -433,23 +432,7 @@ public abstract class RecordStoreConsistentReadTest<R extends AbstractBaseRecord
             record.setPrevProp( 4 );
             record.setInUse( true );
             PropertyBlock block = new PropertyBlock();
-            DynamicRecordAllocator stringAllocator = new DynamicRecordAllocator()
-            {
-                @Override
-                public int getRecordDataSize()
-                {
-                    return 64;
-                }
-
-                @Override
-                public DynamicRecord nextUsedRecordOrNew( Iterator<DynamicRecord> recordsToUseFirst )
-                {
-                    DynamicRecord record = new DynamicRecord( 7 );
-                    record.setCreated();
-                    record.setInUse( true );
-                    return record;
-                }
-            };
+            DynamicRecordAllocator stringAllocator = new ReusableRecordsAllocator( 64, new DynamicRecord( 7 ) );
             String value = "a string too large to fit in the property block itself";
             PropertyStore.encodeValue( block, 6, value, stringAllocator, null );
             if ( light )

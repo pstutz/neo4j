@@ -19,46 +19,252 @@
  */
 package org.neo4j.kernel.builtinprocs;
 
-import java.lang.management.ManagementFactory;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
-import org.neo4j.function.ThrowingConsumer;
+import org.neo4j.graphdb.DependencyResolver;
+import org.neo4j.graphdb.Label;
+import org.neo4j.graphdb.RelationshipType;
+import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.ReadOperations;
+import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.StatementTokenNameLookup;
+import org.neo4j.kernel.api.TokenNameLookup;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
-import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.api.exceptions.Status;
+import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
+import org.neo4j.kernel.api.proc.ProcedureSignature;
+import org.neo4j.kernel.api.proc.UserFunctionSignature;
+import org.neo4j.kernel.impl.api.TokenAccess;
+import org.neo4j.kernel.impl.api.index.IndexingService;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
+import org.neo4j.procedure.Context;
+import org.neo4j.procedure.Description;
+import org.neo4j.procedure.Name;
+import org.neo4j.procedure.Procedure;
 
-import static org.neo4j.kernel.api.proc.ProcedureSignature.procedureName;
+import static org.neo4j.helpers.collection.Iterators.asList;
+import static org.neo4j.helpers.collection.Iterators.asSet;
+import static org.neo4j.procedure.Mode.READ;
 
-/**
- * This registers procedures that are expected to be available by default in Neo4j.
- */
-public class BuiltInProcedures implements ThrowingConsumer<Procedures, ProcedureException>
+@SuppressWarnings( {"unused", "WeakerAccess"} )
+public class BuiltInProcedures
 {
-    private final String neo4jVersion;
-    private final String neo4jEdition;
+    @Context
+    public KernelTransaction tx;
 
-    public BuiltInProcedures( String neo4jVersion, String neo4jEdition )
+    @Context
+    public DependencyResolver resolver;
+
+    @Context
+    public GraphDatabaseAPI graphDatabaseAPI;
+
+    @Description( "List all labels in the database." )
+    @Procedure( name = "db.labels", mode = READ )
+    public Stream<LabelResult> listLabels()
     {
-        this.neo4jVersion = neo4jVersion;
-        this.neo4jEdition = neo4jEdition;
+        return TokenAccess.LABELS.inUse( tx.acquireStatement() ).map( LabelResult::new ).stream();
     }
 
-    @Override
-    public void accept( Procedures procs ) throws ProcedureException
+    @Description( "List all property keys in the database." )
+    @Procedure( name = "db.propertyKeys", mode = READ )
+    public Stream<PropertyKeyResult> listPropertyKeys()
     {
-        // These are 'db'-namespaced procedures. They deal with database-level
-        // functionality - eg. things that differ across databases
-        procs.register( new ListLabelsProcedure( procedureName( "db", "labels" ) ) );
-        procs.register( new ListPropertyKeysProcedure( procedureName( "db", "propertyKeys" ) ) );
-        procs.register( new ListRelationshipTypesProcedure( procedureName( "db", "relationshipTypes" ) ) );
-        procs.register( new ListIndexesProcedure( procedureName( "db", "indexes" ) ) );
-        procs.register( new ListConstraintsProcedure( procedureName( "db", "constraints" ) ) );
+        return TokenAccess.PROPERTY_KEYS.inUse( tx.acquireStatement() ).map( PropertyKeyResult::new ).stream();
+    }
 
-        // These are 'sys'-namespaced procedures, they deal with DBMS-level
-        // functionality - eg. things that apply across databases.
-        procs.register( new ListProceduresProcedure( procedureName( "dbms", "procedures" ) ) );
-        procs.register( new ListComponentsProcedure( procedureName( "dbms", "components" ), neo4jVersion, neo4jEdition ) );
-        procs.register( new JmxQueryProcedure( procedureName( "dbms", "queryJmx" ), ManagementFactory.getPlatformMBeanServer() ) );
+    @Description( "List all relationship types in the database." )
+    @Procedure( name = "db.relationshipTypes", mode = READ )
+    public Stream<RelationshipTypeResult> listRelationshipTypes()
+    {
+        return TokenAccess.RELATIONSHIP_TYPES.inUse( tx.acquireStatement() )
+                .map( RelationshipTypeResult::new ).stream();
+    }
 
-        // These are 'dbms'-namespaced procedures for dealing with authentication and authorization-oriented operations
-        procs.register( new AlterUserPasswordProcedure( procedureName( "dbms", "changePassword" ) ) );
+    @Description( "List all indexes in the database." )
+    @Procedure( name = "db.indexes", mode = READ )
+    public Stream<IndexResult> listIndexes() throws ProcedureException
+    {
+        try ( Statement statement = tx.acquireStatement() )
+        {
+            ReadOperations operations = statement.readOperations();
+            TokenNameLookup tokens = new StatementTokenNameLookup( operations );
+
+            List<IndexDescriptor> indexes =
+                    asList( operations.indexesGetAll() );
+
+            Set<IndexDescriptor> uniqueIndexes = asSet( operations.uniqueIndexesGetAll() );
+            indexes.addAll( uniqueIndexes );
+            indexes.sort( ( a, b ) -> a.userDescription( tokens ).compareTo( b.userDescription( tokens ) ) );
+
+            ArrayList<IndexResult> result = new ArrayList<>();
+            for ( IndexDescriptor index : indexes )
+            {
+                try
+                {
+                    String type;
+                    if ( uniqueIndexes.contains( index ) )
+                    {
+                        type = IndexType.NODE_UNIQUE_PROPERTY.typeName();
+                    }
+                    else
+                    {
+                        type = IndexType.NODE_LABEL_PROPERTY.typeName();
+                    }
+
+                    result.add( new IndexResult( "INDEX ON " + index.userDescription( tokens ),
+                            operations.indexGetState( index ).toString(), type ) );
+                }
+                catch ( IndexNotFoundKernelException e )
+                {
+                    throw new ProcedureException( Status.Schema.IndexNotFound, e,
+                            "No index on ", index.userDescription( tokens ) );
+                }
+            }
+            return result.stream();
+        }
+    }
+
+    @Description( "Wait for an index to come online (for example: CALL db.awaitIndex(\":Person(name)\"))." )
+    @Procedure( name = "db.awaitIndex", mode = READ )
+    public void awaitIndex( @Name( "index" ) String index,
+                            @Name( value = "timeOutSeconds", defaultValue = "300" ) long timeout )
+            throws ProcedureException
+    {
+        try ( IndexProcedures indexProcedures = indexProcedures() )
+        {
+            indexProcedures.awaitIndex( index, timeout, TimeUnit.SECONDS );
+        }
+    }
+
+    @Description( "Schedule resampling of an index (for example: CALL db.resampleIndex(\":Person(name)\"))." )
+    @Procedure( name = "db.resampleIndex", mode = READ )
+    public void resampleIndex( @Name( "index" ) String index ) throws ProcedureException
+    {
+        try ( IndexProcedures indexProcedures = indexProcedures() )
+        {
+            indexProcedures.resampleIndex( index );
+        }
+    }
+
+    @Description( "Schedule resampling of all outdated indexes." )
+    @Procedure( name = "db.resampleOutdatedIndexes", mode = READ )
+    public void resampleOutdatedIndexes()
+    {
+        try ( IndexProcedures indexProcedures = indexProcedures() )
+        {
+            indexProcedures.resampleOutdatedIndexes();
+        }
+    }
+
+    @Description( "Show the schema of the data." )
+    @Procedure(name = "db.schema", mode = READ)
+    public Stream<SchemaProcedure.GraphResult> metaGraph() throws ProcedureException
+    {
+        return Stream.of(new SchemaProcedure(graphDatabaseAPI, tx).buildSchemaGraph());
+    }
+
+    @Description( "List all constraints in the database." )
+    @Procedure( name = "db.constraints", mode = READ )
+    public Stream<ConstraintResult> listConstraints()
+    {
+        Statement statement = tx.acquireStatement();
+        ReadOperations operations = statement.readOperations();
+        TokenNameLookup tokens = new StatementTokenNameLookup( operations );
+
+        return asList( operations.constraintsGetAll() )
+                .stream()
+                .map( ( constraint ) -> constraint.userDescription( tokens ) )
+                .sorted()
+                .map( ConstraintResult::new )
+                .onClose( statement::close );
+    }
+
+    private IndexProcedures indexProcedures()
+    {
+        return new IndexProcedures( tx, resolver.resolveDependency( IndexingService.class ) );
+    }
+
+    @SuppressWarnings( "unused" )
+    public class LabelResult
+    {
+        public final String label;
+
+        private LabelResult( Label label )
+        {
+            this.label = label.name();
+        }
+    }
+
+    @SuppressWarnings( "unused" )
+    public class PropertyKeyResult
+    {
+        public final String propertyKey;
+
+        private PropertyKeyResult( String propertyKey )
+        {
+            this.propertyKey = propertyKey;
+        }
+    }
+
+    @SuppressWarnings( "unused" )
+    public class RelationshipTypeResult
+    {
+        public final String relationshipType;
+
+        private RelationshipTypeResult( RelationshipType relationshipType )
+        {
+            this.relationshipType = relationshipType.name();
+        }
+    }
+
+    @SuppressWarnings( "unused" )
+    public class IndexResult
+    {
+        public final String description;
+        public final String state;
+        public final String type;
+
+        private IndexResult( String description, String state, String type )
+        {
+            this.description = description;
+            this.state = state;
+            this.type = type;
+        }
+    }
+
+    @SuppressWarnings( "unused" )
+    public class ConstraintResult
+    {
+        public final String description;
+
+        private ConstraintResult( String description )
+        {
+            this.description = description;
+        }
+    }
+
+    //When we have decided on what to call different indexes
+    //this should probably be moved to some more central place
+    private enum IndexType
+    {
+        NODE_LABEL_PROPERTY( "node_label_property" ),
+        NODE_UNIQUE_PROPERTY( "node_unique_property" );
+
+        private final String typeName;
+
+        IndexType( String typeName )
+        {
+            this.typeName = typeName;
+        }
+
+        public String typeName()
+        {
+            return typeName;
+        }
     }
 }

@@ -19,9 +19,9 @@
  */
 package org.neo4j.cypher
 
-import org.neo4j.cypher.internal.compiler.v3_0.planDescription.InternalPlanDescription
-import org.neo4j.cypher.internal.compiler.v3_0.planDescription.InternalPlanDescription.Arguments.EstimatedRows
-import org.neo4j.kernel.impl.query.QueryEngineProvider
+import org.neo4j.cypher.internal.compiler.v3_1.planDescription.InternalPlanDescription
+import org.neo4j.cypher.internal.compiler.v3_1.planDescription.InternalPlanDescription.Arguments.EstimatedRows
+import org.neo4j.kernel.impl.query.TransactionalContext
 
 /**
  * Runs the 14 LDBC queries and checks so that the result is what is expected.
@@ -33,7 +33,7 @@ class LdbcAcceptanceTest extends ExecutionEngineFunSuite with NewPlannerTestSupp
     test(ldbcQuery.name) {
       try {
         //given
-        eengine.execute(ldbcQuery.createQuery, ldbcQuery.createParams, graph.session())
+        eengine.execute(ldbcQuery.createQuery, ldbcQuery.createParams)
         ldbcQuery.constraintQueries.foreach(updateWithBothPlannersAndCompatibilityMode(_))
 
         //when
@@ -83,6 +83,6 @@ class LdbcAcceptanceTest extends ExecutionEngineFunSuite with NewPlannerTestSupp
     plan.arguments.collectFirst {
       case EstimatedRows(estimate) => estimate
     }.get +:
-      plan.children.toSeq.flatMap(collectEstimations)
+      plan.children.toIndexedSeq.flatMap(collectEstimations)
   }
 }

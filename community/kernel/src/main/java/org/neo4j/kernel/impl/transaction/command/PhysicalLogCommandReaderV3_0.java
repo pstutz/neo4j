@@ -61,6 +61,7 @@ import static org.neo4j.kernel.impl.util.Bits.bitFlag;
 import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.read2bLengthAndString;
 import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.read2bMap;
 import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.read3bLengthAndString;
+import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.shortToUnsignedInt;
 
 public class PhysicalLogCommandReaderV3_0 extends BaseCommandReader
 {
@@ -209,7 +210,7 @@ public class PhysicalLogCommandReaderV3_0 extends BaseCommandReader
         boolean requireSecondaryUnit = bitFlag( flags, Record.REQUIRE_SECONDARY_UNIT );
         boolean hasSecondaryUnit = bitFlag( flags, Record.HAS_SECONDARY_UNIT );
 
-        int type = channel.getShort();
+        int type = shortToUnsignedInt( channel.getShort() );
         RelationshipGroupRecord record = new RelationshipGroupRecord( id, type );
         record.setInUse( inUse );
         record.setNext( channel.getLong() );
@@ -471,7 +472,7 @@ public class PhysicalLogCommandReaderV3_0 extends BaseCommandReader
     {
         // id+type+in_use(byte)+nr_of_bytes(int)+next_block(long)
         long id = channel.getLong();
-        assert id >= 0 && id <= (1l << 36) - 1 : id + " is not a valid dynamic record id";
+        assert id >= 0 && id <= (1L << 36) - 1 : id + " is not a valid dynamic record id";
         int type = channel.getInt();
         byte inUseFlag = channel.get();
         boolean inUse = (inUseFlag & Record.IN_USE.byteValue()) != 0;
@@ -484,11 +485,11 @@ public class PhysicalLogCommandReaderV3_0 extends BaseCommandReader
             assert nrOfBytes >= 0 && nrOfBytes < ((1 << 24) - 1) : nrOfBytes
                                                                    + " is not valid for a number of bytes field of " + "a dynamic record";
             long nextBlock = channel.getLong();
-            assert (nextBlock >= 0 && nextBlock <= (1l << 36 - 1))
+            assert (nextBlock >= 0 && nextBlock <= (1L << 36 - 1))
                    || (nextBlock == Record.NO_NEXT_BLOCK.intValue()) : nextBlock
                                                                        + " is not valid for a next record field of " + "a dynamic record";
             record.setNextBlock( nextBlock );
-            byte data[] = new byte[nrOfBytes];
+            byte[] data = new byte[nrOfBytes];
             channel.get( data, nrOfBytes );
             record.setData( data );
         }
@@ -591,9 +592,10 @@ public class PhysicalLogCommandReaderV3_0 extends BaseCommandReader
         long[] blocks = readLongs( channel, blockSize / 8 );
         assert blocks.length == blockSize / 8 : blocks.length
                                                 + " longs were read in while i asked for what corresponds to " + blockSize;
-        assert PropertyType.getPropertyType( blocks[0], false ).calculateNumberOfBlocksUsed(
+
+        assert PropertyType.getPropertyTypeOrThrow( blocks[0] ).calculateNumberOfBlocksUsed(
                 blocks[0] ) == blocks.length : blocks.length + " is not a valid number of blocks for type "
-                                               + PropertyType.getPropertyType( blocks[0], false );
+                                               + PropertyType.getPropertyTypeOrThrow( blocks[0] );
         /*
          *  Ok, now we may be ready to return, if there are no DynamicRecords. So
          *  we start building the Object

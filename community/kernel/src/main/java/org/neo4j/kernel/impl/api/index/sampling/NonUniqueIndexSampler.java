@@ -19,88 +19,25 @@
  */
 package org.neo4j.kernel.impl.api.index.sampling;
 
-import org.neo4j.helpers.collection.MultiSet;
 import org.neo4j.storageengine.api.schema.IndexSample;
 
-public class NonUniqueIndexSampler
+/**
+ * Builds index sample.
+ * It's implementation specific how sample will be build: using index directly or based on samples
+ * provided through various include/exclude calls
+ * @see DefaultNonUniqueIndexSampler
+ */
+public interface NonUniqueIndexSampler
 {
-    private static final int INITIAL_SIZE = 1 << 16;
+    void include( String value );
 
-    private final int bufferSizeLimit;
-    private final MultiSet<String> values;
+    void include( String value, long increment );
 
-    private int sampledSteps = 0;
+    void exclude( String value );
 
-    // kept as longs to side step overflow issues
+    void exclude( String value, long decrement );
 
-    private long accumulatedUniqueValues = 0;
-    private long accumulatedSampledSize = 0;
-    private long bufferSize = 0;
+    IndexSample result();
 
-    public NonUniqueIndexSampler( int bufferSizeLimit )
-    {
-        this.bufferSizeLimit = bufferSizeLimit;
-        this.values = new MultiSet<>( INITIAL_SIZE );
-    }
-
-    public void include( String value )
-    {
-        include( value, 1 );
-    }
-
-    public void include( String value, long increment )
-    {
-        assert increment > 0;
-        if ( bufferSize >= bufferSizeLimit )
-        {
-            nextStep();
-        }
-
-        if ( values.increment( value, increment ) == increment )
-        {
-            bufferSize += value.length();
-        }
-    }
-
-    public void exclude( String value )
-    {
-        exclude( value, 1 );
-    }
-
-    public void exclude( String value, long decrement )
-    {
-        assert decrement > 0;
-        if ( values.increment( value, -decrement ) == 0 )
-        {
-            bufferSize -= value.length();
-        }
-    }
-
-    public IndexSample result()
-    {
-        return result( -1 );
-    }
-
-    public IndexSample result( int numDocs )
-    {
-        if ( !values.isEmpty() )
-        {
-            nextStep();
-        }
-
-        long uniqueValues = sampledSteps != 0 ? accumulatedUniqueValues / sampledSteps : 0;
-        long sampledSize = sampledSteps != 0 ? accumulatedSampledSize / sampledSteps : 0;
-
-        return new IndexSample( numDocs < 0 ? accumulatedSampledSize : numDocs, uniqueValues, sampledSize );
-    }
-
-    private void nextStep()
-    {
-        accumulatedUniqueValues += values.uniqueSize();
-        accumulatedSampledSize += values.size();
-        bufferSize = 0;
-
-        sampledSteps++;
-        values.clear();
-    }
+    IndexSample result( int numDocs );
 }

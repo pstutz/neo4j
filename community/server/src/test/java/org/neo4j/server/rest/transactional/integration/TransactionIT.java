@@ -255,7 +255,6 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
         assertThat( countNodes(), equalTo( nodesInDatabaseBeforeTransaction ) );
     }
 
-
     @Test
     public void begin_and_execute_periodic_commit_and_commit() throws Exception
     {
@@ -760,6 +759,27 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
     }
 
     @Test
+    public void shouldHandleMapParametersCorrectly() throws Exception
+    {
+        Response response = http.POST(
+                "/db/data/transaction/commit",
+                quotedJson("{ 'statements': [ { 'statement': " +
+                        "'WITH {map} AS map RETURN map[0]', 'parameters':{'map':[{'index':0,'name':'a'},{'index':1,'name':'b'}]} } ] }"));
+
+        // then
+        assertThat( response.status(), equalTo( 200 ) );
+
+        JsonNode data = response.get( "results" ).get( 0 );
+        JsonNode row = data.get( "data" ).get( 0 ).get( "row" );
+        assertThat( row.size(), equalTo( 1 ) );
+
+        assertThat( row.get(0).get("index").asInt(), equalTo( 0 ) );
+        assertThat( row.get(0).get("name").asText(), equalTo( "a" ) );
+
+        assertThat( response.get( "errors" ).size(), equalTo( 0 ) );
+    }
+
+    @Test
     public void restFormatNodesShouldHaveSensibleUris() throws Throwable
     {
         // given
@@ -892,7 +912,6 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
                 jsonURIString.asText().matches( scheme + "://" + hostname + ":\\d+/db/data" + path ) );
     }
 
-
     private HTTP.RawPayload singleStatement( String statement )
     {
         return rawPayload( "{\"statements\":[{\"statement\":\"" + statement + "\"}]}" );
@@ -921,7 +940,6 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
             return count;
         }
     }
-
 
     private void assertHasTxLocation( Response begin )
     {

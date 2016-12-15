@@ -148,17 +148,24 @@ public class MigrationTestUtils
 
     public static File findFormatStoreDirectoryForVersion( String version, File targetDir ) throws IOException
     {
-        switch ( version )
+        if ( version.equals( StandardV2_3.STORE_VERSION ) )
         {
-        case StandardV2_3.STORE_VERSION:
             return find23FormatStoreDirectory( targetDir );
-        case StandardV2_2.STORE_VERSION:
+        }
+        else if ( version.equals( StandardV2_2.STORE_VERSION ) )
+        {
             return find22FormatStoreDirectory( targetDir );
-        case StandardV2_1.STORE_VERSION:
+        }
+        else if ( version.equals( StandardV2_1.STORE_VERSION ) )
+        {
             return find21FormatStoreDirectory( targetDir );
-        case StandardV2_0.STORE_VERSION:
+        }
+        else if ( version.equals( StandardV2_0.STORE_VERSION ) )
+        {
             return find20FormatStoreDirectory( targetDir );
-        default:
+        }
+        else
+        {
             throw new IllegalArgumentException( "Unknown version" );
         }
     }
@@ -215,7 +222,7 @@ public class MigrationTestUtils
             File file = new File( dir, storeFile.storeFileName() );
             StoreVersionCheck.Result result =
                     legacyStoreVersionCheck.hasVersion( file, StandardV3_0.STORE_VERSION, storeFile.isOptional() );
-            success &= result.outcome == Outcome.unexpectedUpgradingStoreVersion ||
+            success &= result.outcome == Outcome.unexpectedStoreVersion ||
                        result.outcome == Outcome.storeVersionNotFound;
         }
         return success;
@@ -233,10 +240,10 @@ public class MigrationTestUtils
         return false;
     }
 
-    public static boolean checkNeoStoreHasCurrentFormatVersion( StoreVersionCheck check, File workingDirectory )
+    public static boolean checkNeoStoreHasDefaultFormatVersion( StoreVersionCheck check, File workingDirectory )
     {
         File neostoreFile = new File( workingDirectory, MetaDataStore.DEFAULT_NAME );
-        return check.hasVersion( neostoreFile, RecordFormatSelector.autoSelectFormat().storeVersion() )
+        return check.hasVersion( neostoreFile, RecordFormatSelector.defaultFormat().storeVersion() )
                 .outcome.isSuccessful();
     }
 

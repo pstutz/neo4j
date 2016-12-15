@@ -24,14 +24,16 @@ import org.junit.Test;
 
 import java.io.IOException;
 
-import org.neo4j.test.TargetDirectory;
-import org.neo4j.test.TargetDirectory.TestDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 
 public class ValidatorsTest
 {
-    public final @Rule TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    @Rule
+    public final TestDirectory directory = TestDirectory.testDirectory();
 
     @Test
     public void shouldFindFilesByRegex() throws Exception
@@ -47,6 +49,29 @@ public class ValidatorsTest
         assertValid( ".*bc" );
         assertNotValid( "abcd" );
         assertNotValid( ".*de.*" );
+    }
+
+    @Test
+    public void shouldValidateInList() throws Exception
+    {
+        try
+        {
+            Validators.inList(new String[] { "foo", "bar", "baz" }).validate( "qux" );
+            fail( "Should have failed to find item in list." );
+        }
+        catch( IllegalArgumentException e )
+        {
+            assertThat( e.getMessage(), containsString( "'qux' found but must be one of: [foo, bar, baz]." ) );
+        }
+
+        try
+        {
+            Validators.inList(new String[] { "foo", "bar", "baz" }).validate( "bar" );
+        }
+        catch( IllegalArgumentException e )
+        {
+            fail( "Should have found item in list." );
+        }
     }
 
     private void assertNotValid( String string )

@@ -45,7 +45,7 @@ import org.neo4j.kernel.impl.transaction.tracing.LogCheckPointEvent;
 import org.neo4j.kernel.internal.DatabaseHealth;
 import org.neo4j.kernel.lifecycle.LifeRule;
 import org.neo4j.storageengine.api.StorageCommand;
-import org.neo4j.test.CleanupRule;
+import org.neo4j.test.rule.CleanupRule;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertArrayEquals;
@@ -74,6 +74,8 @@ public class BatchingTransactionAppenderTest
 {
     @Rule
     public final LifeRule life = new LifeRule( true );
+    @Rule
+    public final CleanupRule cleanup = new CleanupRule();
 
     private final InMemoryVersionableReadableClosablePositionAwareChannel channel = new InMemoryVersionableReadableClosablePositionAwareChannel();
     private final LogAppendEvent logAppendEvent = LogAppendEvent.NULL;
@@ -159,9 +161,9 @@ public class BatchingTransactionAppenderTest
         transactionRepresentation.setHeader( additionalHeader, masterId, authorId, timeStarted,
                 latestCommittedTxWhenStarted, timeCommitted, -1 );
 
-        LogEntryStart start = new LogEntryStart( 0, 0, 0l, latestCommittedTxWhenStarted, null,
+        LogEntryStart start = new LogEntryStart( 0, 0, 0L, latestCommittedTxWhenStarted, null,
                 LogPosition.UNSPECIFIED );
-        LogEntryCommit commit = new OnePhaseCommit( nextTxId, 0l );
+        LogEntryCommit commit = new OnePhaseCommit( nextTxId, 0L );
         CommittedTransactionRepresentation transaction =
                 new CommittedTransactionRepresentation( start, transactionRepresentation, commit );
 
@@ -206,7 +208,7 @@ public class BatchingTransactionAppenderTest
 
         LogEntryStart start = new LogEntryStart( 0, 0, 0L, latestCommittedTxWhenStarted, null,
                 LogPosition.UNSPECIFIED );
-        LogEntryCommit commit = new OnePhaseCommit( latestCommittedTxWhenStarted + 2, 0l );
+        LogEntryCommit commit = new OnePhaseCommit( latestCommittedTxWhenStarted + 2, 0L );
         CommittedTransactionRepresentation transaction =
                 new CommittedTransactionRepresentation( start, transactionRepresentation, commit );
 
@@ -314,11 +316,11 @@ public class BatchingTransactionAppenderTest
                 positionCache, transactionIdStore, BYPASS, databaseHealth ) );
 
         // When
-        appender.checkPoint( new LogPosition( 1l, 2l ), LogCheckPointEvent.NULL );
+        appender.checkPoint( new LogPosition( 1L, 2L ), LogCheckPointEvent.NULL );
 
         // Then
-        verify( channel, times( 1 ) ).putLong( 1l );
-        verify( channel, times( 1 ) ).putLong( 2l );
+        verify( channel, times( 1 ) ).putLong( 1L );
+        verify( channel, times( 1 ) ).putLong( 2L );
         verify( channel, times( 1 ) ).prepareForFlush();
         verify( flushable, times( 1 ) ).flush();
         verifyZeroInteractions( databaseHealth );
@@ -330,7 +332,7 @@ public class BatchingTransactionAppenderTest
         // Given
         IOException ioex = new IOException( "boom!" );
         FlushablePositionAwareChannel channel = mock( FlushablePositionAwareChannel.class, RETURNS_MOCKS );
-        when (channel.put( anyByte() ) ).thenReturn( channel );
+        when( channel.put( anyByte() ) ).thenReturn( channel );
         when( channel.putLong( anyLong() ) ).thenThrow( ioex );
         when( channel.put( anyByte() ) ).thenThrow( ioex );
         when( logFile.getWriter() ).thenReturn( channel );
@@ -340,7 +342,7 @@ public class BatchingTransactionAppenderTest
         // When
         try
         {
-            appender.checkPoint( new LogPosition( 0l, 0l ), LogCheckPointEvent.NULL );
+            appender.checkPoint( new LogPosition( 0L, 0L ), LogCheckPointEvent.NULL );
             fail( "should have thrown " );
         }
         catch ( IOException ex )
@@ -352,7 +354,28 @@ public class BatchingTransactionAppenderTest
         verify( databaseHealth, times( 1 ) ).panic( ioex );
     }
 
-    public final @Rule CleanupRule cleanup = new CleanupRule();
+    @Test
+    public void shouldKernelPanicIfTransactionIdsMismatch() throws Throwable
+    {
+        // Given
+        BatchingTransactionAppender appender = life.add( new BatchingTransactionAppender(
+                logFile, NO_ROTATION, positionCache, transactionIdStore, BYPASS, databaseHealth ) );
+        when( transactionIdStore.nextCommittingTransactionId() ).thenReturn( 42L );
+        TransactionToApply batch = new TransactionToApply( mock( TransactionRepresentation.class ), 43L );
+
+        // When
+        try
+        {
+            appender.append( batch, LogAppendEvent.NULL );
+            fail( "should have thrown " );
+        }
+        catch ( IllegalStateException ex )
+        {
+            // Then
+            verify( databaseHealth, times( 1 ) ).panic( ex );
+        }
+
+    }
 
     private TransactionRepresentation transaction( Collection<StorageCommand> commands, byte[] additionalHeader,
             int masterId, int authorId, long timeStarted, long latestCommittedTxWhenStarted, long timeCommitted )

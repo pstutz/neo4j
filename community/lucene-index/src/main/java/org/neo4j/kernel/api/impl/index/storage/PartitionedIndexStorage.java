@@ -20,20 +20,26 @@
 package org.neo4j.kernel.api.impl.index.storage;
 
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.store.IOContext;
+import org.apache.lucene.store.IndexInput;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import org.neo4j.io.IOUtils;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.api.impl.index.storage.layout.FolderLayout;
 import org.neo4j.kernel.api.impl.index.storage.layout.IndexFolderLayout;
+import org.neo4j.kernel.impl.util.NumberAwareStringComparator;
 
 import static java.util.stream.Collectors.toList;
 
@@ -44,15 +50,26 @@ import static java.util.stream.Collectors.toList;
  */
 public class PartitionedIndexStorage
 {
+    private static final Comparator<File> FILE_COMPARATOR = new Comparator<File>()
+    {
+        @Override
+        public int compare( File o1, File o2 )
+        {
+            return NumberAwareStringComparator.INSTANCE.compare( o1.getName(), o2.getName() );
+        }
+    };
+
     private final DirectoryFactory directoryFactory;
     private final FileSystemAbstraction fileSystem;
+    private final boolean archiveFailed;
     private final FolderLayout folderLayout;
     private final FailureStorage failureStorage;
 
     public PartitionedIndexStorage( DirectoryFactory directoryFactory, FileSystemAbstraction fileSystem,
-            File rootFolder, String identifier )
+                                    File rootFolder, String identifier, boolean archiveFailed )
     {
         this.fileSystem = fileSystem;
+        this.archiveFailed = archiveFailed;
         this.folderLayout = new IndexFolderLayout( rootFolder, identifier );
         this.directoryFactory = directoryFactory;
         this.failureStorage = new FailureStorage( fileSystem, folderLayout );
@@ -134,7 +151,7 @@ public class PartitionedIndexStorage
      */
     public void prepareFolder( File folder ) throws IOException
     {
-        cleanupFolder( folder );
+        cleanupFolder( folder, archiveFailed );
         fileSystem.mkdirs( folder );
     }
 
@@ -147,12 +164,40 @@ public class PartitionedIndexStorage
      */
     public void cleanupFolder( File folder ) throws IOException
     {
+        cleanupFolder( folder, false );
+    }
+
+    private void cleanupFolder( File folder, boolean archiveFailed ) throws IOException
+    {
         List<File> partitionFolders = listFolders( folder );
-        for ( File partitionFolder : partitionFolders )
+        if ( !partitionFolders.isEmpty() )
         {
-            cleanupLuceneDirectory( partitionFolder );
+            try ( ZipOutputStream zip = archiveFile( folder, archiveFailed ) )
+            {
+                byte[] buffer = null;
+                if ( zip != null )
+                {
+                    buffer = new byte[4*1024];
+                }
+                for ( File partitionFolder : partitionFolders )
+                {
+                    cleanupLuceneDirectory( partitionFolder, zip, buffer );
+                }
+            }
         }
         fileSystem.deleteRecursively( folder );
+    }
+
+    private ZipOutputStream archiveFile( File folder, boolean archiveFailed ) throws IOException
+    {
+        ZipOutputStream zip = null;
+        if ( archiveFailed )
+        {
+            File archiveFile = new File( folder.getParent(),
+                    "archive-" + folder.getName() + "-" + System.currentTimeMillis() + ".zip" );
+            zip = new ZipOutputStream( fileSystem.openAsOutputStream( archiveFile, false ) );
+        }
+        return zip;
     }
 
     /**
@@ -201,7 +246,10 @@ public class PartitionedIndexStorage
     {
         File[] files = fileSystem.listFiles( rootFolder );
         return files == null ? Collections.emptyList()
-                             : Stream.of( files ).filter( fileSystem::isDirectory ).collect( toList() );
+                             : Stream.of( files )
+                               .filter( fileSystem::isDirectory )
+                               .sorted( FILE_COMPARATOR )
+                               .collect( toList() );
 
     }
 
@@ -213,15 +261,38 @@ public class PartitionedIndexStorage
      * Uses {@link FileUtils#windowsSafeIOOperation(FileUtils.FileOperation)} underneath.
      *
      * @param folder the path to the directory to cleanup.
+     * @param zip an optional zip output stream to archive files into.
+     * @param buffer a byte buffer to use for copying bytes from the files into the archive.
      * @throws IOException if removal operation fails.
      */
-    private void cleanupLuceneDirectory( File folder ) throws IOException
+    private void cleanupLuceneDirectory( File folder, ZipOutputStream zip, byte[] buffer ) throws IOException
     {
         try ( Directory dir = directoryFactory.open( folder ) )
         {
+            String folderName = folder.getName() + "/";
+            if ( zip != null )
+            {
+                zip.putNextEntry( new ZipEntry( folderName ) );
+                zip.closeEntry();
+            }
             String[] indexFiles = dir.listAll();
             for ( String indexFile : indexFiles )
             {
+                if ( zip != null )
+                {
+                    zip.putNextEntry( new ZipEntry( folderName + indexFile ) );
+                    try ( IndexInput input = dir.openInput( indexFile, IOContext.READ ) )
+                    {
+                        for ( long pos = 0, size = input.length(); pos < size; )
+                        {
+                            int read = Math.min( buffer.length, (int) (size - pos) );
+                            input.readBytes( buffer, 0, read );
+                            pos += read;
+                            zip.write( buffer, 0, read );
+                        }
+                    }
+                    zip.closeEntry();
+                }
                 FileUtils.windowsSafeIOOperation( () -> dir.deleteFile( indexFile ) );
             }
         }

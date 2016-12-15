@@ -19,16 +19,16 @@
  */
 package org.neo4j.cypher
 
-import java.util
-
 import org.neo4j.cypher.internal.QueryStatistics
-import org.neo4j.cypher.internal.compatibility.ExecutionResultWrapperFor3_0
-import org.neo4j.cypher.internal.compiler.v3_0.executionplan.InternalExecutionResult
-import org.neo4j.cypher.internal.compiler.v3_0.{CompiledRuntimeName, CostBasedPlannerName}
-import org.neo4j.kernel.impl.query.{QueryExecutionMonitor, QuerySession}
+import org.neo4j.cypher.internal.compatibility.ExecutionResultWrapperFor3_1
+import org.neo4j.cypher.internal.compiler.v3_1.executionplan.InternalExecutionResult
+import org.neo4j.cypher.internal.compiler.v3_1.{CompiledRuntimeName, CostBasedPlannerName}
+import org.neo4j.kernel.api.ExecutingQuery
+import org.neo4j.kernel.impl.query.QueryExecutionMonitor
 import org.scalatest.Assertions
+import org.scalatest.mock.MockitoSugar
 
-trait QueryStatisticsTestSupport {
+trait QueryStatisticsTestSupport extends MockitoSugar {
   self: Assertions =>
 
   implicit class QueryStatisticsAssertions(expected: QueryStatistics) {
@@ -38,17 +38,13 @@ trait QueryStatisticsTestSupport {
 
     def apply(actual: InternalExecutionResult) {
       implicit val monitor = new QueryExecutionMonitor {
-        override def startQueryExecution(session: QuerySession, query: String,
-                                         parameters: util.Map[String, AnyRef]){}
+        override def startQueryExecution(query: ExecutingQuery) {}
 
-        override def endSuccess(session: QuerySession){}
+        override def endSuccess(query: ExecutingQuery){}
 
-        override def endFailure(session: QuerySession, throwable: Throwable){}
+        override def endFailure(query: ExecutingQuery, throwable: Throwable){}
       }
-      implicit val session = new QuerySession(null) {
-        override def toString: String = s"test-session\ttest"
-      }
-      val r = new ExecutionResultWrapperFor3_0(actual, CostBasedPlannerName.default, CompiledRuntimeName)
+      val r = new ExecutionResultWrapperFor3_1(actual, CostBasedPlannerName.default, CompiledRuntimeName)
       apply(r.queryStatistics())
     }
   }

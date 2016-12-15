@@ -23,10 +23,11 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.concurrent.TimeUnit;
 
-import org.neo4j.helpers.FrozenClock;
-import org.neo4j.kernel.impl.transaction.log.IllegalLogFormatException;
 import org.neo4j.kernel.impl.transaction.log.LogFileInformation;
 
 import static org.junit.Assert.assertEquals;
@@ -41,16 +42,16 @@ public class EntryTimespanThresholdTest
     private final File file = mock( File.class );
     private final LogFileInformation source = mock( LogFileInformation.class );
     private final long version = 4;
+    private Clock clock = Clock.fixed( Instant.ofEpochMilli( 1000 ), ZoneOffset.UTC );
 
     @Test
     public void shouldReturnFalseWhenTimeIsEqualOrAfterTheLowerLimit() throws IOException
     {
         // given
-        FrozenClock clock = new FrozenClock( 1000l, TimeUnit.MILLISECONDS );
         final EntryTimespanThreshold threshold =
                 new EntryTimespanThreshold( clock, TimeUnit.MILLISECONDS, 200 );
 
-        when( source.getFirstStartRecordTimestamp( version ) ).thenReturn( 800l );
+        when( source.getFirstStartRecordTimestamp( version ) ).thenReturn( 800L );
 
         // when
         threshold.init();
@@ -64,11 +65,10 @@ public class EntryTimespanThresholdTest
     public void shouldReturnReturnWhenTimeIsBeforeTheLowerLimit() throws IOException
     {
         // given
-        FrozenClock clock = new FrozenClock( 1000l, TimeUnit.MILLISECONDS );
         final EntryTimespanThreshold threshold =
                 new EntryTimespanThreshold( clock, TimeUnit.MILLISECONDS, 100 );
 
-        when( source.getFirstStartRecordTimestamp( version ) ).thenReturn( 800l );
+        when( source.getFirstStartRecordTimestamp( version ) ).thenReturn( 800L );
 
         // when
         threshold.init();
@@ -76,53 +76,12 @@ public class EntryTimespanThresholdTest
 
         // then
         assertTrue( result );
-    }
-
-    @Test
-    public void shouldReturnTrueIfTheLogHasAnOlderVersion() throws IOException
-    {
-        // given
-        FrozenClock clock = new FrozenClock( 1000l, TimeUnit.MILLISECONDS );
-        final EntryTimespanThreshold threshold =
-                new EntryTimespanThreshold( clock, TimeUnit.MILLISECONDS, 100 );
-
-        when( source.getFirstStartRecordTimestamp( version ) ).thenThrow( new IllegalLogFormatException( version, 3 ) );
-
-        // when
-        threshold.init();
-        final boolean result = threshold.reached( file, version, source );
-
-        // then
-        assertTrue( result );
-    }
-
-    @Test
-    public void shouldThrowIfTheLogHasANewerVersion() throws IOException
-    {
-        // given
-        FrozenClock clock = new FrozenClock( 1000l, TimeUnit.MILLISECONDS );
-        final EntryTimespanThreshold threshold =
-                new EntryTimespanThreshold( clock, TimeUnit.MILLISECONDS, 100 );
-
-        final IllegalLogFormatException ex = new IllegalLogFormatException( version, 5 );
-        when( source.getFirstStartRecordTimestamp( version ) ).thenThrow( ex );
-
-        // when
-        threshold.init();
-        try{
-            threshold.reached( file, version, source );
-            fail("should have thrown");
-        } catch (RuntimeException e) {
-            // then
-            assertEquals( ex, e.getCause() );
-        }
     }
 
     @Test
     public void shouldThrowIfTheLogCannotBeRead() throws IOException
     {
         // given
-        FrozenClock clock = new FrozenClock( 1000l, TimeUnit.MILLISECONDS );
         final EntryTimespanThreshold threshold =
                 new EntryTimespanThreshold( clock, TimeUnit.MILLISECONDS, 100 );
 

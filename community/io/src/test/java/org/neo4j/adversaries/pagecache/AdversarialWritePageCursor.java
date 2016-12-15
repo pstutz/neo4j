@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.Objects;
 
 import org.neo4j.adversaries.Adversary;
+import org.neo4j.io.pagecache.CursorException;
 import org.neo4j.io.pagecache.PageCursor;
 
 /**
@@ -38,7 +39,7 @@ import org.neo4j.io.pagecache.PageCursor;
  * See {@link org.neo4j.io.pagecache.PagedFile#PF_SHARED_WRITE_LOCK} flag.
  */
 @SuppressWarnings( "unchecked" )
-class AdversarialWritePageCursor implements PageCursor
+class AdversarialWritePageCursor extends PageCursor
 {
     private final PageCursor delegate;
     private final Adversary adversary;
@@ -273,9 +274,27 @@ class AdversarialWritePageCursor implements PageCursor
     }
 
     @Override
+    public void checkAndClearCursorException() throws CursorException
+    {
+        delegate.checkAndClearCursorException();
+    }
+
+    @Override
     public void raiseOutOfBounds()
     {
         delegate.raiseOutOfBounds();
+    }
+
+    @Override
+    public void setCursorException( String message )
+    {
+        delegate.setCursorException( message );
+    }
+
+    @Override
+    public void clearCursorException()
+    {
+        delegate.clearCursorException();
     }
 
     @Override

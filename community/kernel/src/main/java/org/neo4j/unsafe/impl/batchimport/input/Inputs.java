@@ -29,7 +29,6 @@ import org.neo4j.unsafe.impl.batchimport.input.csv.CsvInput;
 import org.neo4j.unsafe.impl.batchimport.input.csv.IdType;
 
 import static java.nio.charset.Charset.defaultCharset;
-
 import static org.neo4j.unsafe.impl.batchimport.input.InputEntityDecorators.NO_NODE_DECORATOR;
 import static org.neo4j.unsafe.impl.batchimport.input.InputEntityDecorators.NO_RELATIONSHIP_DECORATOR;
 import static org.neo4j.unsafe.impl.batchimport.input.csv.DataFactories.data;
@@ -42,8 +41,7 @@ public class Inputs
 {
     public static Input input(
             final InputIterable<InputNode> nodes, final InputIterable<InputRelationship> relationships,
-            final IdMapper idMapper, final IdGenerator idGenerator, final boolean specificRelationshipIds,
-            final Collector badCollector )
+            final IdMapper idMapper, final IdGenerator idGenerator, final Collector badCollector )
     {
         return new Input()
         {
@@ -72,12 +70,6 @@ public class Inputs
             }
 
             @Override
-            public boolean specificRelationshipIds()
-            {
-                return specificRelationshipIds;
-            }
-
-            @Override
             public Collector badCollector()
             {
                 return badCollector;
@@ -86,12 +78,12 @@ public class Inputs
     }
 
     public static Input csv( File nodes, File relationships, IdType idType,
-            Configuration configuration, Collector badCollector )
+            Configuration configuration, Collector badCollector, int maxProcessors )
     {
         return new CsvInput(
                 nodeData( data( NO_NODE_DECORATOR, defaultCharset(), nodes ) ), defaultFormatNodeFileHeader(),
                 relationshipData( data( NO_RELATIONSHIP_DECORATOR, defaultCharset(), relationships ) ),
                 defaultFormatRelationshipFileHeader(), idType, configuration,
-                badCollector );
+                badCollector, maxProcessors );
     }
 }

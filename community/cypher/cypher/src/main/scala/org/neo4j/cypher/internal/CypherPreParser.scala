@@ -19,8 +19,8 @@
  */
 package org.neo4j.cypher.internal
 
-import org.neo4j.cypher.internal.frontend.v3_0.InputPosition
-import org.neo4j.cypher.internal.frontend.v3_0.parser.Base
+import org.neo4j.cypher.internal.frontend.v3_1.InputPosition
+import org.neo4j.cypher.internal.frontend.v3_1.parser.Base
 import org.parboiled.scala._
 
 final case class PreParsedStatement(statement: String, options: Seq[PreParserOption], offset: InputPosition)
@@ -53,8 +53,8 @@ case object CypherPreParser extends Parser with Base {
   )
 
   def RuntimeOption = rule("runtime option")(
-    option("runtime", "interpreted") ~ push(InterpretedRuntimeOption)
-      | option("runtime", "compiled") ~ push(CompiledRuntimeOption)
+        option("runtime", "interpreted") ~ push(InterpretedRuntimeOption)
+      | option("runtime", "compiledExperimentalFeatureNotSupportedForProductionUse") ~ push(CompiledRuntimeOption)
   )
 
   def StrategyOption = rule("strategy option")(

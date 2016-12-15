@@ -39,14 +39,13 @@ import org.neo4j.io.fs.DefaultFileSystemAbstraction;
 import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.test.DbRepresentation;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.SuppressOutput;
+import org.neo4j.test.rule.TestDirectory;
 
+import static java.lang.String.format;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
-
-import static java.lang.String.format;
-
 import static org.neo4j.graphdb.DynamicLabel.label;
 import static org.neo4j.graphdb.DynamicRelationshipType.withName;
 import static org.neo4j.kernel.impl.pagecache.StandalonePageCacheFactory.createPageCache;
@@ -55,7 +54,9 @@ import static org.neo4j.tools.console.input.ConsoleUtil.NULL_PRINT_STREAM;
 public class DatabaseRebuildToolTest
 {
     @Rule
-    public final TargetDirectory.TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    public final SuppressOutput suppressOutput = SuppressOutput.suppressAll();
+    @Rule
+    public final TestDirectory directory = TestDirectory.testDirectory();
 
     @Test
     public void shouldRebuildDbFromTransactions() throws Exception
@@ -162,7 +163,7 @@ public class DatabaseRebuildToolTest
         String dump = new String( byteArrayOut.toByteArray() );
         for ( String string : expectedResultContaining )
         {
-            assertThat( dump, containsString( string ) );
+            assertThat( "dump from command '" + command + "'", dump, containsString( string ) );
         }
     }
 

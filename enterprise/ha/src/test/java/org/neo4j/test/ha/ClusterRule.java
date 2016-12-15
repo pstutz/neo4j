@@ -36,15 +36,18 @@ import org.neo4j.cluster.client.Cluster;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.factory.HighlyAvailableGraphDatabaseFactory;
+import org.neo4j.io.fs.FileUtils;
 import org.neo4j.kernel.impl.ha.ClusterManager;
 import org.neo4j.kernel.impl.ha.ClusterManager.Builder;
 import org.neo4j.kernel.impl.ha.ClusterManager.ClusterBuilder;
 import org.neo4j.kernel.impl.ha.ClusterManager.ManagedCluster;
 import org.neo4j.kernel.impl.ha.ClusterManager.StoreDirInitializer;
 import org.neo4j.kernel.impl.util.Listener;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
+import static org.neo4j.cluster.ClusterSettings.broadcast_timeout;
 import static org.neo4j.cluster.ClusterSettings.default_timeout;
+import static org.neo4j.cluster.ClusterSettings.join_timeout;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.pagecache_memory;
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.store_internal_log_level;
 import static org.neo4j.kernel.ha.HaSettings.tx_push_factor;
@@ -56,22 +59,41 @@ import static org.neo4j.kernel.impl.ha.ClusterManager.allSeesAllAsAvailable;
  */
 public class ClusterRule extends ExternalResource implements ClusterBuilder<ClusterRule>
 {
+    private static final StoreDirInitializer defaultStoreDirInitializer =
+            new ClusterManager.StoreDirInitializer()
+            {
+                @Override
+                public void initializeStoreDir( int serverId, File storeDir ) throws IOException
+                {
+                    File[] files = storeDir.listFiles();
+                    if ( files != null )
+                    {
+                        for ( File file : files )
+                        {
+                            FileUtils.deleteRecursively( file );
+                        }
+                    }
+                }
+            };
+
     private ClusterManager.Builder clusterManagerBuilder;
     private ClusterManager clusterManager;
     private File storeDirectory;
 
-    private final TargetDirectory.TestDirectory testDirectory;
+    private final TestDirectory testDirectory;
     private ManagedCluster cluster;
 
     public ClusterRule( Class<?> testClass )
     {
-        this.testDirectory = TargetDirectory.testDirForTest( testClass );
+        this.testDirectory = TestDirectory.testDirectory( testClass );
         this.clusterManagerBuilder = new ClusterManager.Builder()
                 .withSharedSetting( store_internal_log_level, "DEBUG" )
                 .withSharedSetting( default_timeout, "1s" )
                 .withSharedSetting( tx_push_factor, "0" )
                 .withSharedSetting( pagecache_memory, "8m" )
-                .withAvailabilityChecks( allSeesAllAsAvailable() );
+                .withSharedSetting( join_timeout, "60s" )
+                .withAvailabilityChecks( allSeesAllAsAvailable() )
+                .withStoreDirInitializer( defaultStoreDirInitializer );
     }
 
     @Override
@@ -141,6 +163,18 @@ public class ClusterRule extends ExternalResource implements ClusterBuilder<Clus
         return set( clusterManagerBuilder.withAvailabilityChecks( checks ) );
     }
 
+    @Override
+    public final ClusterRule withConsistencyCheckAfterwards()
+    {
+        return set( clusterManagerBuilder.withConsistencyCheckAfterwards() );
+    }
+
+    @Override
+    public ClusterRule withFirstInstanceId( int firstInstanceId )
+    {
+        return set( clusterManagerBuilder.withFirstInstanceId( firstInstanceId ) );
+    }
+
     private ClusterRule set( Builder builder )
     {
         clusterManagerBuilder = builder;
@@ -155,7 +189,11 @@ public class ClusterRule extends ExternalResource implements ClusterBuilder<Clus
     {
         if ( cluster == null )
         {
-            clusterManager = clusterManagerBuilder.withRootDirectory( storeDirectory ).build();
+            if ( clusterManager == null )
+            {
+                clusterManager = clusterManagerBuilder.withRootDirectory( storeDirectory ).build();
+            }
+
             try
             {
                 clusterManager.start();
@@ -195,9 +233,15 @@ public class ClusterRule extends ExternalResource implements ClusterBuilder<Clus
     @Override
     protected void after()
     {
+        shutdownCluster();
+    }
+
+    public void shutdownCluster()
+    {
         if ( clusterManager != null )
         {
             clusterManager.safeShutdown();
+            cluster = null;
         }
     }
 

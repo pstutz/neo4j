@@ -23,19 +23,23 @@ import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.security.URLAccessValidationError;
 import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.dbms.DbmsOperations;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 
 import java.net.URL;
+import java.util.concurrent.TimeUnit;
 
 public class GraphDatabaseCypherService implements GraphDatabaseQueryService
 {
-    private GraphDatabaseFacade graph;
+    private final GraphDatabaseFacade graph;
+    private final DbmsOperations dbmsOperations;
 
     public GraphDatabaseCypherService( GraphDatabaseService graph )
     {
         this.graph = (GraphDatabaseFacade) graph;
+        this.dbmsOperations = getDependencyResolver().resolveDependency( DbmsOperations.class );
     }
 
     @Override
@@ -45,32 +49,22 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
     }
 
     @Override
-    public Node createVirtualNode() throws NoSuchMethodException {
-        return graph.createVirtualNode();
-    }
-
-    @Override
     public Node createNode()
     {
         return graph.createNode();
     }
 
-    /*@Override
-    public Node createVirtualNode(Label... labels) {
-        return graph.createVirtualNode(labels);
+    @Override
+    public Node createVirtualNode() throws NoSuchMethodException {
+        return graph.createVirtualNode();
     }
-    */
+
     @Override
     public Node createNode( Label... labels )
     {
         return graph.createNode( labels );
     }
 
-    /*@Override
-    public Iterable<Node> getVirtualNodesByLabel(String labelname) {
-        return graph.getVirtualNodesForLabel(labelname);
-    }
-    */
     @Override
     public Node getNodeById( long id )
     {
@@ -84,9 +78,16 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
     }
 
     @Override
-    public InternalTransaction beginTransaction( KernelTransaction.Type type, AccessMode accessMode )
+    public InternalTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext )
     {
-        return graph.beginTransaction( type, accessMode );
+        return graph.beginTransaction( type, securityContext );
+    }
+
+    @Override
+    public InternalTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext,
+            long timeout, TimeUnit unit )
+    {
+        return graph.beginTransaction( type, securityContext, timeout, unit );
     }
 
     @Override
@@ -95,11 +96,15 @@ public class GraphDatabaseCypherService implements GraphDatabaseQueryService
         return graph.validateURLAccess( url );
     }
 
+    @Override
+    public DbmsOperations getDbmsOperations() {
+        return dbmsOperations;
+    }
+
     // This provides backwards compatibility to the older API for places that cannot (yet) stop using it.
     // TODO: Remove this when possible (remove RULE, remove older compilers)
     public GraphDatabaseFacade getGraphDatabaseService()
     {
         return graph;
     }
-
 }

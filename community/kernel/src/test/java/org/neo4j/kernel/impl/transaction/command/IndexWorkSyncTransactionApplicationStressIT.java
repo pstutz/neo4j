@@ -44,7 +44,6 @@ import org.neo4j.kernel.impl.api.index.inmemory.InMemoryIndexProvider;
 import org.neo4j.kernel.impl.api.index.inmemory.InMemoryIndexProviderFactory;
 import org.neo4j.kernel.impl.api.state.TxState;
 import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngine;
-import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngineRule;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.transaction.command.Command.NodeCommand;
@@ -53,14 +52,13 @@ import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.storageengine.api.StorageStatement;
 import org.neo4j.storageengine.api.TransactionApplicationMode;
 import org.neo4j.storageengine.api.schema.IndexReader;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.RecordStorageEngineRule;
+import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.unsafe.impl.batchimport.cache.idmapping.string.Workers;
 
-import static org.junit.Assert.assertEquals;
-
 import static java.util.Arrays.asList;
-
+import static org.junit.Assert.assertEquals;
 import static org.neo4j.helpers.TimeUtil.parseTimeMillis;
 import static org.neo4j.kernel.api.properties.Property.noNodeProperty;
 import static org.neo4j.kernel.api.properties.Property.property;
@@ -72,7 +70,7 @@ public class IndexWorkSyncTransactionApplicationStressIT
 {
     private final FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
     private final RecordStorageEngineRule storageEngineRule = new RecordStorageEngineRule();
-    private final TargetDirectory.TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    private final TestDirectory directory = TestDirectory.testDirectory();
     private final PageCacheRule pageCacheRule = new PageCacheRule();
 
     @Rule
@@ -166,7 +164,7 @@ public class IndexWorkSyncTransactionApplicationStressIT
         {
             try
             {
-                TransactionQueue queue = new TransactionQueue( batchSize, (tx) -> {
+                TransactionQueue queue = new TransactionQueue( batchSize, (tx, last) -> {
                     // Apply
                     storageEngine.apply( tx, TransactionApplicationMode.EXTERNAL );
 

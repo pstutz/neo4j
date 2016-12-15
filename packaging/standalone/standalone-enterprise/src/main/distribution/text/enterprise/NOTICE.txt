@@ -25,8 +25,11 @@ Third-party licenses
 --------------------
 
 Apache Software License, Version 2.0
+  Apache Commons Compress
   Apache Commons Configuration
   Apache Commons Lang
+  Apache Shiro :: Core
+  Caffeine cache
   ColorBrewer
   Commons BeanUtils
   Commons Digester
@@ -37,6 +40,7 @@ Apache Software License, Version 2.0
   Data Mapper for Jackson
   ExplorerCanvas
   Graphite Integration for Metrics
+  hazelcast-all
   Jackson
   JAX-RS provider for JSON content type
   Jetty :: Http Utility
@@ -53,11 +57,11 @@ Apache Software License, Version 2.0
   Lucene Memory
   Lucene QueryParsers
   Metrics Core
+  Netty
   Netty/All-in-One
   opencsv
   parboiled-core
   parboiled-scala
-  The Netty Project
 
 BSD - Scala License
   Scala Library

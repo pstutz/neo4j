@@ -24,10 +24,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 import org.neo4j.concurrent.WorkSync;
-import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.io.fs.FileSystemAbstraction;
@@ -47,6 +47,7 @@ import org.neo4j.kernel.impl.api.BatchTransactionApplierFacade;
 import org.neo4j.kernel.impl.api.CountsRecordState;
 import org.neo4j.kernel.impl.api.CountsStoreBatchTransactionApplier;
 import org.neo4j.kernel.impl.api.IndexReaderFactory;
+import org.neo4j.kernel.impl.api.KernelTransactionsSnapshot;
 import org.neo4j.kernel.impl.api.LegacyBatchIndexApplier;
 import org.neo4j.kernel.impl.api.LegacyIndexApplierLookup;
 import org.neo4j.kernel.impl.api.LegacyIndexProviderLookup;
@@ -69,11 +70,20 @@ import org.neo4j.kernel.impl.core.RelationshipTypeTokenHolder;
 import org.neo4j.kernel.impl.index.IndexConfigStore;
 import org.neo4j.kernel.impl.locking.LockGroup;
 import org.neo4j.kernel.impl.locking.LockService;
+import org.neo4j.storageengine.api.StoreFileMetadata;
+import org.neo4j.kernel.impl.storageengine.impl.recordstorage.id.BufferedIdController;
+import org.neo4j.kernel.impl.storageengine.impl.recordstorage.id.DefaultIdController;
+import org.neo4j.kernel.impl.storageengine.impl.recordstorage.id.IdController;
 import org.neo4j.kernel.impl.store.NeoStores;
+import org.neo4j.kernel.impl.store.RecordStore;
 import org.neo4j.kernel.impl.store.SchemaStorage;
 import org.neo4j.kernel.impl.store.StoreFactory;
-import org.neo4j.kernel.impl.store.format.RecordFormats;
+import org.neo4j.kernel.impl.store.StoreType;
+import org.neo4j.kernel.impl.store.format.RecordFormat;
 import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
+import org.neo4j.kernel.impl.store.id.IdReuseEligibility;
+import org.neo4j.kernel.impl.store.id.configuration.IdTypeConfigurationProvider;
+import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
 import org.neo4j.kernel.impl.transaction.command.CacheInvalidationBatchTransactionApplier;
 import org.neo4j.kernel.impl.transaction.command.HighIdBatchTransactionApplier;
 import org.neo4j.kernel.impl.transaction.command.IndexBatchTransactionApplier;
@@ -83,7 +93,6 @@ import org.neo4j.kernel.impl.transaction.command.NeoStoreBatchTransactionApplier
 import org.neo4j.kernel.impl.transaction.state.DefaultSchemaIndexProviderMap;
 import org.neo4j.kernel.impl.transaction.state.IntegrityValidator;
 import org.neo4j.kernel.impl.transaction.state.Loaders;
-import org.neo4j.kernel.impl.transaction.state.NeoStoreIndexStoreView;
 import org.neo4j.kernel.impl.transaction.state.PropertyCreator;
 import org.neo4j.kernel.impl.transaction.state.PropertyDeleter;
 import org.neo4j.kernel.impl.transaction.state.PropertyLoader;
@@ -93,6 +102,8 @@ import org.neo4j.kernel.impl.transaction.state.RelationshipCreator;
 import org.neo4j.kernel.impl.transaction.state.RelationshipDeleter;
 import org.neo4j.kernel.impl.transaction.state.RelationshipGroupGetter;
 import org.neo4j.kernel.impl.transaction.state.TransactionRecordState;
+import org.neo4j.kernel.impl.transaction.state.storeview.DynamicIndexStoreView;
+import org.neo4j.kernel.impl.transaction.state.storeview.NeoStoreIndexStoreView;
 import org.neo4j.kernel.impl.util.DependencySatisfier;
 import org.neo4j.kernel.impl.util.IdOrderingQueue;
 import org.neo4j.kernel.impl.util.JobScheduler;
@@ -112,20 +123,16 @@ import org.neo4j.storageengine.api.lock.ResourceLocker;
 import org.neo4j.storageengine.api.schema.SchemaRule;
 import org.neo4j.storageengine.api.txstate.ReadableTransactionState;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
+import org.neo4j.unsafe.impl.internal.dragons.FeatureToggles;
 
-import static org.neo4j.kernel.configuration.Settings.BOOLEAN;
-import static org.neo4j.kernel.configuration.Settings.TRUE;
-import static org.neo4j.kernel.configuration.Settings.setting;
 import static org.neo4j.kernel.impl.locking.LockService.NO_LOCK_SERVICE;
 
 public class RecordStorageEngine implements StorageEngine, Lifecycle
 {
-    /**
-     * This setting is hidden to the user and is here merely for making it easier to back out of
-     * a change where reading property chains incurs read locks on {@link LockService}.
-     */
-    private static final Setting<Boolean> use_read_locks_on_property_reads =
-            setting( "unsupported.dbms.use_read_locks_on_property_reads", BOOLEAN, TRUE );
+    private static final boolean takePropertyReadLocks = FeatureToggles.flag(
+            RecordStorageEngine.class, "propertyReadLocks", false );
+    private static final boolean safeIdBuffering = FeatureToggles.flag(
+            RecordStorageEngine.class, "safeIdBuffering", true );
 
     private final StoreReadLayer storeLayer;
     private final IndexingService indexingService;
@@ -145,6 +152,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     private final SchemaStorage schemaStorage;
     private final ConstraintSemantics constraintSemantics;
     private final IdOrderingQueue legacyIndexTransactionOrdering;
+    private final JobScheduler scheduler;
     private final LockService lockService;
     private final WorkSync<Supplier<LabelScanWriter>,LabelUpdateWork> labelScanStoreSync;
     private final CommandReaderFactory commandReaderFactory;
@@ -153,6 +161,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     private final LegacyIndexProviderLookup legacyIndexProviderLookup;
     private final PropertyPhysicalToLogicalConverter indexUpdatesConverter;
     private final Supplier<StorageStatement> storeStatementSupplier;
+    private final IdController idController;
 
     // Immutable state for creating/applying commands
     private final Loaders loaders;
@@ -165,6 +174,8 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
             File storeDir,
             Config config,
             IdGeneratorFactory idGeneratorFactory,
+            IdReuseEligibility eligibleForReuse,
+            IdTypeConfigurationProvider idTypeConfigurationProvider,
             PageCache pageCache,
             FileSystemAbstraction fs,
             LogProvider logProvider,
@@ -183,12 +194,13 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
             LegacyIndexProviderLookup legacyIndexProviderLookup,
             IndexConfigStore indexConfigStore,
             IdOrderingQueue legacyIndexTransactionOrdering,
-            RecordFormats recordFormats )
+            Supplier<KernelTransactionsSnapshot> transactionsSnapshotSupplier )
     {
         this.propertyKeyTokenHolder = propertyKeyTokenHolder;
         this.relationshipTypeTokenHolder = relationshipTypeTokens;
         this.labelTokenHolder = labelTokens;
         this.schemaStateChangeCallback = schemaStateChangeCallback;
+        this.scheduler = scheduler;
         this.lockService = lockService;
         this.databaseHealth = databaseHealth;
         this.legacyIndexProviderLookup = legacyIndexProviderLookup;
@@ -196,18 +208,21 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
         this.constraintSemantics = constraintSemantics;
         this.legacyIndexTransactionOrdering = legacyIndexTransactionOrdering;
 
-        final StoreFactory storeFactory = new StoreFactory( storeDir, config, idGeneratorFactory,
-                pageCache, fs, recordFormats, logProvider );
-        neoStores = storeFactory.openAllNeoStores( true );
+        this.idController = createStorageIdController( idGeneratorFactory, eligibleForReuse,
+            idTypeConfigurationProvider, transactionsSnapshotSupplier );
+        StoreFactory factory = new StoreFactory( storeDir, config, idController.getIdGeneratorFactory(), pageCache, fs, logProvider );
+        neoStores = factory.openAllNeoStores( true );
 
         try
         {
             indexUpdatesConverter = new PropertyPhysicalToLogicalConverter( neoStores.getPropertyStore() );
-            schemaCache = new SchemaCache( constraintSemantics, Collections.<SchemaRule>emptyList() );
+            schemaCache = new SchemaCache( constraintSemantics, Collections.emptyList() );
             schemaStorage = new SchemaStorage( neoStores.getSchemaStore() );
 
+            labelScanStore = labelScanStoreProvider.getLabelScanStore();
+
             schemaIndexProviderMap = new DefaultSchemaIndexProviderMap( indexProvider );
-            indexStoreView = new NeoStoreIndexStoreView( lockService, neoStores );
+            indexStoreView = new DynamicIndexStoreView( labelScanStore, lockService, neoStores );
             indexingService = IndexingServiceFactory.createIndexingService( config, scheduler, schemaIndexProviderMap,
                     indexStoreView, tokenNameLookup,
                     Iterators.asList( new SchemaStorage( neoStores.getSchemaStore() ).allIndexRules() ), logProvider,
@@ -217,8 +232,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
             cacheAccess = new BridgingCacheAccess( schemaCache, schemaStateChangeCallback,
                     propertyKeyTokenHolder, relationshipTypeTokens, labelTokens );
 
-            labelScanStore = labelScanStoreProvider.getLabelScanStore();
-            storeStatementSupplier = storeStatementSupplier( neoStores, config, lockService );
+            storeStatementSupplier = storeStatementSupplier( neoStores );
             DiskLayer diskLayer = new DiskLayer(
                     propertyKeyTokenHolder, labelTokens, relationshipTypeTokens,
                     schemaStorage, neoStores, indexingService,
@@ -250,14 +264,23 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
         }
     }
 
-    private Supplier<StorageStatement> storeStatementSupplier(
-            NeoStores neoStores, Config config, LockService lockService )
+    private IdController createStorageIdController( IdGeneratorFactory idGeneratorFactory,
+            IdReuseEligibility eligibleForReuse,
+            IdTypeConfigurationProvider idTypeConfigurationProvider,
+            Supplier<KernelTransactionsSnapshot> transactionsSnapshotSupplier )
     {
-        final LockService currentLockService =
-                config.get( use_read_locks_on_property_reads ) ? lockService : NO_LOCK_SERVICE;
-        final Supplier<IndexReaderFactory> indexReaderFactory = () -> new IndexReaderFactory.Caching( indexingService );
+        return safeIdBuffering ?
+               new BufferedIdController( idGeneratorFactory, transactionsSnapshotSupplier,
+                       eligibleForReuse, idTypeConfigurationProvider, scheduler ) :
+               new DefaultIdController( idGeneratorFactory );
+    }
 
-        return () -> new StoreStatement( neoStores, currentLockService, indexReaderFactory, labelScanStore::newReader );
+    private Supplier<StorageStatement> storeStatementSupplier( NeoStores neoStores )
+    {
+        Supplier<IndexReaderFactory> indexReaderFactory = () -> new IndexReaderFactory.Caching( indexingService );
+        LockService lockService = takePropertyReadLocks ? this.lockService : NO_LOCK_SERVICE;
+
+        return () -> new StoreStatement( neoStores, indexReaderFactory, labelScanStore::newReader, lockService );
     }
 
     @Override
@@ -327,12 +350,12 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
                     }
                     batch = batch.next();
                 }
-                catch ( Throwable cause )
-                {
-                    databaseHealth.panic( cause );
-                    throw cause;
-                }
             }
+        }
+        catch ( Throwable cause )
+        {
+            databaseHealth.panic( cause );
+            throw cause;
         }
     }
 
@@ -343,7 +366,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
      *
      * After all transactions have been applied the appliers are closed.
      */
-    private BatchTransactionApplierFacade applier( TransactionApplicationMode mode )
+    protected BatchTransactionApplierFacade applier( TransactionApplicationMode mode )
     {
         ArrayList<BatchTransactionApplier> appliers = new ArrayList<>();
         // Graph store application. The order of the decorated store appliers is irrelevant
@@ -379,7 +402,6 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     {
         satisfier.satisfyDependency( legacyIndexApplierLookup );
         satisfier.satisfyDependency( cacheAccess );
-        satisfier.satisfyDependency( indexStoreView );
         satisfier.satisfyDependency( schemaIndexProviderMap );
         satisfier.satisfyDependency( integrityValidator );
         satisfier.satisfyDependency( labelScanStore );
@@ -387,6 +409,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
         // providing TransactionIdStore, LogVersionRepository
         satisfier.satisfyDependency( neoStores.getMetaDataStore() );
         satisfier.satisfyDependency( indexStoreView );
+        satisfier.satisfyDependency( idController );
     }
 
     @Override
@@ -412,6 +435,7 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
         loadSchemaCache();
         indexingService.start();
         labelScanStore.start();
+        idController.start();
     }
 
     @Override
@@ -422,10 +446,17 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     }
 
     @Override
+    public void clearBufferedIds()
+    {
+        idController.clear();
+    }
+
+    @Override
     public void stop() throws Throwable
     {
         labelScanStore.stop();
         indexingService.stop();
+        idController.stop();
     }
 
     @Override
@@ -471,6 +502,39 @@ public class RecordStorageEngine implements StorageEngine, Lifecycle
     public void prepareForRecoveryRequired()
     {
         neoStores.deleteIdGenerators();
+    }
+
+    @Override
+    public Collection<StoreFileMetadata> listStorageFiles()
+    {
+        List<StoreFileMetadata> files = new ArrayList<>();
+        for ( StoreType type : StoreType.values() )
+        {
+            if ( type.equals( StoreType.COUNTS ) )
+            {
+                addCountStoreFiles( files );
+            }
+            else
+            {
+                final RecordStore<AbstractBaseRecord> recordStore = neoStores.getRecordStore( type );
+                StoreFileMetadata metadata =
+                        new StoreFileMetadata( recordStore.getStorageFileName(), Optional.of( type ),
+                                recordStore.getRecordSize() );
+                files.add( metadata );
+            }
+        }
+        return files;
+    }
+
+    private void addCountStoreFiles( List<StoreFileMetadata> files )
+    {
+        Iterable<File> countStoreFiles = neoStores.getCounts().allFiles();
+        for ( File countStoreFile : countStoreFiles )
+        {
+            StoreFileMetadata countStoreFileMetadata = new StoreFileMetadata( countStoreFile,
+                    Optional.of( StoreType.COUNTS ), RecordFormat.NO_RECORD_SIZE );
+            files.add( countStoreFileMetadata );
+        }
     }
 
     /**

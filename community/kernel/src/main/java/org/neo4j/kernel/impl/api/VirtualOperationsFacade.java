@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import org.neo4j.collection.RawIterator;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
@@ -33,7 +32,6 @@ import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
 import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
 import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
-import org.neo4j.kernel.api.proc.ProcedureSignature.ProcedureName;
 import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.store.CursorRelationshipIterator;
@@ -111,10 +109,11 @@ public class VirtualOperationsFacade extends OperationsFacade
     private SortedSet<Integer> knowntransactionIds;
 
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
-                            StatementOperationParts operations, Procedures procedures )
+                            Procedures procedures )
     {
-        super(tx,statement,operations,procedures);
+        super(tx,statement,procedures);
 
+        //initialize(operations);
 
         virtualRelationshipIdToTypeId = new HashMap<>();
         virtualNodeIds = new HashMap<>();
@@ -135,6 +134,11 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         //virtualPropertiyKeyIdsToObjectForNodes = new HashMap<>();
         //virtualPropertiyKeyIdsToObjectForRels = new HashMap<>();
+    }
+
+    public void initialize( StatementOperationParts operationParts )
+    {
+        super.initialize( operationParts);
     }
 
     // <DataRead>
@@ -158,7 +162,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetForLabel( int labelId )
+    public PrimitiveLongIterator nodesGetForLabel(int labelId )
     {
 
         PrimitiveLongIterator originalIT = super.nodesGetForLabel(labelId);
@@ -176,7 +180,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexSeek( IndexDescriptor index, Object value )
+    public PrimitiveLongIterator nodesGetFromIndexSeek(IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -184,11 +188,11 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexRangeSeekByNumber( IndexDescriptor index,
-            Number lower,
-            boolean includeLower,
-            Number upper,
-            boolean includeUpper )
+    public PrimitiveLongIterator nodesGetFromIndexRangeSeekByNumber(IndexDescriptor index,
+                                                                    Number lower,
+                                                                    boolean includeLower,
+                                                                    Number upper,
+                                                                    boolean includeUpper )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -196,11 +200,11 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexRangeSeekByString( IndexDescriptor index,
-            String lower,
-            boolean includeLower,
-            String upper,
-            boolean includeUpper )
+    public PrimitiveLongIterator nodesGetFromIndexRangeSeekByString(IndexDescriptor index,
+                                                                    String lower,
+                                                                    boolean includeLower,
+                                                                    String upper,
+                                                                    boolean includeUpper )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -208,7 +212,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexRangeSeekByPrefix( IndexDescriptor index, String prefix )
+    public PrimitiveLongIterator nodesGetFromIndexRangeSeekByPrefix(IndexDescriptor index, String prefix )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -216,7 +220,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexScan( IndexDescriptor index )
+    public PrimitiveLongIterator nodesGetFromIndexScan(IndexDescriptor index )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -224,7 +228,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexContainsScan( IndexDescriptor index, String term )
+    public PrimitiveLongIterator nodesGetFromIndexContainsScan(IndexDescriptor index, String term )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -232,7 +236,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexEndsWithScan( IndexDescriptor index, String suffix )
+    public PrimitiveLongIterator nodesGetFromIndexEndsWithScan(IndexDescriptor index, String suffix )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -240,7 +244,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public long nodeGetFromUniqueIndexSeek( IndexDescriptor index, Object value )
+    public long nodeGetFromUniqueIndexSeek(IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
         // TODO !
@@ -286,7 +290,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveIntIterator nodeGetLabels( long nodeId ) throws EntityNotFoundException
+    public PrimitiveIntIterator nodeGetLabels(long nodeId ) throws EntityNotFoundException
     {
         if(isVirtual(nodeId)){
             if(nodeExists(nodeId)){
@@ -340,7 +344,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction, int... relTypes )
+    public RelationshipIterator nodeGetRelationships(long nodeId, Direction direction, int... relTypes )
             throws EntityNotFoundException
     {
         // TODO SASCHA
@@ -411,7 +415,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction )
+    public RelationshipIterator nodeGetRelationships(long nodeId, Direction direction )
             throws EntityNotFoundException
     {
         //TODO: check if that is right
@@ -492,7 +496,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public int nodeGetDegree( long nodeId, Direction direction, int relType ) throws EntityNotFoundException
+    public int nodeGetDegree(long nodeId, Direction direction, int relType ) throws EntityNotFoundException
     {
         int degree = 0;
         /*if(!isVirtual(nodeId)){
@@ -533,7 +537,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveIntIterator nodeGetRelationshipTypes( long nodeId ) throws EntityNotFoundException
+    public PrimitiveIntIterator nodeGetRelationshipTypes(long nodeId ) throws EntityNotFoundException
     {
         if(isVirtual(nodeId)) {
             if(nodeExists(nodeId)){
@@ -632,7 +636,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveIntIterator nodeGetPropertyKeys( long nodeId ) throws EntityNotFoundException
+    public PrimitiveIntIterator nodeGetPropertyKeys(long nodeId ) throws EntityNotFoundException
     {
         if(isVirtual(nodeId)){
             return new MergingPrimitiveIntIterator(null, virtualNodeIdToPropertyKeyIds.get(authenticate()).get(nodeId));
@@ -642,7 +646,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public PrimitiveIntIterator relationshipGetPropertyKeys( long relationshipId ) throws EntityNotFoundException
+    public PrimitiveIntIterator relationshipGetPropertyKeys(long relationshipId ) throws EntityNotFoundException
     {
         if(isVirtual(relationshipId)){
             return new MergingPrimitiveIntIterator(null, virtualRelationshipIdToPropertyKeyIds.get(authenticate()).get(relationshipId));
@@ -694,7 +698,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     // <DataReadCursors>
     @Override
-    public Cursor<NodeItem> nodeCursor( long nodeId )
+    public Cursor<NodeItem> nodeCursor(long nodeId )
     {
         // TODO: Test this
         if(isVirtual(nodeId)){
@@ -705,7 +709,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Cursor<RelationshipItem> relationshipCursor( long relId )
+    public Cursor<RelationshipItem> relationshipCursor(long relId )
     {
         //TODO: Test this more
         if(isVirtual(relId)){
@@ -764,7 +768,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetForLabel( int labelId )
+    public Cursor<NodeItem> nodeCursorGetForLabel(int labelId )
     {
         // getting the real ones
         Cursor<NodeItem> realCursor = super.nodeCursorGetForLabel(labelId);
@@ -787,24 +791,24 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetFromIndexSeek( IndexDescriptor index,
-            Object value ) throws IndexNotFoundKernelException
+    public Cursor<NodeItem> nodeCursorGetFromIndexSeek(IndexDescriptor index,
+                                                       Object value ) throws IndexNotFoundKernelException
     {
         // TODO !
         return super.nodeCursorGetFromIndexSeek(index,value);
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetFromIndexScan( IndexDescriptor index ) throws IndexNotFoundKernelException
+    public Cursor<NodeItem> nodeCursorGetFromIndexScan(IndexDescriptor index ) throws IndexNotFoundKernelException
     {
         // TODO !
         return super.nodeCursorGetFromIndexScan(index);
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByNumber( IndexDescriptor index,
-            Number lower, boolean includeLower,
-            Number upper, boolean includeUpper )
+    public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByNumber(IndexDescriptor index,
+                                                                    Number lower, boolean includeLower,
+                                                                    Number upper, boolean includeUpper )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -812,9 +816,9 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByString( IndexDescriptor index,
-            String lower, boolean includeLower,
-            String upper, boolean includeUpper )
+    public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByString(IndexDescriptor index,
+                                                                    String lower, boolean includeLower,
+                                                                    String upper, boolean includeUpper )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -822,7 +826,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByPrefix( IndexDescriptor index, String prefix )
+    public Cursor<NodeItem> nodeCursorGetFromIndexRangeSeekByPrefix(IndexDescriptor index, String prefix )
             throws IndexNotFoundKernelException
     {
         // TODO !
@@ -830,7 +834,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Cursor<NodeItem> nodeCursorGetFromUniqueIndexSeek( IndexDescriptor index, Object value )
+    public Cursor<NodeItem> nodeCursorGetFromUniqueIndexSeek(IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
         // TODO !
@@ -838,7 +842,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public long nodesCountIndexed( IndexDescriptor index, long nodeId, Object value )
+    public long nodesCountIndexed(IndexDescriptor index, long nodeId, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
         // TODO !
@@ -1285,6 +1289,20 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
+    public int nodeDetachDelete( long nodeId ) throws KernelException
+    {
+        statement.assertOpen();
+        if(isVirtual(nodeId)){
+            //TODO: THIS SHOULD BE DOWN PROPERLY!
+            nodeDelete(nodeId);
+
+        } else{
+            super.nodeDetachDelete(nodeId);
+        }
+        return 0;
+    }
+
+    @Override
     public long relationshipCreate(int relationshipTypeId, long startNodeId, long endNodeId) throws RelationshipTypeIdNotFoundKernelException, EntityNotFoundException {
         //if(isVirtual(startNodeId)||isVirtual(endNodeId)){
         //    // real rel between vNode and ?
@@ -1404,7 +1422,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property nodeSetProperty( long nodeId, DefinedProperty property )
+    public Property nodeSetProperty(long nodeId, DefinedProperty property )
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         if(isVirtual(nodeId)){
@@ -1445,7 +1463,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property relationshipSetProperty( long relationshipId, DefinedProperty property )
+    public Property relationshipSetProperty(long relationshipId, DefinedProperty property )
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         if(isVirtual(relationshipId)){
@@ -1493,7 +1511,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property graphSetProperty( DefinedProperty property )
+    public Property graphSetProperty(DefinedProperty property )
     {
         // TODO !
         /*
@@ -1511,7 +1529,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property nodeRemoveProperty( long nodeId, int propertyKeyId )
+    public Property nodeRemoveProperty(long nodeId, int propertyKeyId )
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         if(isVirtual(nodeId)){
@@ -1539,7 +1557,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property relationshipRemoveProperty( long relationshipId, int propertyKeyId )
+    public Property relationshipRemoveProperty(long relationshipId, int propertyKeyId )
             throws EntityNotFoundException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         if(isVirtual(relationshipId)){
@@ -1567,18 +1585,19 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property graphRemoveProperty( int propertyKeyId )
+    public Property graphRemoveProperty(int propertyKeyId )
     {
         // TODO !!!!!
         return super.graphRemoveProperty(propertyKeyId);
     }
 
-    @Override
-    public RawIterator<Object[], ProcedureException> procedureCallWrite( ProcedureName name, Object[] input ) throws ProcedureException
-    {
-        // TODO ?
-        return super.procedureCallWrite(name,input);
-    }
+    //@Override
+    //public RawIterator<Object[], ProcedureException> procedureCallWrite(ProcedureName name, Object[] input ) throws ProcedureException
+    //{
+    //    // TODO ?
+    //    return super.procedureCallWrite(name,input);
+    //}
+
     // </DataWrite>
 
     // <SchemaWrite>
@@ -1873,7 +1892,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public DoubleLongRegister indexUpdatesAndSize( IndexDescriptor index, DoubleLongRegister target )
+    public DoubleLongRegister indexUpdatesAndSize(IndexDescriptor index, DoubleLongRegister target )
             throws IndexNotFoundKernelException
     {
         // TODO ?
@@ -1881,7 +1900,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public DoubleLongRegister indexSample( IndexDescriptor index, DoubleLongRegister target )
+    public DoubleLongRegister indexSample(IndexDescriptor index, DoubleLongRegister target )
             throws IndexNotFoundKernelException
     {
         // TODO ?
@@ -2050,7 +2069,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     @Override
-    public Property nodeSetVirtualProperty( long nodeId, DefinedProperty property )
+    public Property nodeSetVirtualProperty(long nodeId, DefinedProperty property )
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         statement.assertOpen();
@@ -2075,7 +2094,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
 
     @Override
-    public Property relationshipSetVirtualProperty( long relId, DefinedProperty property )
+    public Property relationshipSetVirtualProperty(long relId, DefinedProperty property )
             throws EntityNotFoundException, ConstraintValidationKernelException, AutoIndexingKernelException, InvalidTransactionTypeKernelException
     {
         statement.assertOpen();

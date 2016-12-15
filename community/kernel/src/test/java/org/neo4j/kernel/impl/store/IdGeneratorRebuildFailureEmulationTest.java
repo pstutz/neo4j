@@ -43,15 +43,15 @@ import org.neo4j.graphdb.mockfs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.configuration.Settings;
-import org.neo4j.kernel.impl.factory.CommunityFacadeFactory;
+import org.neo4j.kernel.impl.factory.CommunityEditionModule;
+import org.neo4j.kernel.impl.factory.DatabaseInfo;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacade;
 import org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory;
 import org.neo4j.kernel.impl.factory.PlatformModule;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.ImpermanentGraphDatabase;
-import org.neo4j.test.PageCacheRule;
+import org.neo4j.test.rule.PageCacheRule;
 
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.Assert.assertEquals;
@@ -123,7 +123,7 @@ public class IdGeneratorRebuildFailureEmulationTest
         params.put( GraphDatabaseSettings.rebuild_idgenerators_fast.name(), Settings.FALSE );
         Config config = new Config( params, GraphDatabaseSettings.class );
         factory = new StoreFactory( storeDir, config, new DefaultIdGeneratorFactory( fs ),
-                pageCacheRule.getPageCache( fs ), fs, StandardV3_0.RECORD_FORMATS, NullLogProvider.getInstance() );
+                pageCacheRule.getPageCache( fs ), fs, NullLogProvider.getInstance() );
     }
 
     @After
@@ -234,12 +234,12 @@ public class IdGeneratorRebuildFailureEmulationTest
         @Override
         protected void create( File storeDir, Map<String, String> params, GraphDatabaseFacadeFactory.Dependencies dependencies )
         {
-            new CommunityFacadeFactory()
+            new GraphDatabaseFacadeFactory( DatabaseInfo.COMMUNITY, CommunityEditionModule::new )
             {
                 @Override
                 protected PlatformModule createPlatform( File storeDir, Map<String, String> params, Dependencies dependencies, GraphDatabaseFacade facade )
                 {
-                    return new ImpermanentPlatformModule( storeDir, params, databaseInfo(), dependencies, facade )
+                    return new ImpermanentPlatformModule( storeDir, params, databaseInfo, dependencies, facade )
                     {
                         @Override
                         protected FileSystemAbstraction createFileSystemAbstraction()
@@ -248,7 +248,7 @@ public class IdGeneratorRebuildFailureEmulationTest
                         }
                     };
                 }
-            }.newFacade( storeDir, params, dependencies, this );
+            }.initFacade( storeDir, params, dependencies, this );
         }
 
     }

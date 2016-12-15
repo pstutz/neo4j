@@ -59,10 +59,11 @@ public class LatestCheckPointFinder
         long oldestVersionFound = -1;
         while ( version >= INITIAL_LOG_VERSION )
         {
-            LogVersionedStoreChannel channel = PhysicalLogFile.tryOpenForVersion( logFiles, fileSystem, version );
+            LogVersionedStoreChannel channel =
+                    PhysicalLogFile.tryOpenForVersion( logFiles, fileSystem, version, false );
             if ( channel == null )
             {
-                return new LatestCheckPoint( null, false, oldestVersionFound );
+                break;
             }
 
             oldestVersionFound = version;

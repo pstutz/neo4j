@@ -22,16 +22,13 @@ package org.neo4j.kernel.impl.api.store;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.neo4j.cursor.Cursor;
-import org.neo4j.kernel.impl.store.AbstractDynamicStore;
-import org.neo4j.kernel.impl.store.DynamicArrayStore;
-import org.neo4j.kernel.impl.store.DynamicStringStore;
 import org.neo4j.kernel.impl.store.LongerShortString;
 import org.neo4j.kernel.impl.store.PropertyType;
 import org.neo4j.kernel.impl.store.RecordCursor;
 import org.neo4j.kernel.impl.store.ShortArray;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
+import org.neo4j.kernel.impl.store.record.Record;
 import org.neo4j.kernel.impl.util.Bits;
 import org.neo4j.string.UTF8;
 
@@ -47,7 +44,7 @@ import static org.neo4j.kernel.impl.store.PropertyType.SHORT;
 import static org.neo4j.kernel.impl.store.PropertyType.SHORT_ARRAY;
 import static org.neo4j.kernel.impl.store.PropertyType.SHORT_STRING;
 import static org.neo4j.kernel.impl.store.PropertyType.STRING;
-import static org.neo4j.kernel.impl.store.record.RecordLoad.NORMAL;
+import static org.neo4j.kernel.impl.store.record.RecordLoad.FORCE;
 
 /**
  * Cursor that provides a view on property blocks of a particular property record.
@@ -68,21 +65,20 @@ class StorePropertyPayloadCursor
      */
     private final ByteBuffer cachedBuffer = ByteBuffer.allocate( INTERNAL_BYTE_ARRAY_SIZE );
 
-    private final DynamicStringStore stringStore;
-    private final DynamicArrayStore arrayStore;
-
-    private RecordCursor<DynamicRecord> stringRecordCursor;
-    private RecordCursor<DynamicRecord> arrayRecordCursor;
+    private final RecordCursor<DynamicRecord> stringRecordCursor;
+    private final RecordCursor<DynamicRecord> arrayRecordCursor;
     private ByteBuffer buffer = cachedBuffer;
 
     private long[] data;
     private int position = INITIAL_POSITION;
     private int numberOfBlocks = 0;
+    private boolean exhausted;
 
-    StorePropertyPayloadCursor( DynamicStringStore stringStore, DynamicArrayStore arrayStore )
+    StorePropertyPayloadCursor( RecordCursor<DynamicRecord> stringRecordCursor,
+            RecordCursor<DynamicRecord> arrayRecordCursor )
     {
-        this.stringStore = stringStore;
-        this.arrayStore = arrayStore;
+        this.stringRecordCursor = stringRecordCursor;
+        this.arrayRecordCursor = arrayRecordCursor;
     }
 
     void init( long[] blocks, int numberOfBlocks )
@@ -91,16 +87,24 @@ class StorePropertyPayloadCursor
         buffer = cachedBuffer;
         data = blocks;
         this.numberOfBlocks = numberOfBlocks;
+        exhausted = false;
     }
 
     void clear()
     {
         position = INITIAL_POSITION;
         numberOfBlocks = 0;
+        exhausted = false;
+        buffer = cachedBuffer;
     }
 
     boolean next()
     {
+        if ( exhausted )
+        {
+            return false;
+        }
+
         if ( position == INITIAL_POSITION )
         {
             position = 0;
@@ -110,16 +114,18 @@ class StorePropertyPayloadCursor
             position += currentBlocksUsed();
         }
 
-        if ( position >= numberOfBlocks )
+        if ( position >= numberOfBlocks || type() == null )
         {
+            exhausted = true;
             return false;
         }
-        return type() != null;
+        return true;
     }
 
     PropertyType type()
     {
-        return PropertyType.getPropertyType( currentHeader(), true );
+        long propBlock = currentHeader();
+        return PropertyType.getPropertyTypeOrNull( propBlock );
     }
 
     int propertyKeyId()
@@ -183,18 +189,13 @@ class StorePropertyPayloadCursor
     String shortStringValue()
     {
         assertOfType( SHORT_STRING );
-        Bits bits = valueAsBits();
-        return LongerShortString.decode( bits );
+        return LongerShortString.decode( data, position, currentBlocksUsed() );
     }
 
     String stringValue()
     {
         assertOfType( STRING );
-        if ( stringRecordCursor == null )
-        {
-            stringRecordCursor = stringStore.newRecordCursor( stringStore.newRecord() );
-        }
-        readFromStore( stringStore, stringRecordCursor );
+        readFromStore( stringRecordCursor );
         buffer.flip();
         return UTF8.decode( buffer.array(), 0, buffer.limit() );
     }
@@ -209,11 +210,7 @@ class StorePropertyPayloadCursor
     Object arrayValue()
     {
         assertOfType( ARRAY );
-        if ( arrayRecordCursor == null )
-        {
-            arrayRecordCursor = arrayStore.newRecordCursor( arrayStore.newRecord() );
-        }
-        readFromStore( arrayStore, arrayRecordCursor );
+        readFromStore( arrayRecordCursor );
         buffer.flip();
         return readArrayFromBuffer( buffer );
     }
@@ -251,7 +248,6 @@ class StorePropertyPayloadCursor
         }
     }
 
-
     private long currentHeader()
     {
         return data[position];
@@ -273,24 +269,27 @@ class StorePropertyPayloadCursor
         return bits;
     }
 
-    private void readFromStore( AbstractDynamicStore store, RecordCursor<DynamicRecord> cursor )
+    private void readFromStore( RecordCursor<DynamicRecord> cursor )
     {
         buffer.clear();
         long startBlockId = PropertyBlock.fetchLong( currentHeader() );
-        try ( Cursor<DynamicRecord> records = cursor.acquire( startBlockId, NORMAL ) )
+        cursor.placeAt( startBlockId, FORCE );
+        while ( true )
         {
-            while ( records.next() )
+            cursor.next();
+            DynamicRecord dynamicRecord = cursor.get();
+            byte[] data = dynamicRecord.getData();
+            if ( buffer.remaining() < data.length )
             {
-                DynamicRecord dynamicRecord = records.get();
-                byte[] data = dynamicRecord.getData();
-                if ( buffer.remaining() < data.length )
-                {
-                    buffer.flip();
-                    ByteBuffer newBuffer = newBiggerBuffer( data.length );
-                    newBuffer.put( buffer );
-                    buffer = newBuffer;
-                }
-                buffer.put( data, 0, data.length );
+                buffer.flip();
+                ByteBuffer newBuffer = newBiggerBuffer( data.length );
+                newBuffer.put( buffer );
+                buffer = newBuffer;
+            }
+            buffer.put( data, 0, data.length );
+            if ( Record.NULL_REFERENCE.is( dynamicRecord.getNextBlock() ) )
+            {
+                break;
             }
         }
     }
@@ -364,9 +363,6 @@ class StorePropertyPayloadCursor
 
     private void assertOfType( PropertyType expected )
     {
-        if ( type() != expected )
-        {
-            throw new IllegalStateException( "Expected type " + expected + " but was " + type() );
-        }
+        assert type() == expected : "Expected type " + expected + " but was " + type();
     }
 }

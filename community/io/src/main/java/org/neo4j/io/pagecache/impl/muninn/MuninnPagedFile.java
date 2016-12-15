@@ -22,6 +22,8 @@ package org.neo4j.io.pagecache.impl.muninn;
 import java.io.File;
 import java.io.Flushable;
 import java.io.IOException;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
 
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCursor;
@@ -29,6 +31,8 @@ import org.neo4j.io.pagecache.PageEvictionCallback;
 import org.neo4j.io.pagecache.PageSwapper;
 import org.neo4j.io.pagecache.PageSwapperFactory;
 import org.neo4j.io.pagecache.PagedFile;
+import org.neo4j.io.pagecache.impl.PagedReadableByteChannel;
+import org.neo4j.io.pagecache.impl.PagedWritableByteChannel;
 import org.neo4j.io.pagecache.tracing.FlushEvent;
 import org.neo4j.io.pagecache.tracing.FlushEventOpportunity;
 import org.neo4j.io.pagecache.tracing.MajorFlushEvent;
@@ -36,7 +40,7 @@ import org.neo4j.io.pagecache.tracing.PageCacheTracer;
 import org.neo4j.io.pagecache.tracing.PageFaultEvent;
 import org.neo4j.unsafe.impl.internal.dragons.UnsafeUtil;
 
-final class MuninnPagedFile implements PagedFile
+final class MuninnPagedFile implements PagedFile, Flushable
 {
     private static final int translationTableChunkSizePower = Integer.getInteger(
             "org.neo4j.io.pagecache.impl.muninn.MuninnPagedFile.translationTableChunkSizePower", 12 );
@@ -62,7 +66,6 @@ final class MuninnPagedFile implements PagedFile
 
     final PageSwapper swapper;
     private final CursorPool cursorPool;
-    private final boolean exclusiveMapping;
 
     // Guarded by the monitor lock on MuninnPageCache (map and unmap)
     private boolean deleteOnClose;
@@ -91,14 +94,12 @@ final class MuninnPagedFile implements PagedFile
             PageSwapperFactory swapperFactory,
             PageCacheTracer tracer,
             boolean createIfNotExists,
-            boolean truncateExisting,
-            boolean exclusiveMapping ) throws IOException
+            boolean truncateExisting ) throws IOException
     {
         this.pageCache = pageCache;
         this.filePageSize = filePageSize;
         this.cursorPool = new CursorPool( this );
         this.tracer = tracer;
-        this.exclusiveMapping = exclusiveMapping;
 
         // The translation table is an array of arrays of references to either null, MuninnPage objects, or Latch
         // objects. The table only grows the outer array, and all the inner "chunks" all stay the same size. This
@@ -134,7 +135,7 @@ final class MuninnPagedFile implements PagedFile
     @Override
     public String toString()
     {
-        return getClass().getSimpleName() + "[" + swapper.file().getName() + "]";
+        return getClass().getSimpleName() + "[" + swapper.file() + "]";
     }
 
     @Override
@@ -171,6 +172,17 @@ final class MuninnPagedFile implements PagedFile
         return filePageSize;
     }
 
+    @Override
+    public long fileSize()
+    {
+        final long lastPageId = getLastPageId();
+        if ( lastPageId < 0 )
+        {
+            return 0L;
+        }
+        return (lastPageId + 1) * pageSize();
+    }
+
     File file()
     {
         return swapper.file();
@@ -179,6 +191,18 @@ final class MuninnPagedFile implements PagedFile
     public void close() throws IOException
     {
         pageCache.unmap( this );
+    }
+
+    @Override
+    public ReadableByteChannel openReadableByteChannel() throws IOException
+    {
+        return new PagedReadableByteChannel( this );
+    }
+
+    @Override
+    public WritableByteChannel openWritableByteChannel() throws IOException
+    {
+        return new PagedWritableByteChannel( this );
     }
 
     void closeSwapper() throws IOException
@@ -226,11 +250,11 @@ final class MuninnPagedFile implements PagedFile
             throws IOException
     {
         // TODO it'd be awesome if, on Linux, we'd call sync_file_range(2) instead of fsync
-        Flushable flushable = swapper::force;
         MuninnPage[] pages = new MuninnPage[translationTableChunkSize];
         long filePageId = -1; // Start at -1 because we increment at the *start* of the chunk-loop iteration.
         long limiterStamp = IOLimiter.INITIAL_STAMP;
-        for ( Object[] chunk : translationTable )
+        Object[][] tt = this.translationTable;
+        for ( Object[] chunk : tt )
         {
             // TODO Look into if we can tolerate flushing a few clean pages if it means we can use larger vectors.
             // TODO The clean pages in question must still be loaded, though. Otherwise we'll end up writing
@@ -249,6 +273,12 @@ final class MuninnPagedFile implements PagedFile
                     if ( element instanceof MuninnPage )
                     {
                         MuninnPage page = (MuninnPage) element;
+                        long stamp = page.tryOptimisticReadLock();
+                        if ( (!page.isDirty()) && page.validateReadLock( stamp ) )
+                        {
+                            break;
+                        }
+
                         if ( !(forClosing? page.tryExclusiveLock() : page.tryFlushLock()) )
                         {
                             continue;
@@ -276,14 +306,14 @@ final class MuninnPagedFile implements PagedFile
                 if ( pagesGrabbed > 0 )
                 {
                     vectoredFlush( pages, pagesGrabbed, flushOpportunity, forClosing );
-                    limiterStamp = limiter.maybeLimitIO( limiterStamp, pagesGrabbed, flushable );
+                    limiterStamp = limiter.maybeLimitIO( limiterStamp, pagesGrabbed, this );
                     pagesGrabbed = 0;
                 }
             }
             if ( pagesGrabbed > 0 )
             {
                 vectoredFlush( pages, pagesGrabbed, flushOpportunity, forClosing );
-                limiterStamp = limiter.maybeLimitIO( limiterStamp, pagesGrabbed, flushable );
+                limiterStamp = limiter.maybeLimitIO( limiterStamp, pagesGrabbed, this );
             }
         }
 
@@ -355,6 +385,12 @@ final class MuninnPagedFile implements PagedFile
     }
 
     @Override
+    public void flush() throws IOException
+    {
+        swapper.force();
+    }
+
+    @Override
     public long getLastPageId()
     {
         long state = getHeaderState();
@@ -402,11 +438,6 @@ final class MuninnPagedFile implements PagedFile
         }
         while ( lastPageId < newLastPageId
                 && !UnsafeUtil.compareAndSwapLong( this, headerStateOffset, current, update ) );
-    }
-
-    boolean isExclusiveMapping()
-    {
-        return exclusiveMapping;
     }
 
     /**

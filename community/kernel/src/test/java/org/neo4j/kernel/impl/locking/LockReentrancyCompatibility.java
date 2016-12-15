@@ -189,7 +189,7 @@ public class LockReentrancyCompatibility extends LockingCompatibilityTestSuite.C
         clientA.acquireShared( NODE, 1L );
 
         // Then shared locks should wait
-        Future<Object> clientBLock = acquireShared( clientB, NODE, 1l ).callAndAssertWaiting();
+        Future<Object> clientBLock = acquireShared( clientB, NODE, 1L ).callAndAssertWaiting();
 
         // And when
         clientA.releaseShared( NODE, 1L );
@@ -211,7 +211,6 @@ public class LockReentrancyCompatibility extends LockingCompatibilityTestSuite.C
         clientA.acquireShared( NODE, 1L );
         clientB.acquireShared( NODE, 1L );
 
-
         LockIdentityExplorer sharedLockExplorer = new LockIdentityExplorer( NODE, 1L );
         locks.accept( sharedLockExplorer );
 
@@ -219,7 +218,7 @@ public class LockReentrancyCompatibility extends LockingCompatibilityTestSuite.C
         Future<Object> exclusiveLockFuture = acquireExclusive( clientB, NODE, 1L ).callAndAssertWaiting();
 
         // and when
-        clientA.releaseAll();
+        clientA.releaseShared( NODE, 1L );
 
         // exclusive lock should be received
         assertNotWaiting( clientB, exclusiveLockFuture );

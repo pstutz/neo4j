@@ -26,7 +26,7 @@ public enum BitmapFormat
     public final int shift;
     private final long mask;
 
-    private BitmapFormat( int shift, long mask )
+    BitmapFormat( int shift, long mask )
     {
         this.shift = shift;
         this.mask = mask;
@@ -55,7 +55,6 @@ public enum BitmapFormat
             //noinspection StatementWithEmptyBody
             while ( (bitmap & (1L << ++offset)) == 0 )
             {
-                ;
             }
             result[i] = (range << shift) | offset;
         }

@@ -19,28 +19,25 @@
  */
 package org.neo4j.server.rest.web;
 
-import java.util.HashMap;
-import java.util.Map;
+import org.neo4j.cypher.CypherException;
+import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.Result;
+import org.neo4j.kernel.impl.query.QueryExecutionEngine;
+import org.neo4j.kernel.impl.query.TransactionalContext;
+import org.neo4j.server.database.CypherExecutor;
+import org.neo4j.server.rest.repr.*;
+import org.neo4j.server.rest.transactional.CommitOnSuccessfulStatusCodeRepresentationWriteHandler;
+import org.neo4j.udc.UsageData;
+import saschapeukert.QueryRewriter;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.POST;
 import javax.ws.rs.Path;
 import javax.ws.rs.QueryParam;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
-
-import org.neo4j.cypher.CypherException;
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Result;
-import org.neo4j.kernel.impl.query.QueryExecutionEngine;
-import org.neo4j.kernel.impl.query.QuerySession;
-import org.neo4j.server.database.CypherExecutor;
-import org.neo4j.server.rest.repr.BadInputException;
-import org.neo4j.server.rest.repr.CypherResultRepresentation;
-import org.neo4j.server.rest.repr.InputFormat;
-import org.neo4j.server.rest.repr.InvalidArgumentsException;
-import org.neo4j.server.rest.repr.OutputFormat;
-import org.neo4j.server.rest.transactional.CommitOnSuccessfulStatusCodeRepresentationWriteHandler;
-import org.neo4j.udc.UsageData;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.neo4j.udc.UsageDataKeys.Features.http_cypher_endpoint;
 import static org.neo4j.udc.UsageDataKeys.features;
@@ -116,17 +113,19 @@ public class CypherService
                 handler.closeTransaction();
             }
 
-            QuerySession querySession = cypherExecutor.createSession( request );
+            TransactionalContext tc = cypherExecutor.createTransactionContext( query, params, request );
 
             Result result;
             if ( profile )
             {
-                result = executionEngine.profileQuery( query, params, querySession );
+                result = executionEngine.profileQuery( query, params, tc );
                 includePlan = true;
             }
             else
             {
-                result = executionEngine.executeQuery( query, params, querySession );
+                QueryRewriter rewriter = new QueryRewriter();
+                query = rewriter.rewrite(query);
+                result = executionEngine.executeQuery( query, params, tc );
                 includePlan = result.getQueryExecutionType().requestedExecutionPlanDescription();
             }
 

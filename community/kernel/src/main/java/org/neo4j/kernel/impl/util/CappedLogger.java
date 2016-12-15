@@ -19,13 +19,13 @@
  */
 package org.neo4j.kernel.impl.util;
 
+import java.time.Clock;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import org.neo4j.helpers.Clock;
 import org.neo4j.logging.Log;
 
 /**
@@ -69,7 +69,7 @@ public class CappedLogger
             delegate.debug( msg, cause );
         }
     }
-    
+
     public void info( @Nonnull String msg )
     {
         if ( filter.accept( msg, null ) )
@@ -85,7 +85,7 @@ public class CappedLogger
             delegate.info( msg, cause );
         }
     }
-    
+
     public void warn( @Nonnull String msg )
     {
         if ( filter.accept( msg, null ) )
@@ -101,7 +101,7 @@ public class CappedLogger
             delegate.warn( msg, cause );
         }
     }
-    
+
     public void error( @Nonnull String msg )
     {
         if ( filter.accept( msg, null ) )
@@ -212,7 +212,7 @@ public class CappedLogger
         private boolean hasCountLimit;
         private int countLimit;
         private long timeLimitMillis;
-        private Clock clock;
+        private final Clock clock;
         private boolean filterDuplicates;
 
         // Atomically updated
@@ -264,7 +264,7 @@ public class CappedLogger
 
         private boolean checkExpiredAndSetLastCheckTime()
         {
-            long now = clock.currentTimeMillis();
+            long now = clock.millis();
             long check = this.lastCheck;
             if ( check > now - timeLimitMillis )
             {

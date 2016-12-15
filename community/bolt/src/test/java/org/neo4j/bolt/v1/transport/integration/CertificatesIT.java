@@ -49,9 +49,9 @@ public class CertificatesIT
     private static Certificates certFactory;
 
     @Rule
-    public Neo4jWithSocket server = new Neo4jWithSocket( settings -> {
-        settings.put( tls_certificate_file, certFile.getAbsolutePath() );
-        settings.put( tls_key_file, keyFile.getAbsolutePath() );
+    public Neo4jWithSocket server = new Neo4jWithSocket( getClass(), settings -> {
+        settings.put( tls_certificate_file.name(), certFile.getAbsolutePath() );
+        settings.put( tls_key_file.name(), keyFile.getAbsolutePath() );
     } );
 
     @Test
@@ -59,7 +59,6 @@ public class CertificatesIT
     {
         // GIVEN
         SecureSocketConnection connection = new SecureSocketConnection();
-
 
         // WHEN
         connection.connect( new HostnamePort( "localhost:7687" ) )
@@ -69,7 +68,6 @@ public class CertificatesIT
         Set<X509Certificate> certificatesSeen = connection.getServerCertificatesSeen();
         assertThat(certificatesSeen, contains(loadCertificateFromDisk()));
     }
-
 
     private X509Certificate loadCertificateFromDisk() throws CertificateException, IOException
     {

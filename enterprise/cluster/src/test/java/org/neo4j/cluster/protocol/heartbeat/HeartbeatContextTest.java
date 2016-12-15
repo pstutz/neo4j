@@ -89,7 +89,7 @@ public class HeartbeatContextTest
         when( context.getConfiguration() ).thenReturn( config );
         when( context.getMyId() ).thenReturn( instanceIds[0] );
 
-        MultiPaxosContext context = new MultiPaxosContext( instanceIds[0], Iterables.<ElectionRole, ElectionRole>iterable(
+        MultiPaxosContext context = new MultiPaxosContext( instanceIds[0], 10, Iterables.<ElectionRole, ElectionRole>iterable(
                         new ElectionRole( "coordinator" ) ), config,
                         Mockito.mock( Executor.class ), NullLogProvider.getInstance(),
                         Mockito.mock( ObjectInputStreamFactory.class), Mockito.mock( ObjectOutputStreamFactory.class),
@@ -228,7 +228,7 @@ public class HeartbeatContextTest
         toTest.suspicions( notInCluster, Iterables.asSet( Iterables.<InstanceId, InstanceId>iterable( instanceIds[1] ) ) );
 
         // When
-        List<InstanceId> suspicions = toTest.getSuspicionsOf ( instanceIds[1] );
+        List<InstanceId> suspicions = toTest.getSuspicionsOf( instanceIds[1] );
 
         // Then
         assertThat( suspicions.size(), CoreMatchers.equalTo( 0 ) );

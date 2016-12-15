@@ -56,9 +56,8 @@ import org.neo4j.kernel.impl.store.TokenStore;
 import org.neo4j.kernel.impl.util.AutoCreatingHashMap;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.Token;
-import org.neo4j.test.TargetDirectory;
-import org.neo4j.test.TargetDirectory.TestDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.TestDirectory;
 import org.neo4j.unsafe.impl.batchimport.BatchImporter;
 import org.neo4j.unsafe.impl.batchimport.Configuration;
 import org.neo4j.unsafe.impl.batchimport.Configuration.Default;
@@ -66,6 +65,7 @@ import org.neo4j.unsafe.impl.batchimport.ParallelBatchImporter;
 import org.neo4j.unsafe.impl.batchimport.input.InputNode;
 import org.neo4j.unsafe.impl.batchimport.input.InputRelationship;
 
+import static java.lang.Runtime.getRuntime;
 import static java.lang.String.format;
 import static java.lang.System.currentTimeMillis;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
@@ -97,7 +97,8 @@ public class CsvInputBatchImportIT
         try
         {
             importer.doImport( csv( nodeDataAsFile( nodeData ), relationshipDataAsFile( relationshipData ),
-                    IdType.STRING, lowBufferSize( COMMAS ), silentBadCollector( 0 ) ) );
+                    IdType.STRING, lowBufferSize( COMMAS ), silentBadCollector( 0 ),
+                    getRuntime().availableProcessors() ) );
             // THEN
             verifyImportedData( nodeData, relationshipData );
             success = true;
@@ -114,7 +115,7 @@ public class CsvInputBatchImportIT
     private org.neo4j.unsafe.impl.batchimport.input.csv.Configuration lowBufferSize(
             org.neo4j.unsafe.impl.batchimport.input.csv.Configuration actual )
     {
-        return new org.neo4j.unsafe.impl.batchimport.input.csv.Configuration.Overriden( actual )
+        return new org.neo4j.unsafe.impl.batchimport.input.csv.Configuration.Overridden( actual )
         {
             @Override
             public int bufferSize()
@@ -485,7 +486,8 @@ public class CsvInputBatchImportIT
     }
 
     private final FileSystemAbstraction fs = new DefaultFileSystemAbstraction();
-    public final @Rule TestDirectory directory = TargetDirectory.testDirForTest( getClass() );
+    @Rule
+    public final TestDirectory directory = TestDirectory.testDirectory();
     private final long seed = currentTimeMillis();
     private final Random random = new Random( seed );
 }

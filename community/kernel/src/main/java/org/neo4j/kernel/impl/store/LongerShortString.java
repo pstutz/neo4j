@@ -392,19 +392,20 @@ public enum LongerShortString
         @Override
         char decTranslate( byte codePoint )
         {
-            if ( codePoint < 0x40 )
+            int code = codePoint & 0xFF;
+            if ( code < 0x40 )
             {
-                if ( codePoint == 0x17 ) return '.';
-                if ( codePoint == 0x37 ) return '-';
-                return (char) ( codePoint + 0xC0 );
+                if ( code == 0x17 ) return '.';
+                if ( code == 0x37 ) return '-';
+                return (char) (code + 0xC0 );
             }
             else
             {
-                if ( codePoint == 0x40 ) return ' ';
-                if ( codePoint == 0x60 ) return '_';
-                if ( codePoint >= 0x5B && codePoint < 0x60 ) return (char) ( '0' + codePoint - 0x5B );
-                if ( codePoint >= 0x7B && codePoint < 0x80 ) return (char) ( '5' + codePoint - 0x7B );
-                return (char) codePoint;
+                if ( code == 0x40 ) return ' ';
+                if ( code == 0x60 ) return '_';
+                if ( code >= 0x5B && code < 0x60 ) return (char) ('0' + code - 0x5B );
+                if ( code >= 0x7B && code < 0x80 ) return (char) ('5' + code - 0x7B );
+                return (char) code;
             }
         }
 
@@ -498,6 +499,7 @@ public enum LongerShortString
     public static final int ALL_BIT_MASK = bitMask( LongerShortString.values() );
     public static final int ENCODING_UTF8 = 0;
     public static final int ENCODING_LATIN1 = 10;
+    private static final int HEADER_SIZE = 39; // bits
 
     final int encodingHeader;
     final long mask;
@@ -764,39 +766,52 @@ public enum LongerShortString
      */
     public static String decode( PropertyBlock block )
     {
-        Bits bits = Bits.bitsFromLongs( block.getValueBlocks() );
-        return decode( bits );
+        return decode( block.getValueBlocks(), 0, block.getValueBlocks().length );
     }
 
-    public static String decode(Bits bits)
+    public static String decode( long[] blocks, int offset, int length )
     {
-        long firstLong = bits.getLongs()[0];
+        long firstLong = blocks[offset];
         if ( ( firstLong & 0xFFFFFF0FFFFFFFFFL ) == 0 ) return "";
-        bits.getInt( 24 ); // Get rid of the key
-        bits.getByte( 4 ); // Get rid of the type
-        int encoding = bits.getByte( 5 ); //(int) ( ( firstLong & 0xF00000000L ) >>> 32 );
-        int stringLength = bits.getByte( 6 ); //(int) ( ( firstLong & 0xFC000000L ) >>> 26 );
-        if ( encoding == LongerShortString.ENCODING_UTF8 ) return decodeUTF8( bits, stringLength );
-        if ( encoding == ENCODING_LATIN1 ) return decodeLatin1( bits, stringLength );
+        // key(24b) + type(4) = 28
+        int encoding = (int) ((firstLong & 0x1F0000000L) >>> 28); // 5 bits of encoding
+        int stringLength = (int) ((firstLong & 0x7E00000000L) >>> 33); // 6 bits of stringLength
+        if ( encoding == LongerShortString.ENCODING_UTF8 ) return decodeUTF8( blocks, offset, stringLength );
+        if ( encoding == ENCODING_LATIN1 ) return decodeLatin1( blocks, offset, stringLength );
 
         LongerShortString table = getEncodingTable( encoding );
+        assert table != null: "We only decode LongerShortStrings after we have consistently read the PropertyBlock " +
+                              "data from the page cache. Thus, we should never have an invalid encoding header here.";
         char[] result = new char[stringLength];
         // encode shifts in the bytes with the first char at the MSB, therefore
         // we must "unshift" in the reverse order
-        for ( int i = 0; i < stringLength; i++ )
-        {
-            byte codePoint = bits.getByte( table.step );
-            result[i] = table.decTranslate( codePoint );
-        }
+        decode( result, blocks, offset, table );
 
         // We know the char array is unshared, so use sharing constructor explicitly
         return UnsafeUtil.newSharedArrayString( result );
     }
 
+    private static void decode( char[] result, long[] blocks, int offset, LongerShortString table )
+    {
+        int block = offset;
+        int maskShift = HEADER_SIZE;
+        long baseMask = table.mask;
+        for ( int i = 0; i < result.length; i++ )
+        {
+            byte codePoint = (byte) ((blocks[block] >>> maskShift) & baseMask);
+            maskShift += table.step;
+            if ( maskShift >= 64 && block + 1 < blocks.length )
+            {
+                maskShift %= 64;
+                codePoint |= (blocks[++block] & (baseMask >>> (table.step - maskShift))) << (table.step - maskShift);
+            }
+            result[i] = table.decTranslate( codePoint );
+        }
+    }
 
     // lookup table by encoding header
     // +2 because of ENCODING_LATIN1 gap and one based index
-    private final static LongerShortString[] ENCODINGS_BY_ENCODING = new LongerShortString[ENCODING_COUNT + 2];
+    private static final LongerShortString[] ENCODINGS_BY_ENCODING = new LongerShortString[ENCODING_COUNT + 2];
 
     static
     {
@@ -806,11 +821,16 @@ public enum LongerShortString
         }
     }
 
+    /**
+     * Get encoding table for the given encoding header, or {@code null} if the encoding header is invalid.
+     */
     private static LongerShortString getEncodingTable( int encodingHeader )
     {
-        final LongerShortString encoding = ENCODINGS_BY_ENCODING[encodingHeader];
-        if (encoding==null) throw new IllegalArgumentException( "Invalid encoding '" + encoding + "'" );
-        return encoding;
+        if ( encodingHeader < 0 | ENCODINGS_BY_ENCODING.length <= encodingHeader )
+        {
+            return null;
+        }
+        return ENCODINGS_BY_ENCODING[encodingHeader];
     }
 
     private static Bits newBits( LongerShortString encoding, int length )
@@ -839,7 +859,10 @@ public enum LongerShortString
         for ( int i = 0; i < length; i++ )
         {
             char c = string.charAt( i );
-            if ( c < 0 || c >= 256 ) return false;
+            if ( c >= 256 )
+            {
+                return false;
+            }
             bits.put( c, 8 ); // Just the lower byte
         }
         return true;
@@ -879,22 +902,40 @@ public enum LongerShortString
         }
     }
 
-    private static String decodeLatin1( Bits bits, int stringLength )
-    { // see decode
+    private static String decodeLatin1( long[] blocks, int offset, int stringLength )
+    {
         char[] result = new char[stringLength];
-        for ( int i = 0; i < stringLength; i++ )
+        int block = offset;
+        int maskShift = HEADER_SIZE;
+        for ( int i = 0; i < result.length; i++ )
         {
-            result[i] = (char) bits.getShort( 8 );
+            char codePoint = (char) ((blocks[block] >>> maskShift) & 0xFF);
+            maskShift += 8;
+            if ( maskShift >= 64 )
+            {
+                maskShift %= 64;
+                codePoint |= (blocks[++block] & (0xFF >>> (8-maskShift))) << (8-maskShift);
+            }
+            result[i] = codePoint;
         }
-        return new String( result );
+        return UnsafeUtil.newSharedArrayString( result );
     }
 
-    private static String decodeUTF8( Bits bits, int stringLength )
+    private static String decodeUTF8( long[] blocks, int offset, int stringLength )
     {
         byte[] result = new byte[stringLength];
-        for ( int i = 0; i < stringLength; i++ )
+        int block = offset;
+        int maskShift = HEADER_SIZE;
+        for ( int i = 0; i < result.length; i++ )
         {
-            result[i] = bits.getByte();
+            byte codePoint = (byte) (blocks[block] >>> maskShift);
+            maskShift += 8;
+            if ( maskShift >= 64 )
+            {
+                maskShift %= 64;
+                codePoint |= (blocks[++block] & (0xFF >>> (8-maskShift))) << (8-maskShift);
+            }
+            result[i] = codePoint;
         }
         return UTF8.decode( result );
     }
@@ -906,24 +947,28 @@ public enum LongerShortString
          */
         int encoding = (int) ( ( firstBlock & 0x1F0000000L ) >> 28 );
         int length = (int) ( ( firstBlock & 0x7E00000000L ) >> 33 );
-        /*
-        Bits bits = Bits.bitsFromLongs( new long[] {firstBlock} );
-        bits.getInt( 24 ); // key
-        bits.getByte( 4 ); // type
-        int encoding = bits.getByte( 5 );
-        int length = bits.getByte( 6 );
-        */
-        if (encoding==ENCODING_UTF8 || encoding == ENCODING_LATIN1) return calculateNumberOfBlocksUsedForStep8(length);
-        return calculateNumberOfBlocksUsed( getEncodingTable(encoding), length );
+        if ( encoding == ENCODING_UTF8 || encoding == ENCODING_LATIN1 )
+        {
+            return calculateNumberOfBlocksUsedForStep8(length);
+        }
+
+        LongerShortString encodingTable = getEncodingTable( encoding );
+        if ( encodingTable == null )
+        {
+            // We probably did an inconsistent read of the first block
+            return PropertyType.BLOCKS_USED_FOR_BAD_TYPE_OR_ENCODING;
+        }
+        return calculateNumberOfBlocksUsed( encodingTable, length );
     }
 
     public static int calculateNumberOfBlocksUsedForStep8( int length )
     {
-        return totalBits(length << 3); // * 8
+        return totalBits( length << 3 ); // * 8
     }
+
     public static int calculateNumberOfBlocksUsed( LongerShortString encoding, int length )
     {
-        return totalBits(length * encoding.step);
+        return totalBits( length * encoding.step );
     }
 
     private static int totalBits( int bitsForCharacters )

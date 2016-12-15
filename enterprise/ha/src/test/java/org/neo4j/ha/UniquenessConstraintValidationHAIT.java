@@ -19,7 +19,6 @@
  */
 package org.neo4j.ha;
 
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -31,16 +30,15 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.kernel.ha.HighlyAvailableGraphDatabase;
 import org.neo4j.kernel.impl.ha.ClusterManager;
 import org.neo4j.kernel.impl.util.Listener;
-import org.neo4j.test.OtherThreadRule;
 import org.neo4j.test.ha.ClusterRule;
+import org.neo4j.test.rule.concurrent.OtherThreadRule;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.neo4j.graphdb.Label.label;
-
 import static org.neo4j.kernel.impl.api.integrationtest.UniquenessConstraintValidationConcurrencyIT.createNode;
-import static org.neo4j.test.OtherThreadRule.isWaiting;
+import static org.neo4j.test.rule.concurrent.OtherThreadRule.isWaiting;
 
 public class UniquenessConstraintValidationHAIT
 {
@@ -49,8 +47,8 @@ public class UniquenessConstraintValidationHAIT
 
     @Rule
     public final OtherThreadRule<Void> otherThread = new OtherThreadRule<>();
-    @ClassRule
-    public static final ClusterRule clusterRule = new ClusterRule( UniquenessConstraintValidationHAIT.class )
+    @Rule
+    public final ClusterRule clusterRule = new ClusterRule( getClass() )
             .withInitialDataset( uniquenessConstraint( LABEL, PROPERTY_KEY ) );
 
     @Test
@@ -98,7 +96,6 @@ public class UniquenessConstraintValidationHAIT
 
             tx.success();
         }
-
 
         // then
         assertFalse( "creating violating data should fail", created.get() );
@@ -152,7 +149,6 @@ public class UniquenessConstraintValidationHAIT
 
             tx.failure();
         }
-
 
         // then
         assertTrue( "creating data that conflicts only with rolled back data should pass", created.get() );

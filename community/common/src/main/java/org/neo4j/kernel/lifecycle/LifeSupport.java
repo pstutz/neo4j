@@ -261,7 +261,7 @@ public class LifeSupport
         return true;
     }
 
-    public synchronized boolean remove( Object instance )
+    public synchronized boolean remove( Lifecycle instance )
     {
         for ( int i = 0; i < instances.size(); i++ )
         {
@@ -276,7 +276,6 @@ public class LifeSupport
         }
         return false;
     }
-
 
     public Iterable<Lifecycle> getLifecycleInstances()
     {
@@ -318,7 +317,7 @@ public class LifeSupport
             case STOPPED:
                 instance.init();
                 break;
-            case SHUTDOWN:
+            default:
                 break;
         }
     }
@@ -509,7 +508,7 @@ public class LifeSupport
             return instance.toString() + ": " + currentStatus.name();
         }
 
-        public boolean isInstance( Object instance )
+        public boolean isInstance( Lifecycle instance )
         {
             return this.instance == instance;
         }

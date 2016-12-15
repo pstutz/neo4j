@@ -19,6 +19,7 @@
  */
 package org.neo4j.bolt.v1.transport.integration;
 
+import org.junit.After;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -28,10 +29,10 @@ import org.junit.runners.Parameterized;
 import java.io.IOException;
 import java.util.Collection;
 
-import org.neo4j.bolt.v1.transport.socket.client.Connection;
 import org.neo4j.bolt.v1.transport.socket.client.SecureSocketConnection;
 import org.neo4j.bolt.v1.transport.socket.client.SecureWebSocketConnection;
 import org.neo4j.bolt.v1.transport.socket.client.SocketConnection;
+import org.neo4j.bolt.v1.transport.socket.client.TransportConnection;
 import org.neo4j.bolt.v1.transport.socket.client.WebSocketConnection;
 import org.neo4j.helpers.HostnamePort;
 
@@ -44,10 +45,10 @@ public class ConnectionIT
     public ExpectedException exception = ExpectedException.none();
 
     @Rule
-    public Neo4jWithSocket server = new Neo4jWithSocket();
+    public Neo4jWithSocket server = new Neo4jWithSocket(  getClass() );
 
     @Parameterized.Parameter(0)
-    public Connection connection;
+    public TransportConnection connection;
 
     @Parameterized.Parameter(1)
     public HostnamePort address;
@@ -72,6 +73,15 @@ public class ConnectionIT
                         new WebSocketConnection(),
                         new HostnamePort( "localhost:7687" )
                 });
+    }
+
+    @After
+    public void cleanup() throws IOException
+    {
+        if ( connection != null )
+        {
+            connection.disconnect();
+        }
     }
 
     @Test

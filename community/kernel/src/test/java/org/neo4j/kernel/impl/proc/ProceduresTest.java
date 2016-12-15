@@ -28,16 +28,24 @@ import java.util.List;
 import org.neo4j.collection.RawIterator;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
+import org.neo4j.kernel.api.proc.BasicContext;
 import org.neo4j.kernel.api.proc.CallableProcedure;
+import org.neo4j.kernel.api.proc.Context;
+import org.neo4j.kernel.api.proc.Key;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
+import org.neo4j.procedure.Mode;
+import org.neo4j.procedure.PerformsWrites;
+import org.neo4j.procedure.Procedure;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.junit.Assert.assertThat;
 import static org.neo4j.helpers.collection.Iterators.asList;
-import static org.neo4j.kernel.api.proc.CallableProcedure.Key.key;
+import static org.neo4j.kernel.api.proc.Key.key;
 import static org.neo4j.kernel.api.proc.Neo4jTypes.NTAny;
+import static org.neo4j.kernel.api.proc.Neo4jTypes.NTInteger;
+import static org.neo4j.kernel.api.proc.Neo4jTypes.NTString;
 import static org.neo4j.kernel.api.proc.ProcedureSignature.procedureSignature;
 
 public class ProceduresTest
@@ -46,7 +54,7 @@ public class ProceduresTest
     public ExpectedException exception = ExpectedException.none();
 
     private final Procedures procs = new Procedures();
-    private final ProcedureSignature signature = procedureSignature( "org", "myproc" ).build();
+    private final ProcedureSignature signature = procedureSignature( "org", "myproc" ).out( "name", NTString ).build();
     private final CallableProcedure procedure = procedure( signature );
 
     @Test
@@ -56,23 +64,23 @@ public class ProceduresTest
         procs.register( procedure );
 
         // Then
-        assertThat( procs.get( signature.name() ), equalTo( signature ) );
+        assertThat( procs.procedure( signature.name() ), equalTo( signature ) );
     }
 
     @Test
     public void shouldGetAllRegisteredProcedures() throws Throwable
     {
         // When
-        procs.register( procedure( procedureSignature( "org", "myproc1" ).build() ) );
-        procs.register( procedure( procedureSignature( "org", "myproc2" ).build() ) );
-        procs.register( procedure( procedureSignature( "org", "myproc3" ).build() ) );
+        procs.register( procedure( procedureSignature( "org", "myproc1" ).out( "age", NTInteger ).build() ) );
+        procs.register( procedure( procedureSignature( "org", "myproc2" ).out( "age", NTInteger ).build() ) );
+        procs.register( procedure( procedureSignature( "org", "myproc3" ).out( "age", NTInteger ).build() ) );
 
         // Then
-        List<ProcedureSignature> signatures = Iterables.asList( procs.getAll() );
+        List<ProcedureSignature> signatures = Iterables.asList( procs.getAllProcedures() );
         assertThat( signatures, containsInAnyOrder(
-                procedureSignature( "org", "myproc1" ).build(),
-                procedureSignature( "org", "myproc2" ).build(),
-                procedureSignature( "org", "myproc3" ).build() ) );
+                procedureSignature( "org", "myproc1" ).out( "age", NTInteger ).build(),
+                procedureSignature( "org", "myproc2" ).out( "age", NTInteger ).build(),
+                procedureSignature( "org", "myproc3" ).out( "age", NTInteger ).build() ) );
     }
 
     @Test
@@ -82,9 +90,7 @@ public class ProceduresTest
         procs.register( procedure );
 
         // When
-        RawIterator<Object[], ProcedureException> result = procs.call( new CallableProcedure.BasicContext()
-        {
-        }, signature.name(), new Object[]{1337} );
+        RawIterator<Object[], ProcedureException> result = procs.callProcedure( new BasicContext(), signature.name(), new Object[]{1337} );
 
         // Then
         assertThat( asList( result ), contains( equalTo( new Object[]{1337} ) ) );
@@ -100,9 +106,7 @@ public class ProceduresTest
                                  "procedure name correctly and that the procedure is properly deployed." );
 
         // When
-        procs.call( new CallableProcedure.BasicContext()
-        {
-        }, signature.name(), new Object[]{1337} );
+        procs.callProcedure( new BasicContext(), signature.name(), new Object[]{1337} );
     }
 
     @Test
@@ -155,14 +159,14 @@ public class ProceduresTest
                                  "procedure name correctly and that the procedure is properly deployed." );
 
         // When
-        procs.get( signature.name() );
+        procs.procedure( signature.name() );
     }
 
     @Test
     public void shouldMakeContextAvailable() throws Throwable
     {
         // Given
-        CallableProcedure.Key<String> someKey = key("someKey", String.class);
+        Key<String> someKey = key("someKey", String.class);
 
         procs.register( new CallableProcedure.BasicProcedure(signature)
         {
@@ -173,14 +177,82 @@ public class ProceduresTest
             }
         } );
 
-        CallableProcedure.BasicContext ctx = new CallableProcedure.BasicContext();
+        BasicContext ctx = new BasicContext();
         ctx.put( someKey, "hello, world" );
 
         // When
-        RawIterator<Object[], ProcedureException> result = procs.call( ctx, signature.name(), new Object[0] );
+        RawIterator<Object[], ProcedureException> result = procs.callProcedure( ctx, signature.name(), new Object[0] );
 
         // Then
         assertThat( asList( result ), contains( equalTo( new Object[]{ "hello, world" } ) ) );
+    }
+
+    @Test
+    public void shouldFailCompileProcedureWithReadConflict() throws Throwable
+    {
+        exception.expect( ProcedureException.class );
+        exception.expectMessage( "Conflicting procedure annotation, cannot use PerformsWrites and mode" );
+        procs.registerProcedure( ProcedureWithReadConflictAnnotation.class );
+    }
+
+    @Test
+    public void shouldFailCompileProcedureWithWriteConflict() throws Throwable
+    {
+        exception.expect( ProcedureException.class );
+        exception.expectMessage( "Conflicting procedure annotation, cannot use PerformsWrites and mode" );
+        procs.registerProcedure( ProcedureWithWriteConflictAnnotation.class );
+    }
+
+    @Test
+    public void shouldFailCompileProcedureWithSchemaConflict() throws Throwable
+    {
+        exception.expect( ProcedureException.class );
+        exception.expectMessage( "Conflicting procedure annotation, cannot use PerformsWrites and mode" );
+        procs.registerProcedure( ProcedureWithSchemaConflictAnnotation.class );
+    }
+
+    @Test
+    public void shouldFailCompileProcedureWithDBMSConflict() throws Throwable
+    {
+        exception.expect( ProcedureException.class );
+        exception.expectMessage( "Conflicting procedure annotation, cannot use PerformsWrites and mode" );
+        procs.registerProcedure( ProcedureWithDBMSConflictAnnotation.class );
+    }
+
+    public static class ProcedureWithReadConflictAnnotation
+    {
+        @PerformsWrites
+        @Procedure( mode = Mode.READ )
+        public void shouldCompile()
+        {
+        }
+    }
+
+    public static class ProcedureWithWriteConflictAnnotation
+    {
+        @PerformsWrites
+        @Procedure( mode = Mode.WRITE )
+        public void shouldCompileToo()
+        {
+        }
+    }
+
+    public static class ProcedureWithDBMSConflictAnnotation
+    {
+        @PerformsWrites
+        @Procedure( mode = Mode.DBMS )
+        public void shouldNotCompile()
+        {
+        }
+    }
+
+    public static class ProcedureWithSchemaConflictAnnotation
+    {
+        @PerformsWrites
+        @Procedure( mode = Mode.SCHEMA )
+        public void shouldNotCompile()
+        {
+        }
     }
 
     private CallableProcedure.BasicProcedure procedureWithSignature( final ProcedureSignature signature )

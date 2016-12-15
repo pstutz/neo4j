@@ -19,18 +19,19 @@
  */
 package org.neo4j.kernel.impl.transaction.log;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import org.junit.Test;
 import org.neo4j.graphdb.mockfs.EphemeralFileSystemAbstraction;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.fs.StoreChannel;
 import org.neo4j.storageengine.api.ReadPastEndException;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
 
 public class ReadAheadChannelTest
 {
@@ -169,5 +170,53 @@ public class ReadAheadChannelTest
         {
             // outstanding
         }
+    }
+
+    @Test
+    public void shouldReturnPositionWithinBufferedStream() throws Exception
+    {
+        // given
+        EphemeralFileSystemAbstraction fsa = new EphemeralFileSystemAbstraction();
+        File file = new File( "foo.txt" );
+
+        int readAheadSize = 512;
+        int fileSize = readAheadSize * 8;
+
+        createFile( fsa, file, fileSize );
+        ReadAheadChannel<StoreChannel> bufferedReader = new ReadAheadChannel<>( fsa.open( file, "r" ), readAheadSize );
+
+        // when
+        for ( int i = 0; i < fileSize / Long.BYTES; i++ )
+        {
+            assertEquals( Long.BYTES * i, bufferedReader.position() );
+            bufferedReader.getLong();
+        }
+
+        assertEquals( fileSize, bufferedReader.position() );
+
+        try
+        {
+            bufferedReader.getLong();
+            fail();
+        }
+        catch ( ReadPastEndException e )
+        {
+            // expected
+        }
+
+        assertEquals( fileSize, bufferedReader.position() );
+    }
+
+    private void createFile( EphemeralFileSystemAbstraction fsa, File name, int bufferSize ) throws IOException
+    {
+        StoreChannel storeChannel = fsa.open( name, "w" );
+        ByteBuffer buffer = ByteBuffer.allocate( bufferSize );
+        for ( int i = 0; i < bufferSize; i++ )
+        {
+            buffer.put( (byte) i );
+        }
+        buffer.flip();
+        storeChannel.writeAll( buffer );
+        storeChannel.close();
     }
 }

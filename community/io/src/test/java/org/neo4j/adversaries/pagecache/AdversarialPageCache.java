@@ -24,11 +24,15 @@ import org.apache.commons.lang3.ArrayUtils;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.OpenOption;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Stream;
 
 import org.neo4j.adversaries.Adversary;
+import org.neo4j.io.pagecache.FileHandle;
 import org.neo4j.io.pagecache.IOLimiter;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PagedFile;
@@ -68,6 +72,18 @@ public class AdversarialPageCache implements PageCache
     }
 
     @Override
+    public Optional<PagedFile> getExistingMapping( File file ) throws IOException
+    {
+        adversary.injectFailure( IOException.class, SecurityException.class );
+        final Optional<PagedFile> optional = delegate.getExistingMapping( file );
+        if ( optional.isPresent() )
+        {
+            return Optional.of( new AdversarialPagedFile( optional.get(), adversary ) );
+        }
+        return optional;
+    }
+
+    @Override
     public void flushAndForce() throws IOException
     {
         adversary.injectFailure( FileNotFoundException.class, IOException.class, SecurityException.class );
@@ -82,9 +98,9 @@ public class AdversarialPageCache implements PageCache
     }
 
     @Override
-    public void close() throws IOException
+    public void close()
     {
-        adversary.injectFailure( FileNotFoundException.class, IOException.class, SecurityException.class );
+        adversary.injectFailure( IllegalStateException.class );
         delegate.close();
     }
 
@@ -98,5 +114,12 @@ public class AdversarialPageCache implements PageCache
     public int maxCachedPages()
     {
         return delegate.maxCachedPages();
+    }
+
+    @Override
+    public Stream<FileHandle> streamFilesRecursive( File directory ) throws IOException
+    {
+        adversary.injectFailure( NoSuchFileException.class, IOException.class );
+        return delegate.streamFilesRecursive( directory );
     }
 }

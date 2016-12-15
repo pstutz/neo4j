@@ -23,6 +23,8 @@ import org.junit.Test;
 
 import java.util.concurrent.TimeUnit;
 
+import org.neo4j.kernel.api.security.AuthenticationResult;
+import org.neo4j.time.Clocks;
 import org.neo4j.time.FakeClock;
 
 import static org.hamcrest.Matchers.equalTo;
@@ -34,9 +36,9 @@ public class RateLimitedAuthenticationStrategyTest
     public void shouldReturnSuccessForValidAttempt() throws Exception
     {
         // Given
-        FakeClock clock = new FakeClock();
+        FakeClock clock = getFakeClock();
         AuthenticationStrategy authStrategy = new RateLimitedAuthenticationStrategy( clock, 3 );
-        User user = new User( "user", Credential.forPassword( "right" ), false );
+        User user = new User.Builder( "user", Credential.forPassword( "right" ) ).build();
 
         // Then
         assertThat( authStrategy.authenticate( user, "right" ), equalTo( AuthenticationResult.SUCCESS ) );
@@ -46,9 +48,9 @@ public class RateLimitedAuthenticationStrategyTest
     public void shouldReturnFailureForInvalidAttempt() throws Exception
     {
         // Given
-        FakeClock clock = new FakeClock();
+        FakeClock clock = getFakeClock();
         AuthenticationStrategy authStrategy = new RateLimitedAuthenticationStrategy( clock, 3 );
-        User user = new User( "user", Credential.forPassword( "right" ), false );
+        User user = new User.Builder( "user", Credential.forPassword( "right" ) ).build();
 
         // Then
         assertThat( authStrategy.authenticate( user, "wrong" ), equalTo( AuthenticationResult.FAILURE ) );
@@ -58,9 +60,9 @@ public class RateLimitedAuthenticationStrategyTest
     public void shouldNotSlowRequestRateOnLessThanMaxFailedAttempts() throws Exception
     {
         // Given
-        FakeClock clock = new FakeClock();
+        FakeClock clock = getFakeClock();
         AuthenticationStrategy authStrategy = new RateLimitedAuthenticationStrategy( clock, 3 );
-        User user = new User( "user", Credential.forPassword( "right" ), false );
+        User user = new User.Builder( "user", Credential.forPassword( "right" ) ).build();
 
         // When we've failed two times
         assertThat( authStrategy.authenticate( user, "wrong" ), equalTo( AuthenticationResult.FAILURE ) );
@@ -74,9 +76,9 @@ public class RateLimitedAuthenticationStrategyTest
     public void shouldSlowRequestRateOnMultipleFailedAttempts() throws Exception
     {
         // Given
-        FakeClock clock = new FakeClock();
+        FakeClock clock = getFakeClock();
         AuthenticationStrategy authStrategy = new RateLimitedAuthenticationStrategy( clock, 3 );
-        User user = new User( "user", Credential.forPassword( "right" ), false );
+        User user = new User.Builder( "user", Credential.forPassword( "right" ) ).build();
 
         // When we've failed three times
         assertThat( authStrategy.authenticate( user, "wrong" ), equalTo( AuthenticationResult.FAILURE ) );
@@ -97,9 +99,9 @@ public class RateLimitedAuthenticationStrategyTest
     public void shouldSlowRequestRateOnMultipleFailedAttemptsWhereAttemptIsValid() throws Exception
     {
         // Given
-        FakeClock clock = new FakeClock();
+        FakeClock clock = getFakeClock();
         AuthenticationStrategy authStrategy = new RateLimitedAuthenticationStrategy( clock, 3 );
-        User user = new User( "user", Credential.forPassword( "right" ), false );
+        User user = new User.Builder( "user", Credential.forPassword( "right" ) ).build();
 
         // When we've failed three times
         authStrategy.authenticate( user, "wrong" );
@@ -114,6 +116,11 @@ public class RateLimitedAuthenticationStrategyTest
 
         // Then things should be alright
         assertThat( authStrategy.authenticate( user, "right" ), equalTo( AuthenticationResult.SUCCESS ) );
+    }
+
+    private FakeClock getFakeClock()
+    {
+        return Clocks.fakeClock();
     }
 
 }

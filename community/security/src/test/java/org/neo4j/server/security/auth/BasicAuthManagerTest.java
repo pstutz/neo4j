@@ -19,8 +19,22 @@
  */
 package org.neo4j.server.security.auth;
 
+import junit.framework.TestCase;
+import org.hamcrest.core.IsEqual;
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
+import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
+import org.neo4j.kernel.api.security.AuthManager;
+import org.neo4j.kernel.api.security.AuthSubject;
+import org.neo4j.kernel.api.security.AuthenticationResult;
+import org.neo4j.kernel.api.security.SecurityContext;
+import org.neo4j.kernel.api.security.exception.InvalidAuthTokenException;
+import org.neo4j.kernel.configuration.Config;
+import org.neo4j.logging.NullLogProvider;
+
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -28,121 +42,106 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+import static org.neo4j.kernel.api.security.AuthenticationResult.FAILURE;
+import static org.neo4j.kernel.api.security.AuthenticationResult.PASSWORD_CHANGE_REQUIRED;
+import static org.neo4j.kernel.api.security.AuthenticationResult.SUCCESS;
+import static org.neo4j.kernel.api.security.AuthenticationResult.TOO_MANY_ATTEMPTS;
+import static org.neo4j.server.security.auth.SecurityTestUtils.authToken;
 
-public class BasicAuthManagerTest
+public class BasicAuthManagerTest extends InitialUserTests
 {
-    @Test
-    public void shouldCreateDefaultUserIfNoneExist() throws Throwable
+    private BasicAuthManager manager;
+    private AuthenticationStrategy authStrategy = mock( AuthenticationStrategy.class );
+
+    @Before
+    public void setup() throws Throwable
     {
-        // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ) );
+        config = Config.defaults();
+        users = CommunitySecurityModule.getUserRepository( config, NullLogProvider.getInstance(), fsRule.get() );
+        UserRepository initUserRepository =
+                CommunitySecurityModule.getInitialUserRepository( config, NullLogProvider.getInstance(), fsRule.get() );
+        manager = new BasicAuthManager( users, mock( PasswordPolicy.class ), authStrategy, initUserRepository );
+        manager.init();
+    }
 
-        // When
-        manager.start();
-
-        // Then
-        final User user = users.findByName( "neo4j" );
-        assertNotNull( user );
-        assertTrue( user.credentials().matchesPassword( "neo4j" ) );
-        assertTrue( user.passwordChangeRequired() );
+    @After
+    public void teardown() throws Throwable
+    {
+        manager.stop();
     }
 
     @Test
     public void shouldFindAndAuthenticateUserSuccessfully() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final User user = new User( "jake", Credential.forPassword( "abc123" ), false );
-        users.create( user );
-        final AuthenticationStrategy authStrategy = mock( AuthenticationStrategy.class );
-        final BasicAuthManager manager = new BasicAuthManager( users, authStrategy );
         manager.start();
-        when( authStrategy.authenticate( user, "abc123" ) ).thenReturn( AuthenticationResult.SUCCESS );
+        User user1 = newUser( "jake", "abc123", false );
+        users.create( user1 );
+        final User user = user1;
 
         // When
-        AuthenticationResult result = manager.authenticate( "jake", "abc123" );
+        when( authStrategy.authenticate( user, "abc123" )).thenReturn( SUCCESS );
 
         // Then
-        verify( authStrategy ).authenticate( user, "abc123" );
-        assertThat( result, equalTo( AuthenticationResult.SUCCESS ) );
+        assertLoginGivesResult( "jake", "abc123", SUCCESS );
     }
 
     @Test
     public void shouldFindAndAuthenticateUserAndReturnAuthStrategyResult() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final User user = new User( "jake", Credential.forPassword( "abc123" ), true );
-        users.create( user );
-        final AuthenticationStrategy authStrategy = mock( AuthenticationStrategy.class );
-        final BasicAuthManager manager = new BasicAuthManager( users, authStrategy );
         manager.start();
-        when( authStrategy.authenticate( user, "abc123" ) ).thenReturn( AuthenticationResult.TOO_MANY_ATTEMPTS );
+        User user1 = newUser( "jake", "abc123", true );
+        users.create( user1 );
+        final User user = user1;
 
         // When
-        AuthenticationResult result = manager.authenticate( "jake", "abc123" );
+        when( authStrategy.authenticate( user, "abc123" )).thenReturn( TOO_MANY_ATTEMPTS );
 
         // Then
-        verify( authStrategy ).authenticate( user, "abc123" );
-        assertThat( result, equalTo( AuthenticationResult.TOO_MANY_ATTEMPTS ) );
+        assertLoginGivesResult( "jake", "abc123", TOO_MANY_ATTEMPTS );
     }
 
     @Test
     public void shouldFindAndAuthenticateUserAndReturnPasswordChangeIfRequired() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final User user = new User( "jake", Credential.forPassword( "abc123" ), true );
-        users.create( user );
-        final AuthenticationStrategy authStrategy = mock( AuthenticationStrategy.class );
-        final BasicAuthManager manager = new BasicAuthManager( users, authStrategy );
         manager.start();
-        when( authStrategy.authenticate( user, "abc123" ) ).thenReturn( AuthenticationResult.SUCCESS );
+        User user1 = newUser( "jake", "abc123", true );
+        users.create( user1 );
+        final User user = user1;
 
         // When
-        AuthenticationResult result = manager.authenticate( "jake", "abc123" );
+        when( authStrategy.authenticate( user, "abc123" )).thenReturn( SUCCESS );
 
         // Then
-        verify( authStrategy ).authenticate( user, "abc123" );
-        assertThat( result, equalTo( AuthenticationResult.PASSWORD_CHANGE_REQUIRED ) );
+        assertLoginGivesResult( "jake", "abc123", PASSWORD_CHANGE_REQUIRED );
     }
 
     @Test
     public void shouldFailAuthenticationIfUserIsNotFound() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final User user = new User( "jake", Credential.forPassword( "abc123" ), true );
-        users.create( user );
-        final AuthenticationStrategy authStrategy = mock( AuthenticationStrategy.class );
-        final BasicAuthManager manager = new BasicAuthManager( users, authStrategy );
         manager.start();
-
-        // When
-        AuthenticationResult result = manager.authenticate( "unknown", "abc123" );
+        User user = newUser( "jake", "abc123", true );
+        users.create( user );
 
         // Then
-        verifyNoMoreInteractions( authStrategy );
-        assertThat( result, equalTo( AuthenticationResult.FAILURE ) );
+        assertLoginGivesResult( "unknown", "abc123", FAILURE );
     }
 
     @Test
     public void shouldCreateUser() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ) );
         manager.start();
 
         // When
         manager.newUser( "foo", "bar", true );
 
         // Then
-        User user = users.findByName( "foo" );
+        User user = users.getUserByName( "foo" );
         assertNotNull( user );
         assertTrue( user.passwordChangeRequired() );
         assertTrue( user.credentials().matchesPassword( "bar" ) );
@@ -152,120 +151,86 @@ public class BasicAuthManagerTest
     public void shouldDeleteUser() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final User user = new User( "jake", Credential.forPassword( "abc123" ), true );
-        users.create( user );
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ) );
         manager.start();
+        manager.newUser( "jake", "abc123", true );
 
         // When
         manager.deleteUser( "jake" );
 
         // Then
-        assertNull( users.findByName( "jake" ) );
+        assertNull( users.getUserByName( "jake" ) );
     }
 
     @Test
-    public void shouldDeleteUnknownUser() throws Throwable
+    public void shouldFailToDeleteUnknownUser() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final User user = new User( "jake", Credential.forPassword( "abc123" ), true );
-        users.create( user );
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ) );
         manager.start();
+        manager.newUser( "jake", "abc123", true );
 
-        // When
-        manager.deleteUser( "unknown" );
+        try
+        {
+            // When
+            manager.deleteUser( "nonExistentUser" );
+            TestCase.fail("User 'nonExistentUser' should no longer exist, expected exception.");
+        }
+        catch ( InvalidArgumentsException e )
+        {
+            assertThat( e.getMessage(), containsString( "User 'nonExistentUser' does not exist." ) );
+        }
+        catch ( Throwable t )
+        {
+            assertThat( t.getClass(), IsEqual.equalTo( InvalidArgumentsException.class ) );
+        }
 
         // Then
-        assertNotNull( users.findByName( "jake" ) );
+        assertNotNull( users.getUserByName( "jake" ) );
     }
 
     @Test
     public void shouldSetPassword() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        users.create( new User( "jake", Credential.forPassword( "abc123" ), true ) );
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ) );
         manager.start();
+        manager.newUser( "jake", "abc123", true );
 
         // When
-        User user = manager.setPassword( "jake", "hello, world!" );
+        manager.setUserPassword( "jake", "hello, world!", false );
 
         // Then
+        User user = manager.getUser( "jake" );
         assertTrue( user.credentials().matchesPassword( "hello, world!" ) );
-        assertThat( users.findByName( "jake" ), equalTo( user ) );
+        assertThat( users.getUserByName( "jake" ), equalTo( user ) );
     }
 
     @Test
     public void shouldReturnNullWhenSettingPasswordForUnknownUser() throws Throwable
     {
         // Given
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ) );
         manager.start();
 
         // When
-        User user = manager.setPassword( "unknown", "hello, world!" );
-
-        // Then
-        assertNull( user );
+        try
+        {
+            manager.setUserPassword( "unknown", "hello, world!", false );
+            fail( "exception expected" );
+        }
+        catch ( InvalidArgumentsException e )
+        {
+            // expected
+        }
     }
 
-    @Test
-    public void shouldThrowWhenAuthIsDisabled() throws Throwable
+    private void assertLoginGivesResult( String username, String password, AuthenticationResult expectedResult )
+            throws InvalidAuthTokenException
     {
-        final InMemoryUserRepository users = new InMemoryUserRepository();
-        final BasicAuthManager manager = new BasicAuthManager( users, mock( AuthenticationStrategy.class ), false );
-        manager.start();
+        SecurityContext securityContext = manager.login( authToken( username, password ) );
+        assertThat( securityContext.subject().getAuthenticationResult(), equalTo( expectedResult ) );
+    }
 
-        try
-        {
-            manager.authenticate( "foo", "bar" );
-            fail( "exception expected" );
-        } catch ( IllegalStateException e )
-        {
-            // expected
-        }
-
-        try
-        {
-            manager.newUser( "foo", "bar", true );
-            fail( "exception expected" );
-        } catch ( IllegalStateException e )
-        {
-            // expected
-        }
-
-        try
-        {
-            manager.deleteUser( "foo" );
-            fail( "exception expected" );
-        } catch ( IllegalStateException e )
-        {
-            // expected
-        }
-
-        try
-        {
-            manager.getUser( "foo" );
-            fail( "exception expected" );
-        } catch ( IllegalStateException e )
-        {
-            // expected
-        }
-
-        try
-        {
-            manager.setPassword( "foo", "bar" );
-            fail( "exception expected" );
-        } catch ( IllegalStateException e )
-        {
-            // expected
-        }
-
-        assertTrue( users.numberOfUsers() == 0 );
+    @Override
+    protected AuthManager authManager()
+    {
+        return manager;
     }
 }

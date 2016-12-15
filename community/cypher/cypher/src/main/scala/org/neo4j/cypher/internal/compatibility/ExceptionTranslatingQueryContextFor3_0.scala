@@ -20,13 +20,13 @@
 package org.neo4j.cypher.internal.compatibility
 
 import java.net.URL
-import java.lang.Iterable
+
 import org.neo4j.cypher.internal.compiler.v3_0.commands.expressions.{Expander, KernelPredicate}
 import org.neo4j.cypher.internal.compiler.v3_0.pipes.matching.PatternNode
 import org.neo4j.cypher.internal.compiler.v3_0.spi._
 import org.neo4j.cypher.internal.frontend.v3_0.SemanticDirection
 import org.neo4j.cypher.internal.spi.v3_0.ExceptionTranslationSupport
-import org.neo4j.graphdb._
+import org.neo4j.graphdb.{Node, Path, PropertyContainer, Relationship}
 import org.neo4j.kernel.api.index.IndexDescriptor
 
 import scala.collection.Iterator
@@ -42,11 +42,11 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def setLabelsOnNode(node: Long, labelIds: Iterator[Int]): Int =
     translateException(inner.setLabelsOnNode(node, labelIds))
 
-  override def createNode(real:java.lang.Boolean): Node =
-    translateException(inner.createNode(real))
+  override def createNode(): Node =
+    translateException(inner.createNode())
 
-  override def createRelationship(start: Node, end: Node, relType: String, real:java.lang.Boolean): Relationship =
-    translateException(inner.createRelationship(start, end, relType,real))
+  override def createRelationship(start: Node, end: Node, relType: String): Relationship =
+    translateException(inner.createRelationship(start, end, relType))
 
   override def getLabelsForNode(node: Long): Iterator[Int] =
     translateException(inner.getLabelsForNode(node))
@@ -89,9 +89,6 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
 
   override def getOrCreatePropertyKeyId(propertyKey: String): Int =
     translateException(inner.getOrCreatePropertyKeyId(propertyKey))
-
-  override def getOrCreateVirtualPropertyKeyId(propertyKey: String): Int =
-    translateException(inner.getOrCreateVirtualPropertyKeyId(propertyKey))
 
   override def addIndexRule(labelId: Int, propertyKeyId: Int) =
     translateException(inner.addIndexRule(labelId, propertyKeyId))
@@ -171,8 +168,8 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def relationshipEndNode(rel: Relationship) =
     translateException(inner.relationshipEndNode(rel))
 
-  override def createRelationship(start: Long, end: Long, relType: Int, real:java.lang.Boolean) =
-    translateException(inner.createRelationship(start, end, relType,real))
+  override def createRelationship(start: Long, end: Long, relType: Int) =
+    translateException(inner.createRelationship(start, end, relType))
 
   override def getOrCreateRelTypeId(relTypeName: String) =
     translateException(inner.getOrCreateRelTypeId(relTypeName))
@@ -219,6 +216,9 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   override def getOptRelTypeId(relType: String) =
     translateException(inner.getOptRelTypeId(relType))
 
+  override def detachDeleteNode(node: Node) =
+    translateException(inner.detachDeleteNode(node))
+
   class ExceptionTranslatingOperations[T <: PropertyContainer](inner: Operations[T])
     extends DelegatingOperations[T](inner) {
     override def delete(obj: T) =
@@ -258,15 +258,5 @@ class ExceptionTranslatingQueryContextFor3_0(val inner: QueryContext) extends Qu
   class ExceptionTranslatingTransactionalContext(inner: QueryTransactionalContext) extends DelegatingQueryTransactionalContext(inner) {
     override def close(success: Boolean) { translateException(super.close(success)) }
   }
-
-  //override def createVirtualNode(): Node = translateException(inner.createVirtualNode())
-
-  override def createVirtualRelationship(start: Node, end: Node, relType: String): Relationship =
-    translateException(inner.createVirtualRelationship(start,end,relType))
-
-  override def createVirtualRelationship(start: Long, end: Long, relType: Int): Relationship =
-    translateException(inner.createVirtualRelationship(start,end,relType))
-
-  //override def getVirtualNodesForLabel(label: String): Iterable[Node] = translateException(inner.getVirtualNodesForLabel(label))
 }
 

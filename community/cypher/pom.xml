@@ -6,12 +6,12 @@
   <parent>
     <groupId>org.neo4j</groupId>
     <artifactId>parent</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../..</relativePath>
   </parent>
 
   <artifactId>cypher-parent</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.1.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Neo4j - Community Cypher Build</name>
   <description>Project that builds the Neo4j Cypher modules as part of the Community distribution.</description>
@@ -33,11 +33,12 @@
   </scm>
 
   <modules>
-    <module>frontend-3.0</module>
-    <module>cypher-compiler-3.0</module>
+    <module>frontend-3.1</module>
+    <module>cypher-compiler-3.1</module>
     <module>cypher</module>
-    <module>acceptance</module>
-    <module>compatibility-suite</module>
+    <module>spec-suite-tools</module>
+    <module>acceptance-spec-suite</module>
+    <module>compatibility-spec-suite</module>
   </modules>
 
   <build>
@@ -131,6 +132,7 @@
                       <rules>
                           <requireFilesDontExist>
                               <files>
+                                  <file>cypher-compiler-3.0</file>
                                   <file>cypher-compiler-2.3</file>
                               </files>
                           </requireFilesDontExist>

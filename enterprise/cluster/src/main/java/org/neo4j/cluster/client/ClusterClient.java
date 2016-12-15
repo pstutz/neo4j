@@ -65,8 +65,6 @@ public class ClusterClient
     private LifeSupport life;
     private ProtocolServer protocolServer;
 
-
-
     public ClusterClient( LifeSupport life, ProtocolServer protocolServer )
     {
         this.life = life;
@@ -149,12 +147,6 @@ public class ClusterClient
     public void performRoleElections()
     {
         election.performRoleElections();
-    }
-
-    @Override
-    public void promote( InstanceId node, String role )
-    {
-        election.promote( node, role );
     }
 
     @Override

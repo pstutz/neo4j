@@ -3,19 +3,25 @@ libraries. For an overview of the licenses see the NOTICE.txt file.
 
 ------------------------------------------------------------------------------
 Apache Software License, Version 2.0
+  Apache Commons Compress
   Apache Commons Lang
+  Apache Shiro :: Core
+  Caffeine cache
+  Commons BeanUtils
   ConcurrentLinkedHashMap
   Graphite Integration for Metrics
+  hazelcast-all
   Lucene codecs
   Lucene Common Analyzers
   Lucene Core
   Lucene Memory
   Lucene QueryParsers
   Metrics Core
+  Netty
+  Netty/All-in-One
   opencsv
   parboiled-core
   parboiled-scala
-  The Netty Project
 ------------------------------------------------------------------------------
 
                                  Apache License

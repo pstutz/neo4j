@@ -19,82 +19,60 @@
  */
 package org.neo4j.server.security.auth;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-
+import org.neo4j.server.security.auth.exception.FormatException;
 import org.neo4j.string.HexString;
-import org.neo4j.string.UTF8;
 
 import static java.lang.String.format;
 
 /**
  * Serializes user authorization and authentication data to a format similar to unix passwd files.
  */
-public class UserSerialization
+public class UserSerialization extends FileRepositorySerializer<User>
 {
-    public class FormatException extends Exception
-    {
-        FormatException( String message )
-        {
-            super( message );
-        }
-    }
-
     private static final String userSeparator = ":";
     private static final String credentialSeparator = ",";
 
-    public byte[] serialize(Collection<User> users)
+    @Override
+    protected String serialize( User user )
     {
-        StringBuilder sb = new StringBuilder();
-        for ( User user : users )
-        {
-            sb.append( serialize(user) ).append( "\n" );
-        }
-        return UTF8.encode( sb.toString() );
-    }
-
-    public List<User> deserializeUsers( byte[] bytes ) throws FormatException
-    {
-        List<User> out = new ArrayList<>();
-        int lineNumber = 1;
-        for ( String line : UTF8.decode( bytes ).split( "\n" ) )
-        {
-            if (line.trim().length() > 0)
-            {
-                out.add( deserializeUser( line, lineNumber ) );
-            }
-            lineNumber++;
-        }
-        return out;
-    }
-
-    private String serialize( User user )
-    {
-        return join( userSeparator, user.name(),
+        return String.join( userSeparator,
+                user.name(),
                 serialize( user.credentials() ),
-                user.passwordChangeRequired() ? "password_change_required" : "" );
+                String.join( ",", user.getFlags() )
+            );
     }
 
-    private User deserializeUser( String line, int lineNumber ) throws FormatException
+    @Override
+    protected User deserializeRecord( String line, int lineNumber ) throws FormatException
     {
         String[] parts = line.split( userSeparator, -1 );
         if ( parts.length != 3 )
         {
-            throw new FormatException( format( "wrong number of line fields [line %d]", lineNumber ) );
+            throw new FormatException( format( "wrong number of line fields, expected 3, got %d [line %d]",
+                    parts.length,
+                    lineNumber
+            ) );
         }
-        return new User.Builder()
+
+        User.Builder b = new User.Builder()
                 .withName( parts[0] )
-                .withCredentials( deserializeCredentials( parts[1], lineNumber ) )
-                .withRequiredPasswordChange( parts[2].equals( "password_change_required" ) )
-                .build();
+                .withCredentials( deserializeCredentials( parts[1], lineNumber ) );
+
+        for ( String flag : parts[2].split( ",", -1 ))
+        {
+            String trimmed = flag.trim();
+            if (!trimmed.isEmpty())
+                b = b.withFlag( trimmed );
+        }
+
+        return  b.build();
     }
 
     private String serialize( Credential cred )
     {
         String encodedSalt = HexString.encodeHexString( cred.salt() );
         String encodedPassword = HexString.encodeHexString( cred.passwordHash() );
-        return join( credentialSeparator, Credential.DIGEST_ALGO, encodedPassword, encodedSalt );
+        return String.join( credentialSeparator, Credential.DIGEST_ALGO, encodedPassword, encodedSalt );
     }
 
     private Credential deserializeCredentials( String part, int lineNumber ) throws FormatException
@@ -111,16 +89,5 @@ public class UserSerialization
         byte[] decodedPassword = HexString.decodeHexString( split[1] );
         byte[] decodedSalt = HexString.decodeHexString( split[2] );
         return new Credential( decodedSalt, decodedPassword );
-    }
-
-    private String join( String separator, String... segments )
-    {
-        StringBuilder sb = new StringBuilder();
-        for ( int i = 0; i < segments.length; i++ )
-        {
-            if(i > 0) { sb.append( separator ); }
-            sb.append( segments[i] == null ? "" : segments[i] );
-        }
-        return sb.toString();
     }
 }

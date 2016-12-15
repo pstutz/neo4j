@@ -20,14 +20,14 @@
 package org.neo4j.graphdb.factory;
 
 import java.io.File;
-import java.lang.management.ManagementFactory;
-import java.lang.management.OperatingSystemMXBean;
-import java.lang.reflect.Method;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.neo4j.graphdb.config.Setting;
-import org.neo4j.helpers.HostnamePort;
+import org.neo4j.helpers.AdvertisedSocketAddress;
+import org.neo4j.helpers.ListenSocketAddress;
 import org.neo4j.io.ByteUnit;
+import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.configuration.ConfigurationMigrator;
 import org.neo4j.kernel.configuration.GraphDatabaseConfigurationMigrator;
 import org.neo4j.kernel.configuration.Group;
@@ -40,6 +40,8 @@ import org.neo4j.kernel.impl.cache.MonitorGc;
 import org.neo4j.logging.Level;
 
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.BoltConnector.EncryptionLevel.OPTIONAL;
+import static org.neo4j.graphdb.factory.GraphDatabaseSettings.Connector.ConnectorType.BOLT;
+import static org.neo4j.kernel.configuration.GroupSettingSupport.enumerate;
 import static org.neo4j.kernel.configuration.Settings.ANY;
 import static org.neo4j.kernel.configuration.Settings.BOOLEAN;
 import static org.neo4j.kernel.configuration.Settings.BYTES;
@@ -47,7 +49,6 @@ import static org.neo4j.kernel.configuration.Settings.DEFAULT;
 import static org.neo4j.kernel.configuration.Settings.DOUBLE;
 import static org.neo4j.kernel.configuration.Settings.DURATION;
 import static org.neo4j.kernel.configuration.Settings.FALSE;
-import static org.neo4j.kernel.configuration.Settings.HOSTNAME_PORT;
 import static org.neo4j.kernel.configuration.Settings.INTEGER;
 import static org.neo4j.kernel.configuration.Settings.LONG;
 import static org.neo4j.kernel.configuration.Settings.NO_DEFAULT;
@@ -55,9 +56,12 @@ import static org.neo4j.kernel.configuration.Settings.PATH;
 import static org.neo4j.kernel.configuration.Settings.STRING;
 import static org.neo4j.kernel.configuration.Settings.STRING_LIST;
 import static org.neo4j.kernel.configuration.Settings.TRUE;
+import static org.neo4j.kernel.configuration.Settings.advertisedAddress;
 import static org.neo4j.kernel.configuration.Settings.derivedSetting;
 import static org.neo4j.kernel.configuration.Settings.illegalValueMessage;
+import static org.neo4j.kernel.configuration.Settings.legacyFallback;
 import static org.neo4j.kernel.configuration.Settings.list;
+import static org.neo4j.kernel.configuration.Settings.listenAddress;
 import static org.neo4j.kernel.configuration.Settings.matches;
 import static org.neo4j.kernel.configuration.Settings.max;
 import static org.neo4j.kernel.configuration.Settings.min;
@@ -76,6 +80,9 @@ public abstract class GraphDatabaseSettings
     public static final int DEFAULT_BLOCK_SIZE = 128;
     public static final int DEFAULT_LABEL_BLOCK_SIZE = 64;
     public static final int MINIMAL_BLOCK_SIZE = 16;
+
+    // default unspecified transaction timeout
+    public static final long UNSPECIFIED_TIMEOUT = 0L;
 
     @SuppressWarnings("unused") // accessed by reflection
     @Migrator
@@ -116,7 +123,7 @@ public abstract class GraphDatabaseSettings
     @Description( "Set this to specify the default parser (language version)." )
     public static final Setting<String> cypher_parser_version = setting(
             "cypher.default_language_version",
-            options("2.3", "3.0", DEFAULT ), DEFAULT );
+            options("2.3", "3.0", "3.1", DEFAULT ), DEFAULT );
 
     @Description( "Set this to specify the default planner for the default language version." )
     public static final Setting<String> cypher_planner = setting(
@@ -163,7 +170,7 @@ public abstract class GraphDatabaseSettings
                   "the plan is considered stale and will be replanned. " +
                   "A value of 0 means always replan, and 1 means never replan." )
     public static Setting<Double> query_statistics_divergence_threshold = setting(
-            "cypher.statistics_divergence_threshold", DOUBLE, "0.5", min( 0.0 ), max(
+            "cypher.statistics_divergence_threshold", DOUBLE, "0.75", min( 0.0 ), max(
                     1.0 ) );
 
     @Description( "The threshold when a warning is generated if a label scan is done after a load csv " +
@@ -187,7 +194,7 @@ public abstract class GraphDatabaseSettings
             "unsupported.cypher.idp_solver_duration_threshold", LONG, "1000", min( 10L ) );
 
     @Description("The minimum lifetime of a query plan before a query is considered for replanning")
-    public static Setting<Long> cypher_min_replan_interval = setting( "cypher.min_replan_interval", DURATION, "1s" );
+    public static Setting<Long> cypher_min_replan_interval = setting( "cypher.min_replan_interval", DURATION, "10s" );
 
     @Description( "Determines if Cypher will allow using file URLs when loading data using `LOAD CSV`. Setting this "
                   + "value to `false` will cause Neo4j to fail `LOAD CSV` clauses that load data from the file system." )
@@ -202,6 +209,14 @@ public abstract class GraphDatabaseSettings
     @Internal
     public static final Setting<Long> transaction_start_timeout =
             setting( "unsupported.dbms.transaction_start_timeout", DURATION, "1s" );
+
+    @Internal
+    @Description( "Please use dbms.transaction.timeout instead." )
+    @Deprecated
+    public static final Setting<Boolean> execution_guard_enabled = setting("unsupported.dbms.executiontime_limit.enabled", BOOLEAN, FALSE );
+
+    @Description("The maximum time interval of a transaction within which it should be completed.")
+    public static final Setting<Long> transaction_timeout = setting( "dbms.transaction.timeout", DURATION, String.valueOf( UNSPECIFIED_TIMEOUT ) );
 
     @Description( "The maximum amount of time to wait for running transactions to complete before allowing "
                   + "initiated database shutdown to continue" )
@@ -254,8 +269,7 @@ public abstract class GraphDatabaseSettings
                   "Longer check-point intervals typically means that recovery will take longer to complete in case " +
                   "of a crash. On the other hand, a longer check-point interval can also reduce the I/O load that " +
                   "the database places on the system, as each check-point implies a flushing and forcing of all the " +
-                  "store files. The default is '5m' for a check-point every 5 minutes. Other supported units are 's' " +
-                  "for seconds, and 'ms' for milliseconds." )
+                  "store files." )
     public static final Setting<Long> check_point_interval_time = setting( "dbms.checkpoint.interval.time", DURATION, "5m" );
 
     @Description( "Limit the number of IOs the background checkpoint process will consume per second. " +
@@ -303,10 +317,17 @@ public abstract class GraphDatabaseSettings
     public static final Setting<Boolean> index_background_sampling_enabled =
             setting("dbms.index_sampling.background_enabled", BOOLEAN, TRUE );
 
-    @Description("Size of buffer used by index sampling")
-    public static final Setting<Long> index_sampling_buffer_size =
-            setting("dbms.index_sampling.buffer_size", BYTES, "64m",
+    @Description("Size of buffer used by index sampling. " +
+                 "This configuration setting is no longer applicable as from Neo4j 3.0.3. " +
+                 "Please use dbms.index_sampling.sample_size_limit instead.")
+    @Deprecated
+    public static final Setting<Long> index_sampling_buffer_size = setting("dbms.index_sampling.buffer_size", BYTES, "64m",
                     min( /* 1m */ 1048576L ), max( (long) Integer.MAX_VALUE ) );
+
+    @Description("Index sampling chunk size limit")
+    public static final Setting<Integer> index_sample_size_limit = setting("dbms.index_sampling.sample_size_limit",
+            INTEGER, String.valueOf( ByteUnit.mebiBytes( 8 ) ), min( (int) ByteUnit.mebiBytes( 1 ) ),
+            max( Integer.MAX_VALUE ) );
 
     @Description("Percentage of index updates of total index size required before sampling of a given index is triggered")
     public static final Setting<Integer> index_sampling_update_percentage =
@@ -350,53 +371,10 @@ public abstract class GraphDatabaseSettings
                   "suffix, megabytes with 'm' and gigabytes with 'g'). If Neo4j is running on a dedicated server, " +
                   "then it is generally recommended to leave about 2-4 gigabytes for the operating system, give the " +
                   "JVM enough heap to hold all your transaction state and query context, and then leave the rest for " +
-                  "the page cache. The default page cache memory assumes the machine is dedicated to running " +
-                  "Neo4j, and is heuristically set to 50% of RAM minus the max Java heap size." )
+                  "the page cache. If no page cache memory is configured, then a heuristic setting is computed based " +
+                  "on available system resources." )
     public static final Setting<Long> pagecache_memory =
-            setting( "dbms.memory.pagecache.size", BYTES, defaultPageCacheMemory(), min( 8192 * 30L ) );
-
-    private static String defaultPageCacheMemory()
-    {
-        // First check if we have a default override...
-        String defaultMemoryOverride = System.getProperty( "dbms.pagecache.memory.default.override" );
-        if ( defaultMemoryOverride != null )
-        {
-            return defaultMemoryOverride;
-        }
-
-        double ratioOfFreeMem = 0.50;
-        String defaultMemoryRatioOverride = System.getProperty( "dbms.pagecache.memory.ratio.default.override" );
-        if ( defaultMemoryRatioOverride != null )
-        {
-            ratioOfFreeMem = Double.parseDouble( defaultMemoryRatioOverride );
-        }
-
-        // Try to compute (RAM - maxheap) * 0.50 if we can get reliable numbers...
-        long maxHeapMemory = Runtime.getRuntime().maxMemory();
-        if ( 0 < maxHeapMemory && maxHeapMemory < Long.MAX_VALUE )
-        {
-            try
-            {
-                OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
-                Method getTotalPhysicalMemorySize = os.getClass().getMethod( "getTotalPhysicalMemorySize" );
-                getTotalPhysicalMemorySize.setAccessible( true );
-                long physicalMemory = (long) getTotalPhysicalMemorySize.invoke( os );
-                if ( 0 < physicalMemory && physicalMemory < Long.MAX_VALUE && maxHeapMemory < physicalMemory )
-                {
-                    long heuristic = (long) ((physicalMemory - maxHeapMemory) * ratioOfFreeMem);
-                    long min = ByteUnit.mebiBytes( 32 ); // We'd like at least 32 MiBs.
-                    long max = ByteUnit.tebiBytes( 1 ); // Don't heuristically take more than 1 TiB.
-                    long memory = Math.min( max, Math.max( min, heuristic ) );
-                    return String.valueOf( memory );
-                }
-            }
-            catch ( Exception ignore )
-            {
-            }
-        }
-        // ... otherwise we just go with 2 GiBs.
-        return "2g";
-    }
+            setting( "dbms.memory.pagecache.size", BYTES, null, min( 8192 * 30L ) );
 
     @Description( "Specify which page swapper to use for doing paged IO. " +
                   "This is only used when integrating with proprietary storage technology." )
@@ -428,7 +406,7 @@ public abstract class GraphDatabaseSettings
             "0", min( 0 ) );
 
     @Description("Specifies the block size for storing labels exceeding in-lined space in node record. " +
-    		"This parameter is only honored when the store is created, otherwise it is ignored. " +
+            "This parameter is only honored when the store is created, otherwise it is ignored. " +
             "Also note that each block carries a ~10B of overhead so record size on disk will be slightly larger " +
             "than the configured block size" )
     @Internal
@@ -440,9 +418,6 @@ public abstract class GraphDatabaseSettings
     @Internal
     public static final Setting<String> forced_kernel_id = setting("unsupported.dbms.kernel_id", STRING, NO_DEFAULT,
             illegalValueMessage("has to be a valid kernel identifier", matches("[a-zA-Z0-9]*")));
-
-    @Internal
-    public static final Setting<Boolean> execution_guard_enabled = setting("unsupported.dbms.executiontime_limit.enabled", BOOLEAN, FALSE );
 
     @Description("Amount of time in ms the GC monitor thread will wait before taking another measurement.")
     @Internal
@@ -456,15 +431,18 @@ public abstract class GraphDatabaseSettings
     @Description( "Relationship count threshold for considering a node to be dense" )
     public static final Setting<Integer> dense_node_threshold = setting( "dbms.relationship_grouping_threshold", INTEGER, "50", min(1) );
 
-    @Description( "Log executed queries that takes longer than the configured threshold. "
-            + "_NOTE: This feature is only available in the Neo4j Enterprise Edition_." )
+    @Description( "Log executed queries that take longer than the configured threshold, dbms.logs.query.threshold. " +
+            "Log entries are written to the file _query.log_ located in the Logs directory. " +
+            "For location of the Logs directory, see <<file-locations>>. " +
+            "This feature is available in the Neo4j Enterprise Edition." )
+
     public static final Setting<Boolean> log_queries = setting("dbms.logs.query.enabled", BOOLEAN, FALSE );
 
     @Description("Path of the logs directory")
     public static final Setting<File> logs_directory = pathSetting( "dbms.directories.logs", "logs" );
 
     @Internal
-    public static final Setting<File> log_queries_filename = derivedSetting("dbms.querylog.filename",
+    public static final Setting<File> log_queries_filename = derivedSetting("dbms.logs.query.path",
             logs_directory,
             ( logs ) -> new File( logs, "query.log" ),
             PATH );
@@ -491,6 +469,8 @@ public abstract class GraphDatabaseSettings
     public static final Setting<Integer> batch_inserter_batch_size = setting( "unsupported.tools.batch_inserter.batch_size", INTEGER,
             "10000" );
 
+    // Security settings
+
     @Description("Enable auth requirement to access Neo4j.")
     public static final Setting<Boolean> auth_enabled = setting( "dbms.security.auth_enabled", BOOLEAN, "false" );
 
@@ -499,6 +479,19 @@ public abstract class GraphDatabaseSettings
             pathSetting( "unsupported.dbms.security.auth_store.location", NO_DEFAULT );
 
     // Bolt Settings
+
+    @Description("Default network interface to listen for incoming connections. " +
+            "To listen for connections on all interfaces, use \"0.0.0.0\". " +
+            "To bind specific connectors to a specific network interfaces, " +
+            "specify the +listen_address+ properties for the specific connector.")
+    public static final Setting<String> default_listen_address =
+            setting( "dbms.connectors.default_listen_address", STRING, "localhost" );
+
+    @Description("Default hostname or IP address the server uses to advertise itself to its connectors. " +
+            "To advertise a specific hostname or IP address for a specific connector, " +
+            "specify the +advertised_address+ property for the specific connector.")
+    public static final Setting<String> default_advertised_address =
+            setting( "dbms.connectors.default_advertised_address", STRING, "localhost" );
 
     @Group("dbms.connector")
     public static class Connector
@@ -513,15 +506,16 @@ public abstract class GraphDatabaseSettings
         //       consider future options like non-tcp transports, making `address` a bad choice
         //       as a setting that applies to every connector, for instance.
 
-        protected final GroupSettingSupport group;
+        public final GroupSettingSupport group;
 
-        // For sub-classes, we provide this protected constructor that allows overriding
-        // the default 'type' setting value.
-        protected Connector( String key, String typeDefault )
+        // Note: We no longer use the typeDefault parameter because it made for confusing behaviour;
+        // connectors with unspecified would override settings of other, unrelated connectors.
+        // However, we cannot remove the parameter at this
+        protected Connector( String key, @SuppressWarnings("UnusedParameters") String typeDefault )
         {
             group = new GroupSettingSupport( Connector.class, key );
             enabled = group.scope( setting( "enabled", BOOLEAN, "false" ) );
-            type = group.scope( setting( "type", options( ConnectorType.class ), typeDefault ) );
+            type = group.scope( setting( "type", options( ConnectorType.class ), NO_DEFAULT ) );
         }
 
         public enum ConnectorType
@@ -538,8 +532,15 @@ public abstract class GraphDatabaseSettings
         @Description( "Encryption level to require this connector to use" )
         public final Setting<EncryptionLevel> encryption_level;
 
+        @Description( "Address the connector should bind to. " +
+                "This setting is deprecated and will be replaced by `+listen_address+`" )
+        public final Setting<ListenSocketAddress> address;
+
         @Description( "Address the connector should bind to" )
-        public final Setting<HostnamePort> address;
+        public final Setting<ListenSocketAddress> listen_address;
+
+        @Description( "Advertised address for this connector" )
+        public final Setting<AdvertisedSocketAddress> advertised_address;
 
         // Used by config doc generator
         public BoltConnector()
@@ -549,10 +550,16 @@ public abstract class GraphDatabaseSettings
 
         public BoltConnector(String key)
         {
-            super(key, ConnectorType.BOLT.name() );
+            super(key, null );
             encryption_level = group.scope(
                     setting( "tls_level", options( EncryptionLevel.class ), OPTIONAL.name() ));
-            address = group.scope( setting( "address", HOSTNAME_PORT, "localhost:7687" ) );
+            Setting<ListenSocketAddress> legacyAddressSetting = listenAddress( "address", 7687 );
+            Setting<ListenSocketAddress> listenAddressSetting = legacyFallback( legacyAddressSetting,
+                    listenAddress( "listen_address", 7687 ) );
+
+            this.address = group.scope( legacyAddressSetting );
+            this.listen_address = group.scope( listenAddressSetting );
+            this.advertised_address = group.scope( advertisedAddress( "advertised_address", listenAddressSetting ) );
         }
 
         public enum EncryptionLevel
@@ -572,5 +579,24 @@ public abstract class GraphDatabaseSettings
     public static BoltConnector boltConnector( String key )
     {
         return new BoltConnector( key );
+    }
+
+    @Description( "Create an archive of an index before re-creating it if failing to load on startup." )
+    @Internal
+    public static final Setting<Boolean> archive_failed_index = setting(
+            "unsupported.dbms.index.archive_failed", BOOLEAN, "false" );
+
+    public static List<BoltConnector> boltConnectors( Config config )
+    {
+        List<BoltConnector> boltConnectors = config
+                .view( enumerate( Connector.class ) )
+                .map( BoltConnector::new )
+                .filter( connConfig -> connConfig.group.groupKey.equals( "bolt" ) ||
+                        config.get( connConfig.type ) == BOLT )
+                .collect( Collectors.toList() );
+
+        return boltConnectors.stream()
+                .filter( connConfig -> config.get( connConfig.enabled ) )
+                .collect( Collectors.toList() );
     }
 }

@@ -54,6 +54,18 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableClosabl
         this.readAheadSize = readAheadSize;
     }
 
+    /**
+     * This is the position within the buffered stream (and not the
+     * underlying channel, which will generally be further ahead).
+     *
+     * @return The position within the buffered stream.
+     * @throws IOException
+     */
+    public long position() throws IOException
+    {
+        return channel.position() - aheadBuffer.remaining();
+    }
+
     @Override
     public byte get() throws IOException
     {
@@ -166,11 +178,6 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableClosabl
     protected T next( T channel ) throws IOException
     {
         return channel;
-    }
-
-    protected long offset() throws IOException
-    {
-        return channel.position() - aheadBuffer.remaining();
     }
 
     /*

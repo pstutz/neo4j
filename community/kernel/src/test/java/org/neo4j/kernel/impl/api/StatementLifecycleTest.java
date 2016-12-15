@@ -21,6 +21,7 @@ package org.neo4j.kernel.impl.api;
 
 import org.junit.Test;
 
+import org.neo4j.kernel.impl.factory.CanWrite;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.storageengine.api.StorageStatement;
 
@@ -31,12 +32,12 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 public class StatementLifecycleTest
 {
     @Test
-    public void shouldCloseStoreStatementOnlyWhenReferenceCountDownToZero() throws Exception
+    public void shouldReleaseStoreStatementOnlyWhenReferenceCountDownToZero() throws Exception
     {
         // given
         KernelTransactionImplementation transaction = mock( KernelTransactionImplementation.class );
         StorageStatement storageStatement = mock( StorageStatement.class );
-        KernelStatement statement = new KernelStatement( transaction, null, null, storageStatement, new Procedures() );
+        KernelStatement statement = getKernelStatement( transaction, storageStatement );
         statement.acquire();
         verify( storageStatement ).acquire();
         statement.acquire();
@@ -47,22 +48,28 @@ public class StatementLifecycleTest
 
         // then
         statement.close();
-        verify( storageStatement ).close();
+        verify( storageStatement ).release();
     }
 
     @Test
-    public void shouldCloseStoreStatementWhenForceClosingStatements() throws Exception
+    public void shouldReleaseStoreStatementWhenForceClosingStatements() throws Exception
     {
         // given
         KernelTransactionImplementation transaction = mock( KernelTransactionImplementation.class );
         StorageStatement storageStatement = mock( StorageStatement.class );
-        KernelStatement statement = new KernelStatement( transaction, null, null, storageStatement, new Procedures() );
+        KernelStatement statement = getKernelStatement( transaction, storageStatement );
         statement.acquire();
 
         // when
         statement.forceClose();
 
         // then
-        verify( storageStatement ).close();
+        verify( storageStatement ).release();
+    }
+
+    private KernelStatement getKernelStatement( KernelTransactionImplementation transaction,
+            StorageStatement storageStatement )
+    {
+        return new KernelStatement( transaction, null, storageStatement, new Procedures(), new CanWrite() );
     }
 }

@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.coreapi.schema;
 
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -35,13 +34,12 @@ import org.neo4j.graphdb.index.IndexPopulationProgress;
 import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.graphdb.schema.Schema;
 import org.neo4j.helpers.collection.Iterables;
-import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-
 
 public class SchemaImplTest
 {
@@ -53,12 +51,6 @@ public class SchemaImplTest
     public void createDb() throws Exception
     {
         db = new TestGraphDatabaseFactory().setFileSystem( fs.get() ).newImpermanentDatabase( new File( "mydb" ) );
-    }
-
-    private void restartDb() throws Exception
-    {
-        shutdownDb();
-        createDb();
     }
 
     @After

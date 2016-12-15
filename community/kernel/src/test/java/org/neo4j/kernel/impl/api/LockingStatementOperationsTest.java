@@ -31,27 +31,45 @@ import org.neo4j.kernel.api.constraints.PropertyConstraint;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
+import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
+import org.neo4j.kernel.api.txstate.LegacyIndexTransactionState;
+import org.neo4j.kernel.api.txstate.TransactionState;
+import org.neo4j.kernel.api.txstate.TxStateHolder;
 import org.neo4j.kernel.impl.api.operations.EntityReadOperations;
 import org.neo4j.kernel.impl.api.operations.EntityWriteOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaStateOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaWriteOperations;
+import org.neo4j.kernel.impl.api.state.StubCursors;
+import org.neo4j.kernel.impl.api.state.TxState;
+import org.neo4j.kernel.impl.factory.CanWrite;
+import org.neo4j.kernel.impl.api.store.CursorRelationshipIterator;
+import org.neo4j.kernel.impl.api.store.RelationshipIterator;
+import org.neo4j.kernel.impl.api.store.StoreSingleNodeCursor;
 import org.neo4j.kernel.impl.locking.Locks;
 import org.neo4j.kernel.impl.locking.ResourceTypes;
+import org.neo4j.kernel.impl.locking.SimpleStatementLocks;
 import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.impl.util.Cursors;
+import org.neo4j.storageengine.api.Direction;
+import org.neo4j.storageengine.api.NodeItem;
+import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.StorageStatement;
 
 import static org.junit.Assert.assertSame;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.neo4j.kernel.impl.locking.ResourceTypes.schemaResource;
 
@@ -65,8 +83,9 @@ public class LockingStatementOperationsTest
     private final Locks.Client locks = mock( Locks.Client.class );
     private final InOrder order;
     private final KernelTransactionImplementation transaction = mock( KernelTransactionImplementation.class );
-    private final KernelStatement state = new KernelStatement( transaction, null, null,
-            mock( StorageStatement.class ), new Procedures() );
+    private final TxState txState = new TxState();
+    private final KernelStatement state = new KernelStatement( transaction, new SimpleTxStateHolder( txState ),
+            mock( StorageStatement.class ), new Procedures(), new CanWrite() );
     private final SchemaStateOperations schemaStateOps;
 
     public LockingStatementOperationsTest()
@@ -80,22 +99,8 @@ public class LockingStatementOperationsTest
         lockingOps = new LockingStatementOperations(
                 entityReadOps, entityWriteOps, schemaReadOps, schemaWriteOps, schemaStateOps
         );
-        state.initialize( locks );
+        state.initialize( new SimpleStatementLocks( locks ), null );
         state.acquire();
-
-        when( transaction.shouldBeTerminated() ).thenReturn( false );
-    }
-
-    @Test
-    public void shouldAcquireEntityWriteLockCreatingRelationship() throws Exception
-    {
-        // when
-        lockingOps.relationshipCreate( state, 1, 2, 3 );
-
-        // then
-        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, 2 );
-        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, 3 );
-        order.verify( entityWriteOps ).relationshipCreate( state, 1, 2, 3 );
     }
 
     @Test
@@ -106,6 +111,18 @@ public class LockingStatementOperationsTest
 
         // then
         order.verify( locks ).acquireExclusive( ResourceTypes.NODE, 123 );
+        order.verify( entityWriteOps ).nodeAddLabel( state, 123, 456 );
+    }
+
+    @Test
+    public void shouldNotAcquireEntityWriteLockBeforeAddingLabelToJustCreatedNode() throws Exception
+    {
+        // when
+        txState.nodeDoCreate( 123 );
+        lockingOps.nodeAddLabel( state, 123, 456 );
+
+        // then
+        order.verify( locks, never() ).acquireExclusive( ResourceTypes.NODE, 123 );
         order.verify( entityWriteOps ).nodeAddLabel( state, 123, 456 );
     }
 
@@ -135,6 +152,21 @@ public class LockingStatementOperationsTest
     }
 
     @Test
+    public void shouldNotAcquireEntityWriteLockBeforeSettingPropertyOnJustCreatedNode() throws Exception
+    {
+        // given
+        txState.nodeDoCreate( 123 );
+        DefinedProperty property = Property.property( 8, 9 );
+
+        // when
+        lockingOps.nodeSetProperty( state, 123, property );
+
+        // then
+        order.verify( locks, never() ).acquireExclusive( ResourceTypes.NODE, 123 );
+        order.verify( entityWriteOps ).nodeSetProperty( state, 123, property );
+    }
+
+    @Test
     public void shouldAcquireSchemaReadLockBeforeSettingPropertyOnNode() throws Exception
     {
         // given
@@ -157,6 +189,18 @@ public class LockingStatementOperationsTest
 
         //THEN
         order.verify( locks ).acquireExclusive( ResourceTypes.NODE, 123 );
+        order.verify( entityWriteOps ).nodeDelete( state, 123 );
+    }
+
+    @Test
+    public void shouldNotAcquireEntityWriteLockBeforeDeletingJustCreatedNode() throws Exception
+    {
+        // WHEN
+        txState.nodeDoCreate( 123 );
+        lockingOps.nodeDelete( state, 123 );
+
+        //THEN
+        order.verify( locks, never() ).acquireExclusive( ResourceTypes.NODE, 123 );
         order.verify( entityWriteOps ).nodeDelete( state, 123 );
     }
 
@@ -321,6 +365,18 @@ public class LockingStatementOperationsTest
     }
 
     @Test
+    public void shouldAcquireEntityWriteLockCreatingRelationship() throws Exception
+    {
+        // when
+        lockingOps.relationshipCreate( state, 1, 2, 3 );
+
+        // then
+        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, 2 );
+        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, 3 );
+        order.verify( entityWriteOps ).relationshipCreate( state, 1, 2, 3 );
+    }
+
+    @Test
     public void shouldAcquireNodeLocksWhenCreatingRelationshipInOrderOfAscendingId() throws Exception
     {
         // GIVEN
@@ -401,6 +457,113 @@ public class LockingStatementOperationsTest
             lockingOrder.verify( locks ).acquireExclusive( ResourceTypes.NODE, highId );
             lockingOrder.verify( locks ).acquireExclusive( ResourceTypes.RELATIONSHIP, relationshipId );
             lockingOrder.verifyNoMoreInteractions();
+        }
+    }
+
+    @Test
+    public void shouldAcquireEntityWriteLockBeforeSettingPropertyOnRelationship() throws Exception
+    {
+        // given
+        DefinedProperty property = Property.property( 8, 9 );
+
+        // when
+        lockingOps.relationshipSetProperty( state, 123, property );
+
+        // then
+        order.verify( locks ).acquireExclusive( ResourceTypes.RELATIONSHIP, 123 );
+        order.verify( entityWriteOps ).relationshipSetProperty( state, 123, property );
+    }
+
+    @Test
+    public void shouldNotAcquireEntityWriteLockBeforeSettingPropertyOnJustCreatedRelationship() throws Exception
+    {
+        // given
+        txState.relationshipDoCreate( 123, 1, 2, 3 );
+        DefinedProperty property = Property.property( 8, 9 );
+
+        // when
+        lockingOps.relationshipSetProperty( state, 123, property );
+
+        // then
+        order.verify( locks, never() ).acquireExclusive( ResourceTypes.RELATIONSHIP, 123 );
+        order.verify( entityWriteOps ).relationshipSetProperty( state, 123, property );
+    }
+
+    @Test
+    public void detachDeleteNodeWithoutRelationshipsExclusivelyLockNode() throws KernelException
+    {
+        long nodeId = 1L;
+
+        NodeItem nodeItem = mock( NodeItem.class );
+        when( nodeItem.getRelationships( Direction.BOTH ) ).thenReturn( RelationshipIterator.EMPTY );
+        StoreSingleNodeCursor nodeCursor = mock( StoreSingleNodeCursor.class );
+        when( nodeCursor.get() ).thenReturn( nodeItem );
+        when( entityReadOps.nodeCursorById( state, nodeId ) ).thenReturn( nodeCursor );
+
+        lockingOps.nodeDetachDelete( state, nodeId );
+
+        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, nodeId );
+        order.verify( locks, times( 0 ) ).releaseExclusive( ResourceTypes.NODE, nodeId );
+        order.verify( entityWriteOps ).nodeDetachDelete( state, nodeId );
+    }
+
+    @Test
+    public void detachDeleteNodeExclusivelyLockNodes() throws KernelException
+    {
+        long startNodeId = 1L;
+        long endNodeId = 2L;
+
+        RelationshipItem relationshipItem = StubCursors.asRelationship( 1L, 0, startNodeId, endNodeId, null );
+        CursorRelationshipIterator relationshipIterator =
+                new CursorRelationshipIterator( Cursors.cursor( relationshipItem ) );
+
+        NodeItem nodeItem = mock( NodeItem.class );
+        when( nodeItem.getRelationships( Direction.BOTH ) ).thenReturn( relationshipIterator );
+        StoreSingleNodeCursor nodeCursor = mock( StoreSingleNodeCursor.class );
+        when( nodeCursor.get() ).thenReturn( nodeItem );
+        when( entityReadOps.nodeCursorById( state, startNodeId ) ).thenReturn( nodeCursor );
+        doAnswer( invocation ->
+        {
+            RelationshipVisitor visitor = invocation.getArgumentAt( 2, RelationshipVisitor.class );
+            visitor.visit( relationshipItem.id(), relationshipItem.type(), relationshipItem.startNode(),
+                    relationshipItem.endNode() );
+            return null;
+        } ).when( entityReadOps ).relationshipVisit( eq(state), anyLong(), any() );
+
+        lockingOps.nodeDetachDelete( state, startNodeId );
+
+        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, startNodeId );
+        order.verify( locks ).acquireExclusive( ResourceTypes.NODE, endNodeId );
+        order.verify( locks, times( 0 ) ).releaseExclusive( ResourceTypes.NODE, startNodeId );
+        order.verify( locks, times( 0 ) ).releaseExclusive( ResourceTypes.NODE, endNodeId );
+        order.verify( entityWriteOps ).nodeDetachDelete( state, startNodeId );
+    }
+
+    private static class SimpleTxStateHolder implements TxStateHolder
+    {
+        private final TxState txState;
+
+        private SimpleTxStateHolder( TxState txState )
+        {
+            this.txState = txState;
+        }
+
+        @Override
+        public TransactionState txState()
+        {
+            return txState;
+        }
+
+        @Override
+        public LegacyIndexTransactionState legacyIndexTxState()
+        {
+            return null;
+        }
+
+        @Override
+        public boolean hasTxStateWithChanges()
+        {
+            return txState.hasChanges();
         }
     }
 }

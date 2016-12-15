@@ -42,7 +42,6 @@ import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.MyRelTypes;
 import org.neo4j.kernel.impl.storageengine.impl.recordstorage.RecordStorageEngine;
-import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.impl.store.record.NodeRecord;
 import org.neo4j.kernel.impl.store.record.Record;
@@ -50,8 +49,8 @@ import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 import org.neo4j.logging.NullLogProvider;
 import org.neo4j.test.ImpermanentGraphDatabase;
-import org.neo4j.test.PageCacheRule;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.TestDirectory;
 
 import static java.lang.Integer.parseInt;
 import static java.util.Arrays.asList;
@@ -67,7 +66,7 @@ public class RelationshipGroupStoreTest
     @Rule
     public PageCacheRule pageCacheRule = new PageCacheRule( false );
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
     private File directory;
     private int defaultThreshold;
     private FileSystemAbstraction fs;
@@ -168,7 +167,7 @@ public class RelationshipGroupStoreTest
             customConfig.put( GraphDatabaseSettings.dense_node_threshold.name(), "" + customThreshold );
         }
         return new StoreFactory( directory, new Config( customConfig ), new DefaultIdGeneratorFactory( fs ), pageCache,
-                fs, StandardV3_0.RECORD_FORMATS, NullLogProvider.getInstance() );
+                fs, NullLogProvider.getInstance() );
     }
 
     @Test

@@ -28,9 +28,7 @@ import org.neo4j.com.storecopy.ResponsePacker;
 import org.neo4j.com.storecopy.StoreCopyServer;
 import org.neo4j.com.storecopy.StoreWriter;
 import org.neo4j.io.fs.FileSystemAbstraction;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
-import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
-import org.neo4j.kernel.impl.store.id.IdType;
+import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.kernel.NeoStoreDataSource;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.ha.TransactionChecksumLookup;
@@ -43,17 +41,22 @@ import org.neo4j.kernel.impl.core.PropertyKeyTokenHolder;
 import org.neo4j.kernel.impl.core.RelationshipTypeTokenHolder;
 import org.neo4j.kernel.impl.store.StoreId;
 import org.neo4j.kernel.impl.store.id.IdGenerator;
+import org.neo4j.kernel.impl.store.id.IdGeneratorFactory;
+import org.neo4j.kernel.impl.store.id.IdType;
 import org.neo4j.kernel.impl.transaction.TransactionRepresentation;
 import org.neo4j.kernel.impl.transaction.log.LogicalTransactionStore;
 import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
 import org.neo4j.kernel.impl.transaction.log.checkpoint.CheckPointer;
 import org.neo4j.kernel.impl.transaction.tracing.CommitEvent;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.storageengine.api.TransactionApplicationMode;
 
 public class DefaultMasterImplSPI implements MasterImpl.SPI
 {
     private static final int ID_GRAB_SIZE = 1000;
+    static final String STORE_COPY_CHECKPOINT_TRIGGER = "store copy";
+
     private final GraphDatabaseAPI graphDb;
     private final TransactionChecksumLookup txChecksumLookup;
     private final FileSystemAbstraction fileSystem;
@@ -65,6 +68,7 @@ public class DefaultMasterImplSPI implements MasterImpl.SPI
     private final File storeDir;
     private final ResponsePacker responsePacker;
     private final Monitors monitors;
+    private final PageCache pageCache;
 
     private final TransactionCommitProcess transactionCommitProcess;
     private final CheckPointer checkPointer;
@@ -79,12 +83,10 @@ public class DefaultMasterImplSPI implements MasterImpl.SPI
                                  CheckPointer checkPointer,
                                  TransactionIdStore transactionIdStore,
                                  LogicalTransactionStore logicalTransactionStore,
-                                 NeoStoreDataSource neoStoreDataSource)
+                                 NeoStoreDataSource neoStoreDataSource,
+                                 PageCache pageCache )
     {
         this.graphDb = graphDb;
-
-        // Hmm, fetching the dependencies here instead of handing them in the constructor directly feels bad,
-        // but it seems like there's some intricate usage and need for the db's dependency resolver.
         this.fileSystem = fileSystemAbstraction;
         this.labels = labels;
         this.propertyKeyTokenHolder = propertyKeyTokenHolder;
@@ -97,6 +99,7 @@ public class DefaultMasterImplSPI implements MasterImpl.SPI
         this.txChecksumLookup = new TransactionChecksumLookup( transactionIdStore, logicalTransactionStore );
         this.responsePacker = new ResponsePacker( logicalTransactionStore, transactionIdStore, graphDb::storeId );
         this.monitors = monitors;
+        this.pageCache = pageCache;
     }
 
     @Override
@@ -156,8 +159,8 @@ public class DefaultMasterImplSPI implements MasterImpl.SPI
     public RequestContext flushStoresAndStreamStoreFiles( StoreWriter writer )
     {
         StoreCopyServer streamer = new StoreCopyServer( neoStoreDataSource,
-                checkPointer, fileSystem, storeDir, monitors.newMonitor( StoreCopyServer.Monitor.class ) );
-        return streamer.flushStoresAndStreamStoreFiles( writer, false );
+                checkPointer, fileSystem, storeDir, monitors.newMonitor( StoreCopyServer.Monitor.class ), pageCache );
+        return streamer.flushStoresAndStreamStoreFiles( STORE_COPY_CHECKPOINT_TRIGGER, writer, false );
     }
 
     @Override

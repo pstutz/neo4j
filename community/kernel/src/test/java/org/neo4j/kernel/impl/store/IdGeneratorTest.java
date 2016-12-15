@@ -54,9 +54,9 @@ import org.neo4j.kernel.impl.store.format.standard.StandardV3_0;
 import org.neo4j.kernel.impl.store.id.IdGenerator;
 import org.neo4j.kernel.impl.store.id.IdGeneratorImpl;
 import org.neo4j.kernel.impl.store.record.AbstractBaseRecord;
-import org.neo4j.test.EphemeralFileSystemRule;
-import org.neo4j.test.PageCacheRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.rule.PageCacheRule;
+import org.neo4j.test.rule.fs.EphemeralFileSystemRule;
 
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertEquals;
@@ -143,7 +143,7 @@ public class IdGeneratorTest
             assertEquals( 9, fileChannel.read( buffer ) );
             buffer.flip();
             assertEquals( (byte) 0, buffer.get() );
-            assertEquals( 0l, buffer.getLong() );
+            assertEquals( 0L, buffer.getLong() );
             buffer.flip();
             int readCount = fileChannel.read( buffer );
             if ( readCount != -1 && readCount != 0 )
@@ -223,36 +223,36 @@ public class IdGeneratorTest
             idGenerator.freeId( 1 );
             idGenerator.freeId( 3 );
             idGenerator.freeId( 5 );
-            assertEquals( 7l, idGenerator.nextId() );
+            assertEquals( 7L, idGenerator.nextId() );
             idGenerator.freeId( 6 );
             closeIdGenerator( idGenerator );
             idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 5, 1000, false, 0 );
             idGenerator.freeId( 2 );
             idGenerator.freeId( 4 );
-            assertEquals( 1l, idGenerator.nextId() );
+            assertEquals( 1L, idGenerator.nextId() );
             idGenerator.freeId( 1 );
-            assertEquals( 3l, idGenerator.nextId() );
+            assertEquals( 3L, idGenerator.nextId() );
             idGenerator.freeId( 3 );
-            assertEquals( 5l, idGenerator.nextId() );
+            assertEquals( 5L, idGenerator.nextId() );
             idGenerator.freeId( 5 );
-            assertEquals( 6l, idGenerator.nextId() );
+            assertEquals( 6L, idGenerator.nextId() );
             idGenerator.freeId( 6 );
-            assertEquals( 8l, idGenerator.nextId() );
+            assertEquals( 8L, idGenerator.nextId() );
             idGenerator.freeId( 8 );
-            assertEquals( 9l, idGenerator.nextId() );
+            assertEquals( 9L, idGenerator.nextId() );
             idGenerator.freeId( 9 );
             closeIdGenerator( idGenerator );
             idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 3, 1000, false, 0 );
-            assertEquals( 2l, idGenerator.nextId() );
-            assertEquals( 4l, idGenerator.nextId() );
-            assertEquals( 1l, idGenerator.nextId() );
-            assertEquals( 3l, idGenerator.nextId() );
-            assertEquals( 5l, idGenerator.nextId() );
-            assertEquals( 6l, idGenerator.nextId() );
-            assertEquals( 8l, idGenerator.nextId() );
-            assertEquals( 9l, idGenerator.nextId() );
-            assertEquals( 10l, idGenerator.nextId() );
-            assertEquals( 11l, idGenerator.nextId() );
+            assertEquals( 2L, idGenerator.nextId() );
+            assertEquals( 4L, idGenerator.nextId() );
+            assertEquals( 1L, idGenerator.nextId() );
+            assertEquals( 3L, idGenerator.nextId() );
+            assertEquals( 5L, idGenerator.nextId() );
+            assertEquals( 6L, idGenerator.nextId() );
+            assertEquals( 8L, idGenerator.nextId() );
+            assertEquals( 9L, idGenerator.nextId() );
+            assertEquals( 10L, idGenerator.nextId() );
+            assertEquals( 11L, idGenerator.nextId() );
             closeIdGenerator( idGenerator );
         }
         finally
@@ -298,9 +298,9 @@ public class IdGeneratorTest
             }
             closeIdGenerator( idGenerator );
             idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 2, 1000, false, 0 );
-            assertEquals( 0l, idGenerator.nextId() );
-            assertEquals( 1l, idGenerator.nextId() );
-            assertEquals( 2l, idGenerator.nextId() );
+            assertEquals( 0L, idGenerator.nextId() );
+            assertEquals( 1L, idGenerator.nextId() );
+            assertEquals( 2L, idGenerator.nextId() );
             closeIdGenerator( idGenerator );
             idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 30, 1000, false, 0 );
 
@@ -309,10 +309,10 @@ public class IdGeneratorTest
             // 3 will be written at the end during the next close. And hence
             // will be returned
             // after 6.
-            assertEquals( 4l, idGenerator.nextId() );
-            assertEquals( 5l, idGenerator.nextId() );
-            assertEquals( 6l, idGenerator.nextId() );
-            assertEquals( 3l, idGenerator.nextId() );
+            assertEquals( 4L, idGenerator.nextId() );
+            assertEquals( 5L, idGenerator.nextId() );
+            assertEquals( 6L, idGenerator.nextId() );
+            assertEquals( 3L, idGenerator.nextId() );
             closeIdGenerator( idGenerator );
         }
         finally
@@ -350,9 +350,9 @@ public class IdGeneratorTest
             { // good
             }
             idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 2, 1000, false, 0 );
-            assertEquals( 0l, idGenerator.nextId() );
-            assertEquals( 1l, idGenerator.nextId() );
-            assertEquals( 2l, idGenerator.nextId() );
+            assertEquals( 0L, idGenerator.nextId() );
+            assertEquals( 1L, idGenerator.nextId() );
+            assertEquals( 2L, idGenerator.nextId() );
             closeIdGenerator( idGenerator );
             try
             {
@@ -510,9 +510,9 @@ public class IdGeneratorTest
             IdGeneratorImpl.createGenerator( fs, idGeneratorFile(), 0, false );
             IdGenerator idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 1,
                     recordFormat.getMaxId(), false, 0 );
-            idGenerator.setHighId( recordFormat.getMaxId() - 1 );
+            idGenerator.setHighId( recordFormat.getMaxId() );
             long id = idGenerator.nextId();
-            assertEquals( recordFormat.getMaxId() - 1, id );
+            assertEquals( recordFormat.getMaxId(), id );
             idGenerator.freeId( id );
             try
             {
@@ -526,7 +526,7 @@ public class IdGeneratorTest
             idGenerator = new IdGeneratorImpl( fs, idGeneratorFile(), 1, recordFormat.getMaxId(), false, 0 );
             assertEquals( recordFormat.getMaxId() + 1, idGenerator.getHighId() );
             id = idGenerator.nextId();
-            assertEquals( recordFormat.getMaxId() - 1, id );
+            assertEquals( recordFormat.getMaxId(), id );
             try
             {
                 idGenerator.nextId();

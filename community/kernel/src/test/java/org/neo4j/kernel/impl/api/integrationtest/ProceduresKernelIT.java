@@ -29,7 +29,8 @@ import org.neo4j.collection.RawIterator;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.proc.CallableProcedure;
-import org.neo4j.kernel.api.proc.Neo4jTypes;
+import org.neo4j.kernel.api.proc.Context;
+import org.neo4j.kernel.api.proc.QualifiedName;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
 
 import static org.hamcrest.CoreMatchers.equalTo;
@@ -61,7 +62,7 @@ public class ProceduresKernelIT extends KernelIntegrationTest
 
         // When
         ProcedureSignature found = readOperationsInNewTransaction()
-                .procedureGet( new ProcedureSignature.ProcedureName( new String[]{"example"}, "exampleProc" ) );
+                .procedureGet( new QualifiedName( new String[]{"example"}, "exampleProc" ) );
 
         // Then
         assertThat( found, equalTo( signature ) );
@@ -76,7 +77,7 @@ public class ProceduresKernelIT extends KernelIntegrationTest
 
         // Then
         assertThat( found, equalTo( procedureSignature( procedureName( "db", "labels" ) )
-                .out(  "label", Neo4jTypes.NTString ).build() ) );
+                .out(  "label", NTString ).build() ) );
     }
 
     @Test
@@ -84,8 +85,8 @@ public class ProceduresKernelIT extends KernelIntegrationTest
     {
         // Given
         kernel.registerProcedure( procedure );
-        kernel.registerProcedure( procedure( procedureSignature( "example", "exampleProc2" ).build() ) );
-        kernel.registerProcedure( procedure( procedureSignature( "example", "exampleProc3" ).build() ) );
+        kernel.registerProcedure( procedure( procedureSignature( "example", "exampleProc2" ).out( "name", NTString ).build() ) );
+        kernel.registerProcedure( procedure( procedureSignature( "example", "exampleProc3" ).out( "name", NTString ).build() ) );
 
         // When
         List<ProcedureSignature> signatures =
@@ -94,8 +95,19 @@ public class ProceduresKernelIT extends KernelIntegrationTest
         // Then
         assertThat( signatures, hasItems(
             procedure.signature(),
-            procedureSignature( "example", "exampleProc2" ).build(),
-            procedureSignature( "example", "exampleProc3" ).build() ) );
+            procedureSignature( "example", "exampleProc2" ).out( "name", NTString ).build(),
+            procedureSignature( "example", "exampleProc3" ).out( "name", NTString ).build() ) );
+    }
+
+    @Test
+    public void shouldRefuseToRegisterNonVoidProcedureWithoutOutputs() throws ProcedureException
+    {
+        // Then
+        exception.expect( ProcedureException.class );
+        exception.expectMessage( "Procedures with zero output fields must be declared as VOID" );
+
+        // When
+        kernel.registerProcedure( procedure( procedureSignature( "example", "exampleProc2" ).build() ) );
     }
 
     @Test
@@ -105,8 +117,8 @@ public class ProceduresKernelIT extends KernelIntegrationTest
         kernel.registerProcedure( procedure );
 
         // When
-        RawIterator<Object[], ProcedureException> found = readOperationsInNewTransaction()
-                .procedureCallRead( new ProcedureSignature.ProcedureName( new String[]{"example"}, "exampleProc" ), new Object[]{ 1337 } );
+        RawIterator<Object[], ProcedureException> found = procedureCallOpsInNewTx()
+                .procedureCallRead( new QualifiedName( new String[]{"example"}, "exampleProc" ), new Object[]{ 1337 } );
 
         // Then
         assertThat( asList( found ), contains( equalTo( new Object[]{1337} ) ) );
@@ -126,7 +138,7 @@ public class ProceduresKernelIT extends KernelIntegrationTest
         } );
 
         // When
-        RawIterator<Object[], ProcedureException> stream = readOperationsInNewTransaction().procedureCallRead( signature.name(), new Object[]{""} );
+        RawIterator<Object[], ProcedureException> stream = procedureCallOpsInNewTx().procedureCallRead( signature.name(), new Object[]{""} );
 
         // Then
         assertNotNull( asList( stream  ).get( 0 )[0] );

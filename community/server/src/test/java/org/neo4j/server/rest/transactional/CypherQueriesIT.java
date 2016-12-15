@@ -19,16 +19,18 @@
  */
 package org.neo4j.server.rest.transactional;
 
-import org.junit.Test;
-
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.junit.Test;
+
 import org.neo4j.server.rest.AbstractRestFunctionalTestBase;
 import org.neo4j.server.rest.domain.JsonParseException;
+
 import static org.junit.Assert.assertFalse;
-import static org.neo4j.server.rest.RESTDocsGenerator.ResponseEntity;
+
+import static org.neo4j.server.rest.RESTRequestGenerator.ResponseEntity;
 import static org.neo4j.server.rest.domain.JsonHelper.jsonToMap;
 
 public class CypherQueriesIT extends AbstractRestFunctionalTestBase
@@ -38,10 +40,9 @@ public class CypherQueriesIT extends AbstractRestFunctionalTestBase
     {
         // Document
         ResponseEntity response = gen.get()
-                .noGraph()
                 .expectedStatus( 200 )
                 .payload( quotedJson(
-                        "{ 'statements': [ { 'statement': 'CYPHER runtime=compiled MATCH (n) RETURN n' } ] }" ) )
+                        "{ 'statements': [ { 'statement': 'CYPHER runtime=compiledExperimentalFeatureNotSupportedForProductionUse MATCH (n) RETURN n' } ] }" ) )
                 .post( getDataUri() + "transaction/commit" );
 
         // Then
@@ -49,6 +50,20 @@ public class CypherQueriesIT extends AbstractRestFunctionalTestBase
         assertNoErrors( result );
     }
 
+    @Test
+    public void runningWithGeometryTypes() throws JsonParseException
+    {
+        // Document
+        ResponseEntity response = gen.get()
+                .expectedStatus( 200 )
+                .payload( quotedJson(
+                        "{ 'statements': [ { 'statement': 'RETURN point({latitude:1.2,longitude:2.3}) as point' } ] }" ) )
+                .post( getDataUri() + "transaction/commit" );
+
+        // Then
+        Map<String,Object> result = jsonToMap( response.entity() );
+        assertNoErrors( result );
+    }
 
     private void assertNoErrors( Map<String, Object> response )
     {

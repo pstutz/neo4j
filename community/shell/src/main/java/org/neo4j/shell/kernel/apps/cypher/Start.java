@@ -24,20 +24,20 @@ import java.rmi.RemoteException;
 import java.text.MessageFormat;
 import java.util.Map;
 
+import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.Result;
 import org.neo4j.helpers.Service;
 import org.neo4j.kernel.GraphDatabaseQueryService;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.security.AccessMode;
-import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
+import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.coreapi.PropertyContainerLocker;
-import org.neo4j.kernel.impl.query.Neo4jTransactionalContext;
+import org.neo4j.kernel.impl.query.Neo4jTransactionalContextFactory;
 import org.neo4j.kernel.impl.query.QueryExecutionEngine;
 import org.neo4j.kernel.impl.query.QueryExecutionKernelException;
-import org.neo4j.kernel.impl.query.QuerySession;
+import org.neo4j.kernel.impl.query.QuerySource;
 import org.neo4j.kernel.impl.query.TransactionalContext;
+import org.neo4j.kernel.impl.query.TransactionalContextFactory;
 import org.neo4j.shell.App;
 import org.neo4j.shell.AppCommandParser;
 import org.neo4j.shell.Continuation;
@@ -58,9 +58,33 @@ public class Start extends TransactionProvidingApp
     {
         String className = this.getClass().getSimpleName().toUpperCase();
         return MessageFormat.format( "Executes a Cypher query. Usage: {0} <rest of query>;\nExample: MATCH " +
-                "(me)-[:KNOWS]->(you) RETURN you.name;\nwhere '{'self'}' will be replaced with the current location in " +
-                "the graph.Please, note that the query must end with a semicolon. Other parameters are\ntaken from " +
-                "shell variables, see ''help export''.", className );
+                                     "(me)-[:KNOWS]->(you) RETURN you.name;\nwhere '{'self'}' will be replaced with the current location in " +
+                                     "the graph.Please, note that the query must end with a semicolon. Other parameters are\ntaken from " +
+                                     "shell variables, see ''help export''.", className );
+    }
+
+    @Override
+    public Continuation execute( AppCommandParser parser, Session session, Output out ) throws Exception
+    {
+
+        String query = parser.getLine().trim();
+
+        if ( isComplete( query ) )
+        {
+            if ( getEngine().isPeriodicCommit( query ) )
+            {
+                return exec( parser, session, out );
+            }
+            else
+            {
+                return super.execute( parser, session, out );
+            }
+        }
+        else
+        {
+            return Continuation.INPUT_INCOMPLETE;
+        }
+
     }
 
     @Override
@@ -90,13 +114,15 @@ public class Start extends TransactionProvidingApp
         }
     }
 
-    protected Result getResult( String query, Session session )
+    private Result getResult( String query, Session session )
             throws ShellException, RemoteException, QueryExecutionKernelException
     {
-        return getEngine().executeQuery( query, getParameters( session ), shellSession( session ) );
+        Map<String,Object> parameters = getParameters( session );
+        TransactionalContext tc = createTransactionContext( query, parameters, session );
+        return getEngine().executeQuery( query, parameters, tc );
     }
 
-    protected String trimQuery( String query )
+    private String trimQuery( String query )
     {
         return query.substring( 0, query.lastIndexOf( ";" ) );
     }
@@ -118,7 +144,7 @@ public class Start extends TransactionProvidingApp
         }
     }
 
-    protected void handleException( Output out, QueryExecutionKernelException exception, long startTime )
+    private void handleException( Output out, QueryExecutionKernelException exception, long startTime )
             throws RemoteException
     {
         out.println( (now() - startTime) + " ms" );
@@ -126,7 +152,7 @@ public class Start extends TransactionProvidingApp
         out.println( "WARNING: " + exception.getMessage() );
     }
 
-    protected Map<String,Object> getParameters( Session session ) throws ShellException
+    private Map<String,Object> getParameters( Session session ) throws ShellException
     {
         try
         {
@@ -139,19 +165,23 @@ public class Start extends TransactionProvidingApp
         return session.asMap();
     }
 
-    protected boolean isComplete( String query )
+    private boolean isComplete( String query )
     {
         return query.endsWith( ";" );
     }
-
 
     protected QueryExecutionEngine getEngine()
     {
         if ( this.engine == null )
         {
-            this.engine = getServer().getDb().getDependencyResolver().resolveDependency( QueryExecutionEngine.class );
+            this.engine = getDependencyResolver().resolveDependency( QueryExecutionEngine.class );
         }
         return this.engine;
+    }
+
+    private DependencyResolver getDependencyResolver()
+    {
+        return getServer().getDb().getDependencyResolver();
     }
 
     protected long now()
@@ -159,31 +189,28 @@ public class Start extends TransactionProvidingApp
         return System.currentTimeMillis();
     }
 
-    private QuerySession shellSession( Session session )
+    private TransactionalContext createTransactionContext( String queryText, Map<String,Object> queryParameters,
+            Session session )
     {
-        GraphDatabaseQueryService graph = this.engine.queryService();
-        InternalTransaction transaction = graph.beginTransaction( KernelTransaction.Type.implicit, AccessMode.Static.FULL );
-        Statement statement =
-                graph.getDependencyResolver().resolveDependency( ThreadToStatementContextBridge.class ).get();
-        Neo4jTransactionalContext context =
-                new Neo4jTransactionalContext( graph, transaction, statement, new PropertyContainerLocker() );
-        return new ShellQuerySession( session, context );
+        DependencyResolver dependencyResolver = getDependencyResolver();
+        GraphDatabaseQueryService graph = dependencyResolver.resolveDependency( GraphDatabaseQueryService.class );
+        TransactionalContextFactory contextFactory =
+            Neo4jTransactionalContextFactory.create( graph, new PropertyContainerLocker() );
+        InternalTransaction transaction =
+            graph.beginTransaction( KernelTransaction.Type.implicit, SecurityContext.AUTH_DISABLED );
+        return contextFactory.newContext(
+            ShellQuerySession.describe( session ),
+            transaction,
+            queryText,
+            queryParameters
+        );
     }
 
-    private static class ShellQuerySession extends QuerySession
+    private static class ShellQuerySession
     {
-        private final Session session;
-
-        ShellQuerySession( Session session, TransactionalContext transactionalContext )
+        public static QuerySource describe( Session session )
         {
-            super( transactionalContext );
-            this.session = session;
-        }
-
-        @Override
-        public String toString()
-        {
-            return String.format( "shell-session\tshell\t%s", session.getId() );
+            return new QuerySource( "shell-session", "shell", session.getId().toString() );
         }
     }
 }

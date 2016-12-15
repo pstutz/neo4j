@@ -31,6 +31,8 @@ import org.neo4j.unsafe.impl.batchimport.stats.Stat;
 import org.neo4j.unsafe.impl.batchimport.stats.StatsProvider;
 import org.neo4j.unsafe.impl.batchimport.stats.StepStats;
 
+import static java.lang.Integer.max;
+import static java.lang.Integer.min;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -74,42 +76,30 @@ public class ControlledStep<T> implements Step<T>, StatsProvider
     {
         this.maxProcessors = maxProcessors == 0 ? Integer.MAX_VALUE : maxProcessors;
         this.name = name;
-        setNumberOfProcessors( initialProcessorCount );
+        processors( initialProcessorCount-1 );
     }
 
-    @Override
-    public int numberOfProcessors()
+    public ControlledStep<T> setProcessors( int numberOfProcessors )
     {
-        return numberOfProcessors;
-    }
-
-    public ControlledStep<T> setNumberOfProcessors( int numberOfProcessors )
-    {
-        assertTrue( numberOfProcessors <= maxProcessors );
+        // We don't have to assert max processors here since importer will not count every processor
+        // equally. A step being very idle (due to being very very fast) counts as almost nothing.
         this.numberOfProcessors = numberOfProcessors;
+        processors( numberOfProcessors-numberOfProcessors );
         return this;
     }
 
     @Override
-    public synchronized boolean incrementNumberOfProcessors()
+    public int processors( int delta )
     {
-        if ( numberOfProcessors >= maxProcessors )
+        if ( delta > 0 )
         {
-            return false;
+            numberOfProcessors = min( numberOfProcessors + delta, maxProcessors );
         }
-        numberOfProcessors++;
-        return true;
-    }
-
-    @Override
-    public synchronized boolean decrementNumberOfProcessors()
-    {
-        if ( numberOfProcessors == 1 )
+        else if ( delta < 0 )
         {
-            return false;
+            numberOfProcessors = max( 1, numberOfProcessors + delta );
         }
-        numberOfProcessors--;
-        return true;
+        return numberOfProcessors;
     }
 
     @Override

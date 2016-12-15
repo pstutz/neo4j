@@ -33,6 +33,8 @@ import org.neo4j.unsafe.impl.batchimport.input.InputRelationship;
  */
 public interface IdMapper extends MemoryStatsVisitor.Visitable
 {
+    long ID_NOT_FOUND = -1;
+
     /**
      * Maps an {@code inputId} to an actual node id.
      * @param inputId an id of an unknown type, coming from input.
@@ -74,4 +76,6 @@ public interface IdMapper extends MemoryStatsVisitor.Visitable
      * @return the actual node id previously specified by {@link #put(Object, long, Group)}, or {@code -1} if not found.
      */
     long get( Object inputId, Group group );
+
+    void close();
 }

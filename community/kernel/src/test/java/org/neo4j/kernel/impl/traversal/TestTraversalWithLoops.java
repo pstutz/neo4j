@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.traversal;
 
 import org.junit.Test;
+
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Transaction;
@@ -38,7 +39,7 @@ public class TestTraversalWithLoops extends TraversalTestBase
          *             /  \ /  \
          *             \__/ \__/
          */
-        
+
         createGraph( "a TO b", "b TO c", "c TO c", "c TO d", "d TO d", "d TO e" );
 
         try ( Transaction tx = beginTx() )

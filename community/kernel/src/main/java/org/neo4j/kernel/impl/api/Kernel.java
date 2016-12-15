@@ -19,13 +19,16 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.TransactionHook;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.api.proc.CallableProcedure;
+import org.neo4j.kernel.api.proc.CallableUserFunction;
+import org.neo4j.kernel.api.security.SecurityContext;
+import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.impl.transaction.TransactionMonitor;
 import org.neo4j.kernel.internal.DatabaseHealth;
@@ -70,22 +73,31 @@ public class Kernel extends LifecycleAdapter implements KernelAPI
     private final DatabaseHealth health;
     private final TransactionMonitor transactionMonitor;
     private final Procedures procedures;
+    private final long defaultTransactionTimeout;
 
-    public Kernel( KernelTransactions transactionFactory,
-                   TransactionHooks hooks, DatabaseHealth health, TransactionMonitor transactionMonitor, Procedures procedures )
+    public Kernel( KernelTransactions transactionFactory, TransactionHooks hooks, DatabaseHealth health,
+            TransactionMonitor transactionMonitor, Procedures procedures, Config config )
     {
         this.transactions = transactionFactory;
         this.hooks = hooks;
         this.health = health;
         this.transactionMonitor = transactionMonitor;
         this.procedures = procedures;
+        this.defaultTransactionTimeout = config.get( GraphDatabaseSettings.transaction_timeout );
     }
 
     @Override
-    public KernelTransaction newTransaction( KernelTransaction.Type type, AccessMode accessMode ) throws TransactionFailureException
+    public KernelTransaction newTransaction( KernelTransaction.Type type, SecurityContext securityContext ) throws TransactionFailureException
+    {
+        return newTransaction( type, securityContext, defaultTransactionTimeout );
+    }
+
+    @Override
+    public KernelTransaction newTransaction( KernelTransaction.Type type, SecurityContext securityContext, long timeout ) throws
+            TransactionFailureException
     {
         health.assertHealthy( TransactionFailureException.class );
-        KernelTransaction transaction = transactions.newInstance( type, accessMode );
+        KernelTransaction transaction = transactions.newInstance( type, securityContext, timeout );
         transactionMonitor.transactionStarted();
         return transaction;
     }
@@ -103,9 +115,15 @@ public class Kernel extends LifecycleAdapter implements KernelAPI
     }
 
     @Override
-    public void registerProcedure( CallableProcedure signature ) throws ProcedureException
+    public void registerProcedure( CallableProcedure procedure ) throws ProcedureException
     {
-        procedures.register( signature );
+        procedures.register( procedure );
+    }
+
+    @Override
+    public void registerUserFunction( CallableUserFunction function ) throws ProcedureException
+    {
+        procedures.register( function );
     }
 
     @Override

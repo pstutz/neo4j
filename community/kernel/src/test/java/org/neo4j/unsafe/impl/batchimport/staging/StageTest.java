@@ -27,7 +27,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.neo4j.unsafe.impl.batchimport.stats.Keys;
 
 import static org.junit.Assert.assertEquals;
-
 import static org.neo4j.unsafe.impl.batchimport.staging.Configuration.DEFAULT;
 import static org.neo4j.unsafe.impl.batchimport.staging.Step.ORDER_SEND_DOWNSTREAM;
 
@@ -79,7 +78,7 @@ public class StageTest
         for ( Step<?> step : execution.steps() )
         {
             // we start off with two in each step
-            step.incrementNumberOfProcessors();
+            step.processors( 1 );
         }
         new ExecutionSupervisor( ExecutionMonitors.invisible() ).supervise( execution );
 

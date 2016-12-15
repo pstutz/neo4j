@@ -19,17 +19,14 @@
  */
 package org.neo4j.helpers;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.lang.Thread.State;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.util.function.Predicate;
 
 import org.neo4j.function.Predicates;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class Exceptions
 {
@@ -150,21 +147,16 @@ public class Exceptions
         return root;
     }
 
-    public static String stringify( Throwable cause )
+    public static String stringify( Throwable throwable )
     {
-        try
+        if ( throwable == null )
         {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            PrintStream target = new PrintStream( bytes, true,  UTF_8.name() );
-            cause.printStackTrace( target );
-            target.flush();
-            return bytes.toString( UTF_8.name());
+            return null;
         }
-        catch ( UnsupportedEncodingException e )
-        {
-            cause.printStackTrace(System.err);
-            return "[ERROR: Unable to serialize stacktrace, UTF-8 not supported.]";
-        }
+
+        StringWriter stringWriter = new StringWriter();
+        throwable.printStackTrace( new PrintWriter( stringWriter ) );
+        return stringWriter.toString();
     }
 
     public static String stringify( Thread thread, StackTraceElement[] elements )
@@ -274,22 +266,15 @@ public class Exceptions
         return cause;
     }
 
-    public static String briefOneLineStackTraceInformation( Predicate<StackTraceElement> toInclude )
+    public static <T extends Throwable> T chain( T initial, T current )
     {
-        StringBuilder builder = new StringBuilder();
-        for ( StackTraceElement element : Thread.currentThread().getStackTrace() )
+        if ( initial == null )
         {
-            if ( toInclude.test( element ) )
-            {
-                builder.append( builder.length() > 0 ? "," : "" )
-                        .append( simpleClassName( element.getClassName() ) + "#" + element.getMethodName() );
-            }
+            return current;
         }
-        return builder.toString();
+
+        initial.addSuppressed( current );
+        return initial;
     }
 
-    private static String simpleClassName( String className )
-    {
-        return className.substring( className.lastIndexOf( '.' ) );
-    }
 }

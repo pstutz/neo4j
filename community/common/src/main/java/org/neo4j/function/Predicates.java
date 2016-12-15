@@ -24,6 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntPredicate;
 import java.util.function.Predicate;
@@ -40,6 +41,7 @@ public class Predicates
     private static final Predicate FALSE = item -> false;
 
     private static final Predicate NOT_NULL = item -> item != null;
+    private static final int DEFAULT_POLL_INTERVAL = 20;
 
     @SuppressWarnings( "unchecked" )
     public static <T> Predicate<T> alwaysTrue()
@@ -135,54 +137,97 @@ public class Predicates
         };
     }
 
-    public static <TYPE> void await( Supplier<TYPE> supplier, Predicate<TYPE> predicate, long timeout, TimeUnit timeoutUnit,
-            long pollInterval, TimeUnit pollUnit )
-            throws TimeoutException, InterruptedException
+    public static <TYPE> TYPE await( Supplier<TYPE> supplier, Predicate<TYPE> predicate, long timeout,
+            TimeUnit timeoutUnit, long pollInterval, TimeUnit pollUnit ) throws TimeoutException
     {
-        await( Suppliers.compose( supplier, predicate ), timeout, timeoutUnit, pollInterval, pollUnit );
+        return awaitEx( supplier::get, predicate::test, timeout, timeoutUnit, pollInterval, pollUnit );
     }
 
-    public static <TYPE> void await( Supplier<TYPE> supplier, Predicate<TYPE> predicate, long timeout, TimeUnit timeoutUnit )
-            throws TimeoutException, InterruptedException
+    public static <TYPE> TYPE await( Supplier<TYPE> supplier, Predicate<TYPE> predicate, long timeout,
+            TimeUnit timeoutUnit ) throws TimeoutException
     {
-        await( Suppliers.compose( supplier, predicate ), timeout, timeoutUnit );
+        return awaitEx( supplier::get, predicate::test, timeout, timeoutUnit );
     }
 
-    public static void await( Supplier<Boolean> condition, long timeout, TimeUnit unit )
-            throws TimeoutException, InterruptedException
+    public static <TYPE, EXCEPTION extends Exception> TYPE awaitEx( ThrowingSupplier<TYPE,EXCEPTION> supplier,
+            ThrowingPredicate<TYPE,EXCEPTION> predicate, long timeout, TimeUnit timeoutUnit, long pollInterval,
+            TimeUnit pollUnit ) throws TimeoutException, EXCEPTION
     {
-        int defaultPollInterval = 20;
-        await( condition, timeout, unit, defaultPollInterval, TimeUnit.MILLISECONDS );
+        Suppliers.ThrowingCapturingSupplier<TYPE,EXCEPTION> composed = Suppliers.compose( supplier, predicate );
+        awaitEx( composed, timeout, timeoutUnit, pollInterval, pollUnit );
+        return composed.lastInput();
     }
 
-    public static void await( Supplier<Boolean> condition, long timeout, TimeUnit timeoutUnit, long pollInterval, TimeUnit pollUnit )
-            throws TimeoutException, InterruptedException
+    public static <TYPE, EXCEPTION extends Exception> TYPE awaitEx( ThrowingSupplier<TYPE,EXCEPTION> supplier,
+            ThrowingPredicate<TYPE,EXCEPTION> predicate, long timeout, TimeUnit timeoutUnit )
+            throws TimeoutException, EXCEPTION
+    {
+        Suppliers.ThrowingCapturingSupplier<TYPE,EXCEPTION> composed = Suppliers.compose( supplier, predicate );
+        awaitEx( composed, timeout, timeoutUnit );
+        return composed.lastInput();
+    }
+
+    public static void await( Supplier<Boolean> condition, long timeout, TimeUnit unit ) throws TimeoutException
+    {
+        awaitEx( condition::get, timeout, unit );
+    }
+
+    public static <EXCEPTION extends Exception> void awaitEx( ThrowingSupplier<Boolean,EXCEPTION> condition,
+            long timeout, TimeUnit unit ) throws TimeoutException, EXCEPTION
+    {
+        awaitEx( condition, timeout, unit, DEFAULT_POLL_INTERVAL, TimeUnit.MILLISECONDS );
+    }
+
+    public static void await( Supplier<Boolean> condition, long timeout, TimeUnit timeoutUnit, long pollInterval,
+            TimeUnit pollUnit ) throws TimeoutException
+    {
+        awaitEx( condition::get, timeout, timeoutUnit, pollInterval, pollUnit );
+    }
+
+    public static <EXCEPTION extends Exception> void awaitEx( ThrowingSupplier<Boolean,EXCEPTION> condition,
+            long timeout, TimeUnit unit, long pollInterval, TimeUnit pollUnit ) throws TimeoutException, EXCEPTION
+    {
+        if ( !tryAwaitEx( condition, timeout, unit, pollInterval, pollUnit ) )
+        {
+            throw new TimeoutException(
+                    "Waited for " + timeout + " " + unit + ", but " + condition + " was not accepted." );
+        }
+    }
+
+    public static boolean tryAwait( Supplier<Boolean> condition, long timeout, TimeUnit timeoutUnit, long pollInterval,
+            TimeUnit pollUnit )
+    {
+        return tryAwaitEx( condition::get, timeout, timeoutUnit, pollInterval, pollUnit );
+    }
+
+    public static <EXCEPTION extends Exception> boolean tryAwaitEx( ThrowingSupplier<Boolean,EXCEPTION> condition,
+            long timeout, TimeUnit timeoutUnit, long pollInterval, TimeUnit pollUnit ) throws EXCEPTION
     {
         long deadlineMillis = System.currentTimeMillis() + timeoutUnit.toMillis( timeout );
-        long pollIntervalMillis = pollUnit.toMillis( pollInterval );
+        long pollIntervalNanos = pollUnit.toNanos( pollInterval );
 
         do
         {
             if ( condition.get() )
             {
-                return;
+                return true;
             }
-            Thread.sleep( pollIntervalMillis );
+            LockSupport.parkNanos( pollIntervalNanos );
         }
         while ( System.currentTimeMillis() < deadlineMillis );
-        throw new TimeoutException( "Waited for " + timeout + " " + timeoutUnit + ", but " + condition + " was not accepted." );
+        return false;
     }
 
-    public static void awaitForever( BooleanSupplier condition, long checkInterval, TimeUnit unit ) throws InterruptedException
+    public static void awaitForever( BooleanSupplier condition, long checkInterval, TimeUnit unit )
     {
-        long sleep = unit.toMillis( checkInterval );
+        long sleep = unit.toNanos( checkInterval );
         do
         {
             if ( condition.getAsBoolean() )
             {
                 return;
             }
-            Thread.sleep( sleep );
+            LockSupport.parkNanos( sleep );
         }
         while ( true );
     }
@@ -190,6 +235,11 @@ public class Predicates
     public static <T> Predicate<T> in( final T... allowed )
     {
         return in( Arrays.asList( allowed ) );
+    }
+
+    public static <T> Predicate<T> not( Predicate<T> predicate )
+    {
+        return (t) -> !predicate.test( t );
     }
 
     public static <T> Predicate<T> in( final Iterable<T> allowed )

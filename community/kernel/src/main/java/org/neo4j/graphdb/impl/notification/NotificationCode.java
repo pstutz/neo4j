@@ -44,6 +44,13 @@ public enum NotificationCode
         Status.Statement.FeatureDeprecationWarning,
         "Using PLANNER for switching between planners has been deprecated, please use CYPHER planner=[rule,cost] instead"
     ),
+    DEPRECATED_PLANNER(
+        SeverityLevel.WARNING,
+        Status.Statement.FeatureDeprecationWarning,
+        "The rule planner, which was used to plan this query, is deprecated and will be discontinued soon. " +
+                "If you did not explicitly choose the rule planner, you should try to change your query so that the " +
+                "rule planner is not used"
+    ),
     PLANNER_UNSUPPORTED(
         SeverityLevel.WARNING,
         Status.Statement.PlannerUnsupportedWarning,
@@ -83,6 +90,16 @@ public enum NotificationCode
         SeverityLevel.WARNING,   // but it is left here for backwards compatibility.
         Status.Statement.FeatureDeprecationWarning,
         "Use of bare node patterns has been deprecated. Please enclose the identifier in parenthesis."
+    ),
+    DEPRECATED_FUNCTION(
+            SeverityLevel.WARNING,
+            Status.Statement.FeatureDeprecationWarning,
+            "The query used a deprecated function."
+    ),
+    DEPRECATED_PROCEDURE(
+            SeverityLevel.WARNING,
+            Status.Statement.FeatureDeprecationWarning,
+            "The query used a deprecated procedure."
     ),
     EAGER_LOAD_CSV(
         SeverityLevel.WARNING,

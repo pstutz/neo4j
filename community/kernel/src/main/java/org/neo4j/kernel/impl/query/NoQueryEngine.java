@@ -22,14 +22,13 @@ package org.neo4j.kernel.impl.query;
 import java.util.Map;
 
 import org.neo4j.graphdb.Result;
-import org.neo4j.kernel.GraphDatabaseQueryService;
 
 enum NoQueryEngine implements QueryExecutionEngine
 {
     INSTANCE;
 
     @Override
-    public Result executeQuery( String query, Map<String, Object> parameters, QuerySession querySession )
+    public Result executeQuery( String query, Map<String,Object> parameters, TransactionalContext context )
     {
         throw noQueryEngine();
     }
@@ -41,7 +40,7 @@ enum NoQueryEngine implements QueryExecutionEngine
     }
 
     @Override
-    public Result profileQuery( String query, Map<String, Object> parameter, QuerySession session )
+    public Result profileQuery( String query, Map<String,Object> parameter, TransactionalContext context )
     {
         throw noQueryEngine();
     }
@@ -51,14 +50,6 @@ enum NoQueryEngine implements QueryExecutionEngine
     {
         throw noQueryEngine();
     }
-
-
-    @Override
-    public GraphDatabaseQueryService queryService()
-    {
-        throw noQueryEngine();
-    }
-
 
     private RuntimeException noQueryEngine()
     {

@@ -20,41 +20,80 @@
 package org.neo4j.server.security.auth;
 
 import java.io.IOException;
+import java.util.Set;
 
+import org.neo4j.kernel.api.exceptions.InvalidArgumentsException;
+import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.server.security.auth.exception.ConcurrentModificationException;
-import org.neo4j.server.security.auth.exception.IllegalCredentialsException;
 
 /**
  * A component that can store and retrieve users. Implementations must be thread safe.
  */
-public interface UserRepository
+public interface UserRepository extends Lifecycle
 {
-    User findByName( String name );
+    /**
+     * Clears all cached user data.
+     */
+    void clear();
+
+    /**
+     * Return the user associated with the given username.
+     * @param username the username
+     * @return the associated user, or null if no user exists
+     */
+    User getUserByName( String username );
 
     /**
      * Create a user, given that the users token is unique.
      * @param user the new user object
-     * @throws IllegalCredentialsException if the username is not valid
+     * @throws InvalidArgumentsException if the username is not valid
+     * @throws IOException if the underlying storage for users fails
      */
-    void create( User user ) throws IllegalCredentialsException, IOException;
+    void create( User user ) throws InvalidArgumentsException, IOException;
+
+    /**
+     * Replaces the users in the repository with the given users.
+     * @param users the new users
+     * @throws InvalidArgumentsException if any username is not valid
+     * @throws IOException if the underlying storage for users fails
+     */
+    void setUsers( ListSnapshot<User> users ) throws InvalidArgumentsException, IOException;
 
     /**
      * Update a user, given that the users token is unique.
      * @param existingUser the existing user object, which must match the current state in this repository
      * @param updatedUser the updated user object
      * @throws ConcurrentModificationException if the existingUser does not match the current state in the repository
+     * @throws IOException if the underlying storage for users fails
+     * @throws InvalidArgumentsException if the existing and updated users have different names
      */
-    void update( User existingUser, User updatedUser ) throws ConcurrentModificationException, IOException;
+    void update( User existingUser, User updatedUser )
+            throws ConcurrentModificationException, IOException, InvalidArgumentsException;
 
     /**
      * Deletes a user.
      * @param user the user to delete
+     * @throws IOException if the underlying storage for users fails
      * @return true if the user was found and deleted
      */
     boolean delete( User user ) throws IOException;
 
     int numberOfUsers();
 
-    /** Utility for API consumers to tell if #save() will accept a given username */
-    boolean isValidName( String name );
+    /**
+     * Asserts whether the given username is valid or not. A valid username is non-null, non-empty, and contains
+     * only simple ascii characters.
+     * @param username the username to be tested.
+     * @throws InvalidArgumentsException if the username was invalid.
+     */
+    void assertValidUsername( String username ) throws InvalidArgumentsException;
+
+    Set<String> getAllUsernames();
+
+    /**
+     * Returns a snapshot of the current persisted user repository
+     * @return a snapshot of the current persisted user repository
+     * @throws IOException
+     */
+    ListSnapshot<User> getPersistedSnapshot() throws IOException;
 }

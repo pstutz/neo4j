@@ -26,7 +26,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 /**
- * Container for {@link IndexSearcher} of the particular {@link IndexPartition partition}.
+ * Container for {@link IndexSearcher} of the particular {@link AbstractIndexPartition partition}.
  * Manages lifecycle of the underlying {@link IndexSearcher searcher}.
  */
 public class PartitionSearcher implements Closeable

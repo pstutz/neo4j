@@ -32,15 +32,11 @@ import org.neo4j.kernel.impl.storemigration.StoreFileType;
 
 public class Validators
 {
-    public static final Validator<File> REGEX_FILE_EXISTS = new Validator<File>()
+    public static final Validator<File> REGEX_FILE_EXISTS = file ->
     {
-        @Override
-        public void validate( File file )
+        if ( matchingFiles( file ).isEmpty() )
         {
-            if ( matchingFiles( file ).isEmpty() )
-            {
-                throw new IllegalArgumentException( "File '" + file + "' doesn't exist" );
-            }
+            throw new IllegalArgumentException( "File '" + file + "' doesn't exist" );
         }
     };
 
@@ -63,70 +59,76 @@ public class Validators
         return files;
     }
 
-    public static final Validator<File> DIRECTORY_IS_WRITABLE = new Validator<File>()
+    public static final Validator<File> DIRECTORY_IS_WRITABLE = value ->
     {
-        @Override
-        public void validate( File value )
-        {
-            if ( value.mkdirs() )
-            {   // It's OK, we created the directory right now, which means we have write access to it
-                return;
-            }
+        if ( value.mkdirs() )
+        {   // It's OK, we created the directory right now, which means we have write access to it
+            return;
+        }
 
-            File test = new File( value, "_______test___" );
-            try
-            {
-                test.createNewFile();
-            }
-            catch ( IOException e )
-            {
-                throw new IllegalArgumentException( "Directoy '" + value + "' not writable: " + e.getMessage() );
-            }
-            finally
-            {
-                test.delete();
-            }
+        File test = new File( value, "_______test___" );
+        try
+        {
+            test.createNewFile();
+        }
+        catch ( IOException e )
+        {
+            throw new IllegalArgumentException( "Directoy '" + value + "' not writable: " + e.getMessage() );
+        }
+        finally
+        {
+            test.delete();
         }
     };
 
-    public static final Validator<File> CONTAINS_NO_EXISTING_DATABASE = new Validator<File>()
+    public static final Validator<File> CONTAINS_NO_EXISTING_DATABASE = value ->
     {
-        @Override
-        public void validate( File value )
+        if ( isExistingDatabase( value ) )
         {
-            if ( new DefaultFileSystemAbstraction()
-                    .fileExists( new File( value, StoreFileType.STORE.augment( MetaDataStore.DEFAULT_NAME ) ) ) )
-            {
-                throw new IllegalArgumentException( "Directory '" + value + "' already contains a database" );
-            }
+            throw new IllegalArgumentException( "Directory '" + value + "' already contains a database" );
         }
     };
 
-    public static <T> Validator<T[]> atLeast( final String key, final int length )
+    public static final Validator<File> CONTAINS_EXISTING_DATABASE = value ->
     {
-        return new Validator<T[]>()
+        if ( !isExistingDatabase( value ) )
         {
-            @Override
-            public void validate( T[] value )
+            throw new IllegalArgumentException( "Directory '" + value + "' does not contain a database" );
+        }
+    };
+
+    private static boolean isExistingDatabase( File value )
+    {
+        return new DefaultFileSystemAbstraction()
+                .fileExists( new File( value, StoreFileType.STORE.augment( MetaDataStore.DEFAULT_NAME ) ) );
+    }
+
+    public static Validator<String> inList( String[] validStrings )
+    {
+        return value -> {
+            if ( !Arrays.stream( validStrings ).anyMatch( s -> s.equals( value ) ) )
             {
-                if ( value.length < length )
-                {
-                    throw new IllegalArgumentException( "Expected '" + key + "' to have at least " +
-                            length + " valid item" + (length == 1 ? "" : "s") + ", but had " + value.length +
-                            " " + Arrays.toString( value ) );
-                }
+                throw new IllegalArgumentException( "'" + value + "' found but must be one of: " +
+                    Arrays.toString( validStrings ) + "." );
             }
         };
     }
 
-    public static final <T> Validator<T> emptyValidator()
+    public static <T> Validator<T[]> atLeast( final String key, final int length )
     {
-        return new Validator<T>()
+        return value ->
         {
-            @Override
-            public void validate( T value )
-            {   // Do nothing
+            if ( value.length < length )
+            {
+                throw new IllegalArgumentException( "Expected '" + key + "' to have at least " +
+                        length + " valid item" + (length == 1 ? "" : "s") + ", but had " + value.length +
+                        " " + Arrays.toString( value ) );
             }
         };
+    }
+
+    public static <T> Validator<T> emptyValidator()
+    {
+        return value -> {};
     }
 }

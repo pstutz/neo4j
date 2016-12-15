@@ -26,11 +26,14 @@ import org.neo4j.unsafe.impl.batchimport.staging.BatchSender;
 import org.neo4j.unsafe.impl.batchimport.staging.ProcessorStep;
 import org.neo4j.unsafe.impl.batchimport.staging.StageControl;
 
+/**
+ * Keeps track of number of relationships to import, this to set highId in relationship store before import.
+ * This is because of the way double-unit records works, so the secondary units will end up beyond this limit.
+ */
 public class CalculateRelationshipsStep extends ProcessorStep<Batch<InputRelationship,RelationshipRecord>>
 {
     private final RelationshipStore relationshipStore;
     private long numberOfRelationships;
-    private long maxSpecific;
 
     public CalculateRelationshipsStep( StageControl control, Configuration config, RelationshipStore relationshipStore )
     {
@@ -41,17 +44,7 @@ public class CalculateRelationshipsStep extends ProcessorStep<Batch<InputRelatio
     @Override
     protected void process( Batch<InputRelationship,RelationshipRecord> batch, BatchSender sender ) throws Throwable
     {
-        int batchSize = batch.input.length;
-        InputRelationship inputRelationship = batch.input[batchSize - 1];
-
-        if ( inputRelationship.hasSpecificId() )
-        {
-            maxSpecific = Math.max( inputRelationship.specificId(), maxSpecific );
-        }
-        else
-        {
-            numberOfRelationships += batchSize;
-        }
+        numberOfRelationships += batch.input.length;
         sender.send( batch );
     }
 
@@ -59,7 +52,7 @@ public class CalculateRelationshipsStep extends ProcessorStep<Batch<InputRelatio
     protected void done()
     {
         long highestId = relationshipStore.getHighId() + numberOfRelationships;
-        relationshipStore.setHighestPossibleIdInUse( Math.max( highestId, maxSpecific ) );
+        relationshipStore.setHighestPossibleIdInUse( highestId );
         super.done();
     }
 }

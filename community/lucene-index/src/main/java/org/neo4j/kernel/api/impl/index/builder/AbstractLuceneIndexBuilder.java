@@ -21,9 +21,13 @@ package org.neo4j.kernel.api.impl.index.builder;
 
 import java.io.File;
 
+import org.neo4j.graphdb.config.Setting;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.kernel.api.impl.index.storage.DirectoryFactory;
 import org.neo4j.kernel.api.impl.index.storage.PartitionedIndexStorage;
+import org.neo4j.kernel.configuration.Config;
+import org.neo4j.kernel.impl.factory.OperationalMode;
 
 /**
  * Base class for lucene index builders.
@@ -33,6 +37,8 @@ import org.neo4j.kernel.api.impl.index.storage.PartitionedIndexStorage;
 public abstract class AbstractLuceneIndexBuilder<T extends AbstractLuceneIndexBuilder<T>>
 {
     protected LuceneIndexStorageBuilder storageBuilder = LuceneIndexStorageBuilder.create();
+    private Config config = Config.defaults();
+    private OperationalMode operationalMode = OperationalMode.single;
 
     /**
      * Specify index storage
@@ -94,4 +100,45 @@ public abstract class AbstractLuceneIndexBuilder<T extends AbstractLuceneIndexBu
         return (T) this;
     }
 
+    /**
+     * Specify db config
+     * @param config configuration
+     * @return index builder
+     */
+    public T withConfig( Config config )
+    {
+        this.config = config;
+        return (T) this;
+    }
+
+    /**
+     * Specify db operational mode
+     * @param operationalMode operational mode
+     * @return index builder
+     */
+    public T withOperationalMode( OperationalMode operationalMode )
+    {
+        this.operationalMode = operationalMode;
+        return (T) this;
+    }
+
+    /**
+     * Check if index should be read only
+     * @return true if index should be read only
+     */
+    protected boolean isReadOnly()
+    {
+        return getConfig( GraphDatabaseSettings.read_only ) && (OperationalMode.single == operationalMode);
+    }
+
+    /**
+     * Lookup a config parameter.
+     * @param flag the parameter to look up.
+     * @param <F> the type of the parameter.
+     * @return the value of the parameter.
+     */
+    protected  <F> F getConfig( Setting<F> flag )
+    {
+        return config.get( flag );
+    }
 }

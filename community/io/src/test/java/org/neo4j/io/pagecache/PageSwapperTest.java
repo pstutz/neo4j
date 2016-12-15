@@ -23,14 +23,19 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
+import org.junit.rules.RuleChain;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.NoSuchFileException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
@@ -41,10 +46,14 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 import org.neo4j.io.pagecache.impl.ByteBufferPage;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
+import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static java.util.stream.Collectors.toSet;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isOneOf;
 import static org.hamcrest.Matchers.sameInstance;
@@ -53,6 +62,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+@SuppressWarnings( "OptionalGetWithoutIsPresent" )
 public abstract class PageSwapperTest
 {
     public static final PageEvictionCallback NO_CALLBACK = ( pageId, page ) -> {};
@@ -62,9 +72,26 @@ public abstract class PageSwapperTest
 
     protected static final int cachePageSize = 32;
 
+    public final TestDirectory testDir = TestDirectory.testDirectory();
+    public final ExpectedException expectedException = ExpectedException.none();
+    @Rule
+    public final RuleChain rules = RuleChain.outerRule( testDir ).around( expectedException );
+
+    private final ConcurrentLinkedQueue<PageSwapperFactory> openedFactories = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<PageSwapper> openedSwappers = new ConcurrentLinkedQueue<>();
+
     protected abstract PageSwapperFactory swapperFactory() throws Exception;
 
     protected abstract void mkdirs( File dir ) throws IOException;
+
+    protected abstract File baseDirectory() throws IOException;
+
+    protected final PageSwapperFactory createSwapperFactory() throws Exception
+    {
+        PageSwapperFactory factory = swapperFactory();
+        openedFactories.add( factory );
+        return factory;
+    }
 
     protected int cachePageSize()
     {
@@ -91,15 +118,26 @@ public abstract class PageSwapperTest
     }
 
     protected PageSwapper createSwapper(
-            PageSwapperFactory swapperFactory,
+            PageSwapperFactory factory,
             File file,
             int filePageSize,
             PageEvictionCallback callback,
             boolean createIfNotExist ) throws IOException
     {
-        PageSwapper swapper = swapperFactory.createPageSwapper( file, filePageSize, callback, createIfNotExist );
+        PageSwapper swapper = factory.createPageSwapper( file, filePageSize, callback, createIfNotExist );
         openedSwappers.add( swapper );
         return swapper;
+    }
+
+    protected final PageSwapper createSwapperAndFile( PageSwapperFactory factory, File file ) throws IOException
+    {
+        return createSwapperAndFile( factory, file, cachePageSize() );
+    }
+
+    protected final PageSwapper createSwapperAndFile( PageSwapperFactory factory, File file, int filePageSize )
+            throws IOException
+    {
+        return createSwapper( factory, file, filePageSize, NO_CALLBACK, true );
     }
 
     private File file( String filename ) throws IOException
@@ -109,10 +147,10 @@ public abstract class PageSwapperTest
         return file;
     }
 
-    @Rule
-    public final TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
-
-    private final ConcurrentLinkedQueue<PageSwapper> openedSwappers = new ConcurrentLinkedQueue<>();
+    private long sizeOf( ByteBufferPage page )
+    {
+        return page.size();
+    }
 
     @Before
     @After
@@ -122,10 +160,12 @@ public abstract class PageSwapperTest
     }
 
     @After
-    public void closeOpenedPageSwappers() throws IOException
+    public void closeOpenedPageSwappers() throws Exception
     {
-        IOException exception = null;
+        Exception exception = null;
+        PageSwapperFactory factory;
         PageSwapper swapper;
+
         while ( (swapper = openedSwappers.poll()) != null )
         {
             try
@@ -144,6 +184,26 @@ public abstract class PageSwapperTest
                 }
             }
         }
+
+        while ( (factory = openedFactories.poll()) != null )
+        {
+            try
+            {
+                factory.close();
+            }
+            catch ( Exception e )
+            {
+                if ( exception == null )
+                {
+                    exception = e;
+                }
+                else
+                {
+                    exception.addSuppressed( e );
+                }
+            }
+        }
+
         if ( exception != null )
         {
             throw exception;
@@ -157,8 +217,8 @@ public abstract class PageSwapperTest
 
         ByteBufferPage page = createPage();
         page.putInt( 1, 0 );
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         assertThat( swapper.write( 0, page ), is( sizeOf( page ) ) );
                 page.putInt( 0, 0 );
@@ -173,11 +233,6 @@ public abstract class PageSwapperTest
         assertThat( page.getInt( 0 ), is( 1 ) );
     }
 
-    private long sizeOf( ByteBufferPage page )
-    {
-        return page.size();
-    }
-
     @Test
     public void vectoredReadMustNotSwallowInterrupts() throws Exception
     {
@@ -185,8 +240,8 @@ public abstract class PageSwapperTest
 
         ByteBufferPage page = createPage();
         page.putInt( 1, 0 );
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         assertThat( swapper.write( 0, page ), is( sizeOf( page ) ) );
                 page.putInt( 0, 0 );
@@ -208,8 +263,8 @@ public abstract class PageSwapperTest
 
         ByteBufferPage page = createPage();
         page.putInt( 1, 0 );
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         Thread.currentThread().interrupt();
 
@@ -235,8 +290,8 @@ public abstract class PageSwapperTest
 
         ByteBufferPage page = createPage();
         page.putInt( 1, 0 );
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         Thread.currentThread().interrupt();
 
@@ -260,8 +315,8 @@ public abstract class PageSwapperTest
     {
         File file = file( "a" );
 
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         Thread.currentThread().interrupt();
         swapper.force();
@@ -272,8 +327,8 @@ public abstract class PageSwapperTest
     public void mustReopenChannelWhenReadFailsWithAsynchronousCloseException() throws Exception
     {
         File file = file( "a" );
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         ByteBufferPage page = createPage();
         page.putLong( X, 0 );
@@ -300,8 +355,8 @@ public abstract class PageSwapperTest
     public void mustReopenChannelWhenVectoredReadFailsWithAsynchronousCloseException() throws Exception
     {
         File file = file( "a" );
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         ByteBufferPage page = createPage();
         page.putLong( X, 0 );
@@ -333,8 +388,8 @@ public abstract class PageSwapperTest
         page.putInt( Z, 16 );
         File file = file( "a" );
 
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         Thread.currentThread().interrupt();
 
@@ -362,8 +417,8 @@ public abstract class PageSwapperTest
         page.putInt( Z, 16 );
         File file = file( "a" );
 
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         Thread.currentThread().interrupt();
 
@@ -387,8 +442,8 @@ public abstract class PageSwapperTest
     {
         File file = file( "a" );
 
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
 
         for ( int i = 0; i < 10; i++ )
         {
@@ -409,8 +464,8 @@ public abstract class PageSwapperTest
         File file = file( filename );
 
         ByteBufferPage page = createPage();
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
         swapper.write( 0, page );
         swapper.close();
 
@@ -432,8 +487,8 @@ public abstract class PageSwapperTest
         File file = file( filename );
 
         ByteBufferPage page = createPage();
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
         swapper.write( 0, page );
         swapper.close();
 
@@ -454,8 +509,8 @@ public abstract class PageSwapperTest
         File file = file( "a" );
 
         ByteBufferPage page = createPage();
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
         swapper.close();
 
         try
@@ -475,8 +530,8 @@ public abstract class PageSwapperTest
         File file = file( "a" );
 
         ByteBufferPage page = createPage();
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
         swapper.close();
 
         try
@@ -495,8 +550,8 @@ public abstract class PageSwapperTest
     {
         File file = file( "a" );
 
-        PageSwapperFactory swapperFactory = swapperFactory();
-        PageSwapper swapper = createSwapper( swapperFactory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory swapperFactory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( swapperFactory, file );
         swapper.close();
 
         try
@@ -515,11 +570,11 @@ public abstract class PageSwapperTest
     {
         File fileA = file( "a" );
         File fileB = file( "b" );
-        PageSwapperFactory factory = swapperFactory();
+        PageSwapperFactory factory = createSwapperFactory();
         PageSwapper swapperA =
-                createSwapper( factory, fileA, cachePageSize(), NO_CALLBACK, true );
+                createSwapperAndFile( factory, fileA );
         PageSwapper swapperB =
-                createSwapper( factory, fileB, cachePageSize(), NO_CALLBACK, true );
+                createSwapperAndFile( factory, fileB );
 
         ByteBufferPage page = createPage();
         page.putLong( X, 0 );
@@ -544,7 +599,7 @@ public abstract class PageSwapperTest
             callbackPage.set( page );
         };
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
+        PageSwapperFactory factory = createSwapperFactory();
         PageSwapper swapper = createSwapper( factory, file, cachePageSize(), callback, true );
         Page page = createPage();
         swapper.evicted( 42, page );
@@ -558,7 +613,7 @@ public abstract class PageSwapperTest
         final AtomicBoolean gotCallback = new AtomicBoolean();
         PageEvictionCallback callback = ( filePageId, page ) -> gotCallback.set( true );
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
+        PageSwapperFactory factory = createSwapperFactory();
         PageSwapper swapper = createSwapper( factory, file, cachePageSize(), callback, true );
         Page page = createPage();
         swapper.close();
@@ -566,19 +621,19 @@ public abstract class PageSwapperTest
         assertFalse( gotCallback.get() );
     }
 
-    @Test( expected = NoSuchFileException.class )
+    @Test
     public void mustThrowExceptionIfFileDoesNotExist() throws Exception
     {
-        PageSwapperFactory factory = swapperFactory();
+        PageSwapperFactory factory = createSwapperFactory();
+        expectedException.expect( NoSuchFileException.class );
         createSwapper( factory, file( "does not exist" ), cachePageSize(), NO_CALLBACK, false );
     }
 
     @Test
     public void mustCreateNonExistingFileWithCreateFlag() throws Exception
     {
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper pageSwapper =
-                createSwapper( factory, file( "does not exist" ), cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper pageSwapper = createSwapperAndFile( factory, file( "does not exist" ) );
 
         // After creating the file, we must also be able to read and write
         ByteBufferPage page = createPage();
@@ -595,8 +650,8 @@ public abstract class PageSwapperTest
     public void truncatedFilesMustBeEmpty() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, cachePageSize(), NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file );
 
         assertThat( swapper.getLastPageId(), is( -1L ) );
 
@@ -635,8 +690,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredWriteMustFlushAllBuffersInOrder() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage pageA = createPage( 4 );
         ByteBufferPage pageB = createPage( 4 );
@@ -675,8 +730,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredReadMustFillAllBuffersInOrder() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage output = createPage();
 
@@ -707,8 +762,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredReadFromEmptyFileMustFillPagesWithZeros() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage page = createPage( 4 );
         page.putInt( 1, 0 );
@@ -720,8 +775,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredReadBeyondEndOfFileMustFillPagesWithZeros() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage output = createPage( 4 );
         output.putInt( 0xFFFF_FFFF, 0 );
@@ -740,8 +795,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredReadWhereLastPageExtendBeyondEndOfFileMustHaveRemainderZeroFilled() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage output = createPage( 4 );
         output.putInt( 0xFFFF_FFFF, 0 );
@@ -762,8 +817,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredReadWhereSecondLastPageExtendBeyondEndOfFileMustHaveRestZeroFilled() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage output = createPage( 4 );
         output.putInt( 1, 0 );
@@ -793,8 +848,8 @@ public abstract class PageSwapperTest
     public void concurrentPositionedVectoredReadsAndWritesMustNotInterfere() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        final PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        final PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
         final int pageCount = 100;
         final int iterations = 20000;
         final CountDownLatch startLatch = new CountDownLatch( 1 );
@@ -866,8 +921,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredReadMustWorkOnSubsequenceOfGivenArray() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage pageA = createPage( 4 );
         ByteBufferPage pageB = createPage( 4 );
@@ -900,8 +955,8 @@ public abstract class PageSwapperTest
     public void positionedVectoredWriteMustWorkOnSubsequenceOfGivenArray() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage pageA = createPage( 4 );
         ByteBufferPage pageB = createPage( 4 );
@@ -940,8 +995,8 @@ public abstract class PageSwapperTest
     public void mustThrowNullPointerExceptionFromReadWhenPageArrayElementsAreNull() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage page = createPage( 4 );
 
@@ -962,8 +1017,8 @@ public abstract class PageSwapperTest
     public void mustThrowNullPointerExceptionFromWriteWhenPageArrayElementsAreNull() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage page = createPage( 4 );
 
@@ -982,8 +1037,8 @@ public abstract class PageSwapperTest
     public void mustThrowNullPointerExceptionFromReadWhenPageArrayIsNull() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage page = createPage( 4 );
 
@@ -1004,8 +1059,8 @@ public abstract class PageSwapperTest
     public void mustThrowNullPointerExceptionFromWriteWhenPageArrayIsNull() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         try
         {
@@ -1018,135 +1073,147 @@ public abstract class PageSwapperTest
         }
     }
 
-    @Test( expected = IOException.class )
+    @Test
     public void readMustThrowForNegativeFilePageIds() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
+        expectedException.expect( IOException.class );
         swapper.read( -1, createPage( 4 ) );
     }
 
-    @Test( expected = IOException.class )
+    @Test
     public void writeMustThrowForNegativeFilePageIds() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
+        expectedException.expect( IOException.class );
         swapper.write( -1, createPage( 4 ) );
     }
 
-    @Test( expected = IOException.class )
+    @Test
     public void vectoredReadMustThrowForNegativeFilePageIds() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
+        expectedException.expect( IOException.class );
         swapper.read( -1, new Page[]{createPage( 4 ), createPage( 4 )}, 0, 2 );
     }
 
-    @Test( expected = IOException.class )
+    @Test
     public void vectoredWriteMustThrowForNegativeFilePageIds() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
+        expectedException.expect( IOException.class );
         swapper.write( -1, new Page[] {createPage( 4 ), createPage( 4 )}, 0, 2 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredReadMustThrowForNegativeArrayOffsets() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
         swapper.write( 0, pages, 0, 2 );
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.read( 0, pages, -1, 2 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredWriteMustThrowForNegativeArrayOffsets() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.write( 0, pages, -1, 2 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredReadMustThrowWhenLengthGoesBeyondArraySize() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
         swapper.write( 0, pages, 0, 2 );
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.read( 0, pages, 1, 2 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredWriteMustThrowWhenLengthGoesBeyondArraySize() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.write( 0, pages, 1, 2 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredReadMustThrowWhenArrayOffsetIsEqualToArrayLength() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
         swapper.write( 0, pages, 0, 2 );
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.read( 0, pages, 2, 1 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredWriteMustThrowWhenArrayOffsetIsEqualToArrayLength() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.write( 0, pages, 2, 1 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredReadMustThrowWhenArrayOffsetIsGreaterThanArrayLength() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
         swapper.write( 0, pages, 0, 2 );
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.read( 0, pages, 3, 1 );
     }
 
-    @Test( expected = ArrayIndexOutOfBoundsException.class )
+    @Test
     public void vectoredWriteMustThrowWhenArrayOffsetIsGreaterThanArrayLength() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         Page[] pages = {createPage( 4 ), createPage( 4 )};
+        expectedException.expect( ArrayIndexOutOfBoundsException.class );
         swapper.write( 0, pages, 3, 1 );
     }
 
@@ -1154,8 +1221,8 @@ public abstract class PageSwapperTest
     public void vectoredReadMustReadNothingWhenLengthIsZero() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage pageA = createPage( 4 );
         ByteBufferPage pageB = createPage( 4 );
@@ -1176,8 +1243,8 @@ public abstract class PageSwapperTest
     public void vectoredWriteMustReadNothingWhenLengthIsZero() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
 
         ByteBufferPage pageA = createPage( 4 );
         ByteBufferPage pageB = createPage( 4 );
@@ -1199,8 +1266,8 @@ public abstract class PageSwapperTest
     public void mustDeleteFileIfClosedWithCloseAndDelete() throws Exception
     {
         File file = file( "file" );
-        PageSwapperFactory factory = swapperFactory();
-        PageSwapper swapper = createSwapper( factory, file, 4, NO_CALLBACK, true );
+        PageSwapperFactory factory = createSwapperFactory();
+        PageSwapper swapper = createSwapperAndFile( factory, file, 4 );
         swapper.closeAndDelete();
 
         try
@@ -1212,5 +1279,298 @@ public abstract class PageSwapperTest
         {
             // Just as planned!
         }
+    }
+
+    @Test
+    public void streamFilesRecursiveMustBeEmptyForEmptyBaseDirectory() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        assertThat( factory.streamFilesRecursive( baseDirectory() ).count(), is( 0L ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustListAllFilesInBaseDirectory() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a );
+        createSwapperAndFile( factory, b );
+        Set<File> files = factory.streamFilesRecursive( base ).map( FileHandle::getFile ).collect( toSet() );
+        assertThat( files, containsInAnyOrder( a, b ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustListAllFilesInSubDirectories() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File sub1 = new File( base, "sub1" );
+        File sub1sub1 = new File( sub1, "sub1" );
+        File sub2 = new File( base, "sub2" );
+        File sub3 = new File( base, "sub3" );
+        mkdirs( sub1 );
+        mkdirs( sub1sub1 );
+        mkdirs( sub2 );
+        mkdirs( sub3 ); // empty, not listed
+        File a = new File( base, "a" );
+        File b = new File( sub1, "b" );
+        File c = new File( sub1sub1, "c" );
+        File d = new File( sub1sub1, "d" );
+        File e = new File( sub2, "e" );
+        File[] files = new File[] {a, b, c, d, e};
+        for ( File f : files )
+        {
+            createSwapperAndFile( factory, f );
+        }
+        Set<File> set = factory.streamFilesRecursive( base ).map( FileHandle::getFile ).collect( toSet() );
+        assertThat( set, containsInAnyOrder( files ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveFilePathsMustBeCanonical() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File sub = new File( base, "sub" );
+        mkdirs( sub );
+        File a = new File( new File( new File( sub, ".." ), "sub" ), "a" );
+        File canonicalFile = a.getCanonicalFile();
+        createSwapperAndFile( factory, canonicalFile );
+        String actualPath = factory.streamFilesRecursive( a )
+                                   .map( fh -> fh.getFile().getAbsolutePath() ).findAny().get();
+        assertThat( actualPath, is( canonicalFile.getAbsolutePath() ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustListSingleFileGivenAsBase() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a );
+        createSwapperAndFile( factory, b );
+        Set<File> files = factory.streamFilesRecursive( a ).map( FileHandle::getFile ).collect( toSet() );
+        assertThat( files, containsInAnyOrder( a ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustThrowOnNonExistingBasePath() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File nonExisting = new File( base, "nonExisting" );
+        expectedException.expect( NoSuchFileException.class );
+        factory.streamFilesRecursive( nonExisting );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustRenameFiles() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a ).close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.rename( b );
+        createSwapper( factory, b, cachePageSize(), NO_CALLBACK, false ); // throws if 'b' does not exist
+    }
+
+    @Test
+    public void streamFilesRecursiveMustRenameDelete() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a ).close();
+        createSwapperAndFile( factory, b ).close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.delete();
+        Set<File> files = factory.streamFilesRecursive( base ).map( FileHandle::getFile ).collect( toSet() );
+        assertThat( files, containsInAnyOrder( b ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustThrowWhenDeletingNonExistingFile() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        PageSwapper swapperA = createSwapperAndFile( factory, a );
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        swapperA.closeAndDelete();
+        expectedException.expect( NoSuchFileException.class );
+        handle.delete();
+    }
+
+    @Test
+    public void streamFilesRecursiveMustThrowWhenTargetFileOfRenameAlreadyExists() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a ).close();
+        createSwapperAndFile( factory, b ).close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        expectedException.expect( FileAlreadyExistsException.class );
+        handle.rename( b );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustNotThrowWhenTargetFileOfRenameAlreadyExistsAndUsingReplaceExisting() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a ).close();
+        createSwapperAndFile( factory, b ).close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.rename( b, REPLACE_EXISTING );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustCreateMissingPathDirectoriesImpliedByFileRename() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File target = new File( new File( new File( base, "sub" ), "sub" ), "target" );
+        createSwapperAndFile( factory, a ).close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.rename( target );
+        createSwapper( factory, target, cachePageSize(), NO_CALLBACK, false ); // must not throw
+    }
+
+    @Test
+    public void streamFilesRecursiveMustNotSeeFilesLaterCreatedBaseDirectory() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a ).close(); // note that we don't create 'b' at this point
+        Stream<FileHandle> stream = factory.streamFilesRecursive( base ); // stream takes a snapshot of file tree
+        createSwapperAndFile( factory, b ).close(); // 'b' now exists, but it's too late to be included in snapshot
+        assertThat( stream.map( FileHandle::getFile ).collect( toSet() ), containsInAnyOrder( a ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustNotSeeFilesRenamedIntoBaseDirectory() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File sub = new File( base, "sub" );
+        mkdirs( sub );
+        File x = new File( sub, "x" );
+        createSwapperAndFile( factory, a ).close();
+        createSwapperAndFile( factory, x ).close();
+        File target = new File( base, "target" );
+        Iterable<FileHandle> handles = factory.streamFilesRecursive( base )::iterator;
+        Set<File> observedFiles = new HashSet<>();
+        for ( FileHandle handle : handles )
+        {
+            File file = handle.getFile();
+            observedFiles.add( file );
+            if ( file.equals( x ) )
+            {
+                handle.rename( target );
+            }
+        }
+        assertThat( observedFiles, containsInAnyOrder( a, x ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveMustNotSeeFilesRenamedIntoSubDirectory() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File sub = new File( base, "sub" );
+        mkdirs( sub );
+        File target = new File( sub, "target" );
+        createSwapperAndFile( factory, a ).close();
+        Iterable<FileHandle> handles = factory.streamFilesRecursive( base )::iterator;
+        Set<File> observedFiles = new HashSet<>();
+        for ( FileHandle handle : handles )
+        {
+            File file = handle.getFile();
+            observedFiles.add( file );
+            if ( file.equals( a ) )
+            {
+                handle.rename( target );
+            }
+        }
+        assertThat( observedFiles, containsInAnyOrder( a ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveSourceFileMustNotExistAfterRename() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        createSwapperAndFile( factory, a ).close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.rename( b );
+        expectedException.expect( NoSuchFileException.class );
+        createSwapper( factory, a, cachePageSize(), NO_CALLBACK, false ); // throws because 'a' no longer exists
+    }
+
+    @Test
+    public void streamFilesRecursiveRenameMustNotChangeSourceFileContents() throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        ByteBufferPage page = createPage();
+        PageSwapper swapper = createSwapperAndFile( factory, a );
+        long expectedValue = 0xdeadbeeffefefeL;
+        page.putLong( expectedValue, 0 );
+        swapper.write( 0, page );
+        clear( page );
+        swapper.close();
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.rename( b );
+        swapper = createSwapper( factory, b, cachePageSize(), NO_CALLBACK, false );
+        swapper.read( 0, page );
+        long actualValue = page.getLong( 0 );
+        assertThat( actualValue, is( expectedValue ) );
+    }
+
+    @Test
+    public void streamFilesRecursiveRenameMustNotChangeSourceFileContentsWithReplaceExisting()
+            throws Exception
+    {
+        PageSwapperFactory factory = createSwapperFactory();
+        File base = baseDirectory();
+        File a = new File( base, "a" );
+        File b = new File( base, "b" );
+        ByteBufferPage page = createPage();
+        PageSwapper swapper = createSwapperAndFile( factory, a );
+        long expectedValue = 0xdeadbeeffefefeL;
+        page.putLong( expectedValue, 0 );
+        swapper.write( 0, page );
+        clear( page );
+        swapper.close();
+        swapper = createSwapperAndFile( factory, b );
+        page.putLong( ThreadLocalRandom.current().nextLong(), 0 );
+        swapper.write( 0, page );
+        swapper.close();
+        clear( page );
+        FileHandle handle = factory.streamFilesRecursive( a ).findAny().get();
+        handle.rename( b, REPLACE_EXISTING );
+        swapper = createSwapper( factory, b, cachePageSize(), NO_CALLBACK, false );
+        swapper.read( 0, page );
+        long actualValue = page.getLong( 0 );
+        assertThat( actualValue, is( expectedValue ) );
     }
 }

@@ -1,6 +1,9 @@
 package org.neo4j.kernel.impl.api;
 
+import org.neo4j.collection.primitive.Primitive;
+import org.neo4j.collection.primitive.PrimitiveIntCollection;
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
+import org.neo4j.collection.primitive.PrimitiveIntSet;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.impl.util.Cursors;
@@ -111,12 +114,16 @@ public class VirtualRelationshipItem implements RelationshipItem {
     }
 
     @Override
-    public PrimitiveIntIterator getPropertyKeys() {
+    public PrimitiveIntCollection getPropertyKeys() {
+
+        PrimitiveIntSet col= Primitive.intSet();
         try {
-            return ops.relationshipGetPropertyKeys(id);
+            PrimitiveIntIterator it = ops.relationshipGetPropertyKeys(id);
+            col.addAll(it);
+            return col;
         } catch (EntityNotFoundException e) {
             e.printStackTrace();
-            return new MergingPrimitiveIntIterator(null,null);
         }
+        return col;
     }
 }

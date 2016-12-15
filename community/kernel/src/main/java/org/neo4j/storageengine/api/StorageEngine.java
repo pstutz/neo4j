@@ -116,6 +116,12 @@ public interface StorageEngine
      */
     void prepareForRecoveryRequired();
 
+    /**
+     * @return a {@link Collection} of {@link StoreFileMetadata} containing metadata about all store files managed by
+     * this {@link StorageEngine}.
+     */
+    Collection<StoreFileMetadata> listStorageFiles();
+
     // ====================================================================
     // All these methods below are temporary while in the process of
     // creating this API, take little notice to them, as they will go away
@@ -123,4 +129,8 @@ public interface StorageEngine
 
     @Deprecated
     void loadSchemaCache();
+
+    @Deprecated
+    void clearBufferedIds();
+
 }

@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.api.impl.schema;
 
-import org.apache.lucene.document.Document;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -37,12 +36,13 @@ import java.util.stream.Collectors;
 
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.helpers.collection.Iterables;
+import org.neo4j.helpers.collection.Iterators;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.index.LuceneAllDocumentsReader;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
@@ -56,7 +56,7 @@ public class LuceneSchemaIndexIT
 {
 
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
 
     @Before
     public void before() throws Exception
@@ -115,10 +115,31 @@ public class LuceneSchemaIndexIT
     }
 
     @Test
+    public void updateMultiplePartitionedIndex() throws IOException, IndexEntryConflictException
+    {
+        try ( SchemaIndex index = LuceneSchemaIndexBuilder.create()
+                .withIndexRootFolder( testDir.directory() )
+                .withIndexIdentifier( "partitionedIndexForUpdates" )
+                .build() )
+        {
+            index.create();
+            index.open();
+            addDocumentToIndex( index, 45 );
+
+            index.getIndexWriter().updateDocument( LuceneDocumentStructure.newTermForChangeOrRemove( 100 ),
+                    LuceneDocumentStructure.documentRepresentingProperty( 100, 100 ) );
+            index.maybeRefreshBlocking();
+
+            long documentsInIndex = Iterators.count( index.allDocumentsReader().iterator() );
+            assertEquals( "Index should contain 45 added and 1 updated document.", 46, documentsInIndex );
+        }
+    }
+
+    @Test
     public void createPopulateDropIndex() throws Exception
     {
         File crudOperation = testDir.directory( "indexCRUDOperation" );
-        try ( LuceneSchemaIndex crudIndex = LuceneSchemaIndexBuilder.create()
+        try ( SchemaIndex crudIndex = LuceneSchemaIndexBuilder.create()
                 .withIndexRootFolder( crudOperation )
                 .withIndexIdentifier( "crudIndex" )
                 .build() )
@@ -141,7 +162,7 @@ public class LuceneSchemaIndexIT
     @Test
     public void createFailPartitionedIndex() throws Exception
     {
-        try ( LuceneSchemaIndex failedIndex = LuceneSchemaIndexBuilder.create()
+        try ( SchemaIndex failedIndex = LuceneSchemaIndexBuilder.create()
                 .withIndexRootFolder( testDir.directory( "failedIndexFolder" ) )
                 .withIndexIdentifier( "failedIndex" )
                 .build() )
@@ -162,7 +183,7 @@ public class LuceneSchemaIndexIT
     @Test
     public void openClosePartitionedIndex() throws IOException
     {
-        LuceneSchemaIndex reopenIndex = null;
+        SchemaIndex reopenIndex = null;
         try
         {
             reopenIndex = LuceneSchemaIndexBuilder.create()
@@ -207,17 +228,17 @@ public class LuceneSchemaIndexIT
         }
     }
 
-    private void addDocumentToIndex( LuceneSchemaIndex index, int documents ) throws IOException
+    private void addDocumentToIndex( SchemaIndex index, int documents ) throws IOException
     {
         for ( int i = 0; i < documents; i++ )
         {
-            index.getIndexWriter().addDocument( new Document() );
+            index.getIndexWriter().addDocument( LuceneDocumentStructure.documentRepresentingProperty( i, i ) );
         }
     }
 
     private LuceneIndexAccessor createDefaultIndexAccessor() throws IOException
     {
-        LuceneSchemaIndex index = LuceneSchemaIndexBuilder.create()
+        SchemaIndex index = LuceneSchemaIndexBuilder.create()
                 .withIndexRootFolder( testDir.directory() )
                 .withIndexIdentifier( "testIndex" )
                 .build();

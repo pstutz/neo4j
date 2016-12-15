@@ -86,8 +86,8 @@ public class HighAvailabilityModeSwitcher implements HighAvailabilityMemberListe
     private SwitchToMaster switchToMaster;
     private final Election election;
     private final ClusterMemberAvailability clusterMemberAvailability;
-    private ClusterClient clusterClient;
-    private Supplier<StoreId> storeIdSupplier;
+    private final ClusterClient clusterClient;
+    private final Supplier<StoreId> storeIdSupplier;
     private final InstanceId instanceId;
 
     private final Log msgLog;
@@ -203,6 +203,12 @@ public class HighAvailabilityModeSwitcher implements HighAvailabilityMemberListe
     public void instanceStops( HighAvailabilityMemberChangeEvent event )
     {
         stateChanged( event );
+    }
+
+    @Override
+    public void instanceDetached( HighAvailabilityMemberChangeEvent event )
+    {
+        switchToDetached();
     }
 
     public void forceElections()
@@ -414,15 +420,6 @@ public class HighAvailabilityModeSwitcher implements HighAvailabilityMemberListe
                 return;
             }
 
-            if ( oldState.equals( HighAvailabilityMemberState.SLAVE ) )
-            {
-                clusterMemberAvailability.memberIsUnavailable( SLAVE );
-            }
-            else if ( oldState.equals( HighAvailabilityMemberState.MASTER ) )
-            {
-                clusterMemberAvailability.memberIsUnavailable( MASTER );
-            }
-
             componentSwitcher.switchToPending();
             neoStoreDataSourceSupplier.getDataSource().beforeModeSwitch();
 
@@ -442,6 +439,40 @@ public class HighAvailabilityModeSwitcher implements HighAvailabilityMemberListe
         }
         catch ( Exception ignored )
         {
+        }
+    }
+
+    private void switchToDetached()
+    {
+        msgLog.info( "I am %s, moving to detached", instanceId );
+
+        startModeSwitching( () -> {
+            if ( cancellationHandle.cancellationRequested() )
+            {
+                msgLog.info( "Switch to pending cancelled on start." );
+                return;
+            }
+
+            componentSwitcher.switchToSlave();
+            neoStoreDataSourceSupplier.getDataSource().beforeModeSwitch();
+
+            if ( cancellationHandle.cancellationRequested() )
+            {
+                msgLog.info( "Switch to pending cancelled before ha communication shutdown." );
+                return;
+            }
+
+            haCommunicationLife.shutdown();
+            haCommunicationLife = new LifeSupport();
+        }, new CancellationHandle() );
+
+        try
+        {
+            modeSwitcherFuture.get( 10, TimeUnit.SECONDS );
+        }
+        catch ( Exception e )
+        {
+            msgLog.warn( "Exception received while waiting for switching to detached", e );
         }
     }
 

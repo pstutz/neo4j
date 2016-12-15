@@ -1,13 +1,14 @@
 test_expect_java_arg() {
   arg="$1"
   end="$((SECONDS+5))"
+  java_args="${SHARNESS_TRASH_DIRECTORY}/java-args"
   while true; do
-    if grep --fixed-strings --regexp "${arg}" java-args >/dev/null ; then
+    if grep --fixed-strings --regexp "${arg}" "${java_args}" >/dev/null ; then
       break
     fi
 
     if [[ "${SECONDS}" -ge "${end}" ]]; then
-      echo >&2 "test_expect_java_arg: expected argument '$arg' but got '$(cat java-args)'"
+      echo >&2 "test_expect_java_arg: expected argument '$arg' but got '$(cat "${java_args}")'"
       return 1
     fi
 
@@ -38,7 +39,7 @@ test_expect_stderr_matching() {
   expected_pattern=$1
   shift
 
-  stdout="$("$@" 2>&1)"
+  stdout="$("$@" 2>&1 1>/dev/null)"
   err="$?"
   [[ "${err}" -ne 0 ]] && return "${err}"
 

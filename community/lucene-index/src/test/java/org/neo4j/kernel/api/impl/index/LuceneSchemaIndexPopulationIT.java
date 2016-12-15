@@ -33,15 +33,15 @@ import java.util.List;
 import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.kernel.api.exceptions.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.impl.schema.LuceneIndexAccessor;
-import org.neo4j.kernel.api.impl.schema.LuceneSchemaIndex;
 import org.neo4j.kernel.api.impl.schema.LuceneSchemaIndexBuilder;
+import org.neo4j.kernel.api.impl.schema.SchemaIndex;
 import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
 import org.neo4j.storageengine.api.schema.IndexReader;
 import org.neo4j.storageengine.api.schema.IndexSample;
 import org.neo4j.storageengine.api.schema.IndexSampler;
-import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.rule.TestDirectory;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -52,7 +52,7 @@ public class LuceneSchemaIndexPopulationIT
 {
 
     @Rule
-    public TargetDirectory.TestDirectory testDir = TargetDirectory.testDirForTest( getClass() );
+    public TestDirectory testDir = TestDirectory.testDirectory();
     private int affectedNodes;
 
     @Before
@@ -81,7 +81,7 @@ public class LuceneSchemaIndexPopulationIT
     @Test
     public void partitionedIndexPopulation() throws Exception
     {
-        try ( LuceneSchemaIndex uniqueIndex = LuceneSchemaIndexBuilder.create().uniqueIndex()
+        try ( SchemaIndex uniqueIndex = LuceneSchemaIndexBuilder.create().uniqueIndex()
                 .withIndexRootFolder( testDir.directory( "partitionIndex" + affectedNodes ) )
                 .withIndexIdentifier( "uniqueIndex" + affectedNodes )
                 .build() )

@@ -22,11 +22,12 @@ package org.neo4j.kernel.impl.store.format.highlimit;
 import java.io.IOException;
 
 import org.neo4j.io.pagecache.PageCursor;
-import org.neo4j.io.pagecache.PagedFile;
 import org.neo4j.kernel.impl.store.format.BaseOneByteHeaderRecordFormat;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
 
+import static java.lang.String.format;
+import static org.neo4j.kernel.impl.store.format.standard.DynamicRecordFormat.payloadTooBigErrorMessage;
 import static org.neo4j.kernel.impl.store.format.standard.DynamicRecordFormat.readData;
 
 /**
@@ -42,13 +43,13 @@ import static org.neo4j.kernel.impl.store.format.standard.DynamicRecordFormat.re
  *
  * => 12B + data size
  */
-class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRecord>
+public class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRecord>
 {
     private static final int RECORD_HEADER_SIZE = 1/*header byte*/ + 3/*# of bytes*/ + 8/*max size of next reference*/;
                                             // = 12
     private static final int START_RECORD_BIT = 0x8;
 
-    protected DynamicRecordFormat()
+    public DynamicRecordFormat()
     {
         super( INT_STORE_HEADER_READER, RECORD_HEADER_SIZE, IN_USE_BIT, HighLimit.DEFAULT_MAXIMUM_BITS_PER_ID );
     }
@@ -60,7 +61,7 @@ class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRecord>
     }
 
     @Override
-    public void read( DynamicRecord record, PageCursor cursor, RecordLoad mode, int recordSize, PagedFile storeFile )
+    public void read( DynamicRecord record, PageCursor cursor, RecordLoad mode, int recordSize )
             throws IOException
     {
         byte headerByte = cursor.getByte();
@@ -68,15 +69,37 @@ class DynamicRecordFormat extends BaseOneByteHeaderRecordFormat<DynamicRecord>
         if ( mode.shouldLoad( inUse ) )
         {
             int length = cursor.getShort() | cursor.getByte() << 16;
+            if ( length > recordSize | length < 0 )
+            {
+                cursor.setCursorException( payloadLengthErrorMessage( record, recordSize, length ) );
+                return;
+            }
             long next = cursor.getLong();
             boolean isStartRecord = (headerByte & START_RECORD_BIT) != 0;
             record.initialize( inUse, isStartRecord, next, -1, length );
             readData( record, cursor );
         }
+        else
+        {
+            record.setInUse( inUse );
+        }
+    }
+
+    private String payloadLengthErrorMessage( DynamicRecord record, int recordSize, int length )
+    {
+        return length < 0 ?
+               negativePayloadErrorMessage( record, length ) :
+               payloadTooBigErrorMessage( record, recordSize, length );
+    }
+
+    private String negativePayloadErrorMessage( DynamicRecord record, int length )
+    {
+        return format( "DynamicRecord[%s] claims to have a negative payload of %s bytes.",
+                record.getId(), length );
     }
 
     @Override
-    public void write( DynamicRecord record, PageCursor cursor, int recordSize, PagedFile storeFile ) throws IOException
+    public void write( DynamicRecord record, PageCursor cursor, int recordSize ) throws IOException
     {
         if ( record.inUse() )
         {

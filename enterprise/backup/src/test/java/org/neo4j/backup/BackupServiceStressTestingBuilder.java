@@ -55,9 +55,9 @@ import org.neo4j.kernel.impl.util.DependenciesProxy;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.NullLogProvider;
+import org.neo4j.test.ThreadTestUtils;
 
-import static java.lang.System.currentTimeMillis;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class BackupServiceStressTestingBuilder
 {
@@ -66,12 +66,6 @@ public class BackupServiceStressTestingBuilder
     private File backupDirectory;
     private String backupHostname = "localhost";
     private int backupPort = 8200;
-
-    public static BooleanSupplier untilTimeExpired( long duration, TimeUnit unit )
-    {
-        final long endTimeInMilliseconds = currentTimeMillis() + unit.toMillis( duration );
-        return () -> currentTimeMillis() <= endTimeInMilliseconds;
-    }
 
     public BackupServiceStressTestingBuilder until( BooleanSupplier untilCondition )
     {
@@ -238,7 +232,11 @@ public class BackupServiceStressTestingBuilder
                 }
 
                 executor.shutdown();
-                assertTrue( executor.awaitTermination( 30, TimeUnit.SECONDS ) );
+                if ( !executor.awaitTermination( 5, TimeUnit.MINUTES ) )
+                {
+                    ThreadTestUtils.dumpAllStackTraces();
+                    fail( "Didn't manage to shut down the workers correctly, dumped threads for forensic purposes" );
+                }
 
                 life.shutdown();
 

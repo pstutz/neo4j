@@ -223,6 +223,59 @@ public class ExtractorsTest
         assertNull( extracted );
     }
 
+    @Test
+    public void shouldTrimStringIfConfiguredTo() throws Exception
+    {
+        // GIVEN
+        Extractors extractors = new Extractors( ',', true, true);
+        String value = " abcde fgh  ";
+
+        // WHEN
+        char[] asChars = value.toCharArray();
+        Extractor<String> extractor = extractors.string();
+        extractor.extract( asChars, 0, asChars.length, true );
+
+        // THEN
+        assertEquals( value.trim(), extractor.value() );
+    }
+
+    @Test
+    public void shouldNotTrimStringIfNotConfiguredTo() throws Exception
+    {
+        // GIVEN
+        Extractors extractors = new Extractors( ',', true, false);
+        String value = " abcde fgh  ";
+
+        // WHEN
+        char[] asChars = value.toCharArray();
+        Extractor<String> extractor = extractors.string();
+        extractor.extract( asChars, 0, asChars.length, true );
+
+        // THEN
+        assertEquals( value, extractor.value() );
+    }
+
+    @Test
+    public void shouldCloneExtractor() throws Exception
+    {
+        // GIVEN
+        Extractors extractors = new Extractors( ';' );
+        Extractor<String> e1 = extractors.string();
+        Extractor<String> e2 = e1.clone();
+
+        // WHEN
+        String v1 = "abc";
+        e1.extract( v1.toCharArray(), 0, v1.length(), false );
+        assertEquals( v1, e1.value() );
+        assertNull( e2.value() );
+
+        // THEN
+        String v2 = "def";
+        e2.extract( v2.toCharArray(), 0, v2.length(), false );
+        assertEquals( v2, e2.value() );
+        assertEquals( v1, e1.value() );
+    }
+
     private String toString( long[] values, char delimiter )
     {
         StringBuilder builder = new StringBuilder();

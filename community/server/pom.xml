@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   Copyright (c) 2002-2016 "Neo Technology,"
-  Network Engine for Objects in Lund AB [http://neotechnology.com]
-
-  This file is part of Neo4j.
-
-  Neo4j is free software: you can redistribute it and/or modify
-  it under the terms of the GNU Affero General Public License as
-  published by the Free Software Foundation, either version 3 of the
-  License, or (at your option) any later version.
-
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU Affero General Public License for more details.
-
-  You should have received a copy of the GNU Affero General Public License
-  along with this program. If not, see <http://www.gnu.org/licenses />.
+   Network Engine for Objects in Lund AB [http://neotechnology.com]
+  
+   This file is part of Neo4j.
+  
+   Neo4j is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+  
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
+  
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
   -->
 
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <parent>
     <groupId>org.neo4j</groupId>
     <artifactId>parent</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.1.0-SNAPSHOT</version>
     <relativePath>../..</relativePath>
   </parent>
 
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.neo4j.app</groupId>
   <artifactId>neo4j-server</artifactId>
-  <version>3.0.0-SNAPSHOT</version>
+  <version>3.1.0-SNAPSHOT</version>
   <name>Neo4j - Server</name>
   <description>Standalone Neo4j server application.</description>
   <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -46,7 +46,7 @@
     <docs-plugin.filter>true</docs-plugin.filter>
 
     <neo4j.version>${project.version}</neo4j.version>
-    <neo4j-browser.version>1.1.4</neo4j-browser.version>
+    <neo4j-browser.version>2.0.0-M09</neo4j-browser.version>
 
     <neo4j-server.mainClass>org.neo4j.server.CommunityEntryPoint</neo4j-server.mainClass>
     <neo-server.home>target/generated-resources/appassembler/jsw</neo-server.home>
@@ -135,7 +135,19 @@
 
     <dependency>
       <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-security</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.neo4j</groupId>
       <artifactId>neo4j-dbms</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-command-line</artifactId>
       <version>${project.version}</version>
     </dependency>
 
@@ -274,6 +286,14 @@
 
     <dependency>
       <groupId>org.neo4j</groupId>
+      <artifactId>neo4j-security</artifactId>
+      <version>${project.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.neo4j</groupId>
       <artifactId>neo4j-logging</artifactId>
       <version>${project.version}</version>
       <type>test-jar</type>
@@ -344,6 +364,7 @@
           <classpathScope>test</classpathScope>
           <arguments>
             <argument>--config-dir=${basedir}/neo4j-home/conf</argument>
+            <argument>--home-dir=${basedir}/neo4j-home</argument>
           </arguments>
         </configuration>
       </plugin>
@@ -489,52 +510,6 @@
             </group>
           </groups>
         </configuration>
-      </plugin>
-
-      <plugin>
-        <artifactId>maven-antrun-plugin</artifactId>
-        <version>1.7</version>
-        <!--$NO-MVN-MAN-VER$-->
-        <executions>
-          <execution>
-            <id>generate-source-based-documentation</id>
-            <phase>process-classes</phase>
-            <configuration>
-              <target>
-                <java classname="org.neo4j.server.rest.transactional.error.ErrorDocumentationGenerator"
-                      classpathref="maven.compile.classpath" failonerror="true">
-                  <arg value="${project.build.directory}/docs/dev/rest-api"/>
-                </java>
-              </target>
-            </configuration>
-            <goals>
-              <goal>run</goal>
-            </goals>
-          </execution>
-        </executions>
-        <dependencies>
-          <dependency>
-            <groupId>ant-contrib</groupId>
-            <artifactId>ant-contrib</artifactId>
-            <version>1.0b3</version>
-            <exclusions>
-              <exclusion>
-                <groupId>ant</groupId>
-                <artifactId>ant</artifactId>
-              </exclusion>
-            </exclusions>
-          </dependency>
-          <dependency>
-            <groupId>org.apache.ant</groupId>
-            <artifactId>ant</artifactId>
-            <version>1.8.2</version>
-          </dependency>
-          <dependency>
-            <groupId>org.apache.ant</groupId>
-            <artifactId>ant-apache-regexp</artifactId>
-            <version>1.8.2</version>
-          </dependency>
-        </dependencies>
       </plugin>
 
     </plugins>

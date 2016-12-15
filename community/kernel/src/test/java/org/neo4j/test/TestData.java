@@ -19,6 +19,11 @@
  */
 package org.neo4j.test;
 
+import org.junit.rules.TestRule;
+import org.junit.runner.Description;
+import org.junit.runners.model.MultipleFailureException;
+import org.junit.runners.model.Statement;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -26,15 +31,8 @@ import java.lang.annotation.Target;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.junit.Ignore;
-import org.junit.rules.TestRule;
-import org.junit.runner.Description;
-import org.junit.runners.model.MultipleFailureException;
-import org.junit.runners.model.Statement;
-
 import org.neo4j.kernel.impl.annotations.Documented;
 
-@Ignore( "this is not a test, it is a testing utility" )
 public class TestData<T> implements TestRule
 {
     @Target( ElementType.METHOD )
@@ -115,7 +113,7 @@ public class TestData<T> implements TestRule
     {
         this.producer = producer;
     }
-    
+
     @Override
     public Statement apply( final Statement base, final Description description )
     {

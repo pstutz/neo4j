@@ -39,6 +39,7 @@ import org.neo4j.kernel.impl.store.DynamicStringStore;
 import org.neo4j.kernel.impl.store.PropertyStore;
 import org.neo4j.kernel.impl.store.PropertyType;
 import org.neo4j.kernel.impl.store.RecordCursor;
+import org.neo4j.kernel.impl.store.StandaloneDynamicRecordAllocator;
 import org.neo4j.kernel.impl.store.record.DynamicRecord;
 import org.neo4j.kernel.impl.store.record.PropertyBlock;
 import org.neo4j.kernel.impl.store.record.RecordLoad;
@@ -55,7 +56,7 @@ import static org.mockito.Mockito.when;
 import static org.neo4j.kernel.impl.api.store.StorePropertyPayloadCursorTest.Param.param;
 import static org.neo4j.kernel.impl.api.store.StorePropertyPayloadCursorTest.Param.paramArg;
 import static org.neo4j.kernel.impl.api.store.StorePropertyPayloadCursorTest.Params.params;
-import static org.neo4j.test.Assert.assertObjectOrArrayEquals;
+import static org.neo4j.test.assertion.Assert.assertObjectOrArrayEquals;
 
 @RunWith( Enclosed.class )
 public class StorePropertyPayloadCursorTest
@@ -65,8 +66,8 @@ public class StorePropertyPayloadCursorTest
         @Test
         public void nextShouldAlwaysReturnFalseWhenNotInitialized()
         {
-            StorePropertyPayloadCursor cursor = new StorePropertyPayloadCursor( mock( DynamicStringStore.class ),
-                    mock( DynamicArrayStore.class ) );
+            StorePropertyPayloadCursor cursor = new StorePropertyPayloadCursor( mock( RecordCursor.class ),
+                    mock( RecordCursor.class ) );
 
             assertFalse( cursor.next() );
 
@@ -107,8 +108,8 @@ public class StorePropertyPayloadCursorTest
             // Given
             StorePropertyPayloadCursor cursor = newCursor( 1, 2, 3L );
 
-            cursor.next();
-            cursor.next();
+            assertTrue( cursor.next() );
+            assertTrue( cursor.next() );
 
             // When
             cursor.clear();
@@ -123,9 +124,9 @@ public class StorePropertyPayloadCursorTest
             // Given
             StorePropertyPayloadCursor cursor = newCursor( 1, 2, 3 );
 
-            cursor.next();
-            cursor.next();
-            cursor.next();
+            assertTrue( cursor.next() );
+            assertTrue( cursor.next() );
+            assertTrue( cursor.next() );
 
             // When
             cursor.clear();
@@ -154,7 +155,7 @@ public class StorePropertyPayloadCursorTest
             StorePropertyPayloadCursor cursor = newCursor();
 
             // When
-            cursor.next();
+            assertFalse( cursor.next() );
 
             // Then
             // next() on an empty cursor works just fine
@@ -184,6 +185,18 @@ public class StorePropertyPayloadCursorTest
             verify( dynamicStringStore ).newRecordCursor( any( DynamicRecord.class ) );
             verify( dynamicArrayStore ).newRecordCursor( any( DynamicRecord.class ) );
         }
+
+        @Test
+        public void nextMultipleInvocations()
+        {
+            StorePropertyPayloadCursor cursor = newCursor();
+
+            assertFalse( cursor.next() );
+            assertFalse( cursor.next() );
+            assertFalse( cursor.next() );
+            assertFalse( cursor.next() );
+        }
+
     }
 
     @RunWith( Parameterized.class )
@@ -456,7 +469,8 @@ public class StorePropertyPayloadCursorTest
     private static StorePropertyPayloadCursor newCursor( DynamicStringStore dynamicStringStore,
             DynamicArrayStore dynamicArrayStore, Object... values )
     {
-        StorePropertyPayloadCursor cursor = new StorePropertyPayloadCursor( dynamicStringStore, dynamicArrayStore );
+        StorePropertyPayloadCursor cursor = new StorePropertyPayloadCursor(
+                dynamicStringStore.newRecordCursor( null ), dynamicArrayStore.newRecordCursor( null ) );
 
         long[] blocks = asBlocks( values );
         cursor.init( blocks, blocks.length );
@@ -466,8 +480,8 @@ public class StorePropertyPayloadCursorTest
 
     private static long[] asBlocks( Object... values )
     {
-        RecordAllocator stringAllocator = new RecordAllocator();
-        RecordAllocator arrayAllocator = new RecordAllocator();
+        DynamicRecordAllocator stringAllocator = new StandaloneDynamicRecordAllocator();
+        DynamicRecordAllocator arrayAllocator = new StandaloneDynamicRecordAllocator();
         long[] blocks = new long[PropertyType.getPayloadSizeLongs()];
         int cursor = 0;
         for ( int i = 0; i < values.length; i++ )
@@ -551,26 +565,6 @@ public class StorePropertyPayloadCursorTest
         public String toString()
         {
             return "{params=" + Arrays.toString( params ) + "}";
-        }
-    }
-
-    private static class RecordAllocator implements DynamicRecordAllocator
-    {
-        long id;
-
-        @Override
-        public int getRecordDataSize()
-        {
-            return 120;
-        }
-
-        @Override
-        public DynamicRecord nextUsedRecordOrNew( Iterator<DynamicRecord> recordsToUseFirst )
-        {
-            DynamicRecord record = new DynamicRecord( id++ );
-            record.setCreated();
-            record.setInUse( true );
-            return record;
         }
     }
 }

@@ -22,9 +22,12 @@ package org.neo4j.kernel.impl.factory;
 import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
+import org.neo4j.function.Suppliers;
+import org.neo4j.function.ThrowingAction;
 import org.neo4j.graphdb.*;
 import org.neo4j.graphdb.event.KernelEventHandler;
 import org.neo4j.graphdb.event.TransactionEventHandler;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.index.IndexManager;
 import org.neo4j.graphdb.schema.Schema;
 import org.neo4j.graphdb.security.URLAccessValidationError;
@@ -38,6 +41,7 @@ import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
+import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
 import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException;
@@ -46,33 +50,41 @@ import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.legacyindex.AutoIndexing;
 import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.api.security.AccessMode;
+import org.neo4j.kernel.api.security.SecurityContext;
+import org.neo4j.kernel.configuration.Config;
+import org.neo4j.kernel.guard.Guard;
 import org.neo4j.kernel.impl.api.TokenAccess;
-import org.neo4j.kernel.impl.api.legacyindex.InternalAutoIndexing;
 import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 import org.neo4j.kernel.impl.core.NodeProxy;
 import org.neo4j.kernel.impl.core.RelationshipProxy;
+import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.coreapi.*;
 import org.neo4j.kernel.impl.coreapi.schema.SchemaImpl;
-import org.neo4j.kernel.impl.query.Neo4jTransactionalContext;
+import org.neo4j.kernel.impl.query.Neo4jTransactionalContextFactory;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
-import org.neo4j.kernel.impl.query.QuerySession;
 import org.neo4j.kernel.impl.query.TransactionalContext;
+import org.neo4j.kernel.impl.query.TransactionalContextFactory;
 import org.neo4j.kernel.impl.store.StoreId;
 import org.neo4j.kernel.impl.traversal.BidirectionalTraversalDescriptionImpl;
 import org.neo4j.kernel.impl.traversal.MonoDirectionalTraversalDescription;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.EntityType;
 import org.neo4j.storageengine.api.RelationshipItem;
+import saschapeukert.QueryRewriter;
 
 import java.io.File;
 import java.net.URL;
 import java.util.Collections;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import static java.lang.String.format;
 import static org.neo4j.collection.primitive.PrimitiveLongCollections.map;
 import static org.neo4j.helpers.collection.Iterators.emptyIterator;
+import static org.neo4j.kernel.api.security.SecurityContext.AUTH_DISABLED;
+import static org.neo4j.kernel.impl.api.legacyindex.InternalAutoIndexing.NODE_AUTO_INDEX;
+import static org.neo4j.kernel.impl.api.legacyindex.InternalAutoIndexing.RELATIONSHIP_AUTO_INDEX;
 import static org.neo4j.kernel.impl.api.operations.KeyReadOperations.NO_SUCH_LABEL;
 import static org.neo4j.kernel.impl.api.operations.KeyReadOperations.NO_SUCH_PROPERTY_KEY;
 
@@ -86,10 +98,12 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     private static final PropertyContainerLocker locker = new PropertyContainerLocker();
 
     private Schema schema;
-    private IndexManager indexManager;
-    protected NodeProxy.NodeActions nodeActions;
-    protected RelationshipProxy.RelationshipActions relActions;
-    protected SPI spi;
+    private Supplier<IndexManager> indexManager;
+    private NodeProxy.NodeActions nodeActions;
+    private RelationshipProxy.RelationshipActions relActions;
+    private SPI spi;
+    private TransactionalContextFactory contextFactory;
+    private long defaultTransactionTimeout;
 
     /**
      * This is what you need to implemenent to get your very own {@link GraphDatabaseFacade}. This SPI exists as a thin
@@ -117,12 +131,14 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         void shutdown();
 
         /**
-         * Begin a new kernel transaction. If a transaction is already associated to the current context
+         * Begin a new kernel transaction with specified timeout in milliseconds.
+         * If a transaction is already associated to the current context
          * (meaning, non-null is returned from {@link #currentTransaction()}), this should fail.
          *
          * @throws org.neo4j.graphdb.TransactionFailureException if unable to begin, or a transaction already exists.
+         * @see SPI#beginTransaction(KernelTransaction.Type, SecurityContext)
          */
-        KernelTransaction beginTransaction( KernelTransaction.Type type, AccessMode accessMode );
+        KernelTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext, long timeout );
 
         /**
          * Retrieve the transaction associated with the current context. For the classic implementation of the Core API,
@@ -141,7 +157,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         Statement currentStatement();
 
         /** Execute a cypher statement */
-        Result executeQuery( String query, Map<String,Object> parameters, QuerySession querySession );
+        Result executeQuery( String query, Map<String,Object> parameters, TransactionalContext context );
 
         AutoIndexing autoIndexing();
 
@@ -164,27 +180,49 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
 
     /**
      * Create a new Core API facade, backed by the given SPI.
+     *
+     * Any required dependencies are resolved using the resolver obtained from the SPI.
      */
-    public void init( SPI spi )
+    public final void init( SPI spi, Config config )
     {
-        IndexProviderImpl idxProvider = new IndexProviderImpl( this, spi::currentStatement );
+        DependencyResolver resolver = spi.resolver();
+        init(
+            spi,
+            resolver.resolveDependency( Guard.class ),
+            resolver.resolveDependency( ThreadToStatementContextBridge.class ),
+            config
+        );
+    }
 
+    /**
+     * Create a new Core API facade, backed by the given SPI and using pre-resolved dependencies
+     */
+    public void init( SPI spi, Guard guard, ThreadToStatementContextBridge txBridge, Config config )
+    {
         this.spi = spi;
-        this.relActions = new StandardRelationshipActions( spi::currentStatement, spi::currentTransaction,
-                this::assertTransactionOpen, ( id ) -> new NodeProxy( nodeActions, id ), this );
-        this.nodeActions =
-                new StandardNodeActions( spi::currentStatement, spi::currentTransaction, this::assertTransactionOpen,
-                        relActions, this );
-        this.schema = new SchemaImpl( spi::currentStatement );
-        AutoIndexerFacade<Node> nodeAutoIndexer = new AutoIndexerFacade<>(
-                () -> new ReadOnlyIndexFacade<>(
-                        idxProvider.getOrCreateNodeIndex( InternalAutoIndexing.NODE_AUTO_INDEX, null ) ),
+        this.defaultTransactionTimeout = config.get( GraphDatabaseSettings.transaction_timeout );
+
+        Supplier<Statement> statementSupplier = spi::currentStatement;
+        Supplier<KernelTransaction> transactionSupplier = spi::currentTransaction;
+        ThrowingAction<RuntimeException> assertTransactionOpen = this::assertTransactionOpen;
+
+        this.schema = new SchemaImpl( statementSupplier );
+        this.relActions = new StandardRelationshipActions( statementSupplier, transactionSupplier, assertTransactionOpen, ( id ) -> new NodeProxy( nodeActions, id ), this );
+        this.nodeActions = new StandardNodeActions( statementSupplier, transactionSupplier, assertTransactionOpen, relActions, this );
+
+        this.indexManager = Suppliers.lazySingleton( () -> {
+            IndexProviderImpl idxProvider = new IndexProviderImpl( this, statementSupplier );
+            AutoIndexerFacade<Node> nodeAutoIndexer = new AutoIndexerFacade<>(
+                () -> new ReadOnlyIndexFacade<>( idxProvider.getOrCreateNodeIndex( NODE_AUTO_INDEX, null ) ),
                 spi.autoIndexing().nodes() );
-        RelationshipAutoIndexerFacade relAutoIndexer = new RelationshipAutoIndexerFacade(
-                () -> new ReadOnlyRelationshipIndexFacade( idxProvider
-                        .getOrCreateRelationshipIndex( InternalAutoIndexing.RELATIONSHIP_AUTO_INDEX, null ) ),
+            RelationshipAutoIndexerFacade relAutoIndexer = new RelationshipAutoIndexerFacade(
+                () -> new ReadOnlyRelationshipIndexFacade( idxProvider.getOrCreateRelationshipIndex( RELATIONSHIP_AUTO_INDEX, null ) ),
                 spi.autoIndexing().relationships() );
-        this.indexManager = new IndexManagerImpl( spi::currentStatement, idxProvider, nodeAutoIndexer, relAutoIndexer );
+
+            return new IndexManagerImpl( statementSupplier, idxProvider, nodeAutoIndexer, relAutoIndexer );
+        } );
+
+        this.contextFactory = Neo4jTransactionalContextFactory.create( spi, guard, txBridge, locker );
     }
 
     @Override
@@ -271,8 +309,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public Relationship getRelationshipById( long id )
     {
-        /*
-        if ( id < 0 )
+        /*if ( id < 0 )
         {
             throw new NotFoundException( format( "Relationship %d not found", id ),
                     new EntityNotFoundException( EntityType.RELATIONSHIP, id ) );
@@ -295,7 +332,6 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
                     RelationshipProxy relationship = new RelationshipProxy( relActions, id,startNode,type,endNode );
                     return relationship;
                 }
-
             }
             catch ( EntityNotFoundException e )
             {
@@ -307,7 +343,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public IndexManager index()
     {
-        return indexManager;
+        return indexManager.get();
     }
 
     @Override
@@ -332,35 +368,69 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     @Override
     public Transaction beginTx()
     {
-        return beginTransaction( KernelTransaction.Type.explicit, AccessMode.Static.FULL );
+        return beginTransaction( KernelTransaction.Type.explicit, AUTH_DISABLED );
     }
 
-    public InternalTransaction beginTransaction( KernelTransaction.Type type, AccessMode accessMode )
+    @Override
+    public Transaction beginTx( long timeout, TimeUnit unit )
     {
-        if ( spi.isInOpenTransaction() )
-        {
-            // FIXME: perhaps we should check that the new type and access mode are compatible with the current tx
-            return new PlaceboTransaction( spi::currentTransaction, spi::currentStatement );
-        }
+        return beginTransaction( KernelTransaction.Type.explicit, AUTH_DISABLED, timeout, unit );
+    }
 
-        return new TopLevelTransaction( spi.beginTransaction( type, accessMode ), spi::currentStatement );
+    @Override
+    public InternalTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext )
+    {
+        return beginTransactionInternal( type, securityContext, defaultTransactionTimeout );
+    }
+
+    @Override
+    public InternalTransaction beginTransaction( KernelTransaction.Type type, SecurityContext securityContext,
+            long timeout, TimeUnit unit )
+    {
+        return beginTransactionInternal( type, securityContext, unit.toMillis( timeout ) );
     }
 
     @Override
     public Result execute( String query ) throws QueryExecutionException
     {
-        return execute( query, Collections.<String,Object>emptyMap() );
+        return execute( query, Collections.emptyMap() );
+    }
+
+    @Override
+    public Result execute( String query, long timeout, TimeUnit unit ) throws QueryExecutionException
+    {
+        return execute( query, Collections.emptyMap(), timeout, unit );
     }
 
     @Override
     public Result execute( String query, Map<String,Object> parameters ) throws QueryExecutionException
     {
         // ensure we have a tx and create a context (the tx is gonna get closed by the Cypher result)
-        InternalTransaction transaction = beginTransaction( KernelTransaction.Type.implicit, AccessMode.Static.FULL );
-        TransactionalContext transactionalContext =
-                new Neo4jTransactionalContext( spi.queryService(), transaction, spi.currentStatement(), locker );
+        InternalTransaction transaction =
+                beginTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED );
 
-        return spi.executeQuery( query, parameters, QueryEngineProvider.embeddedSession( transactionalContext ) );
+        return execute( transaction, query, parameters );
+    }
+
+    @Override
+    public Result execute( String query, Map<String,Object> parameters, long timeout, TimeUnit unit ) throws
+            QueryExecutionException
+    {
+        InternalTransaction transaction =
+                beginTransaction( KernelTransaction.Type.implicit, AUTH_DISABLED, timeout, unit );
+        return execute( transaction, query, parameters );
+    }
+
+    public Result execute( InternalTransaction transaction, String query, Map<String,Object> parameters )
+            throws QueryExecutionException
+    {
+        // Rewrite Query
+        QueryRewriter rewriter = new QueryRewriter();
+        query = rewriter.rewrite(query);
+
+        TransactionalContext context =
+                contextFactory.newContext( QueryEngineProvider.describe(), transaction, query, parameters );
+        return spi.executeQuery( query, parameters, context );
     }
 
     @Override
@@ -408,6 +478,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
     {
         return allInUse( TokenAccess.RELATIONSHIP_TYPES );
     }
+
     private <T> ResourceIterable<T> allInUse( final TokenAccess<T> tokens )
     {
         assertTransactionOpen();
@@ -500,6 +571,17 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         return allNodesWithLabel( myLabel );
     }
 
+    private InternalTransaction beginTransactionInternal( KernelTransaction.Type type, SecurityContext securityContext,
+            long timeoutMillis )
+    {
+        if ( spi.isInOpenTransaction() )
+        {
+            // FIXME: perhaps we should check that the new type and access mode are compatible with the current tx
+            return new PlaceboTransaction( spi::currentTransaction, spi::currentStatement );
+        }
+        return new TopLevelTransaction( spi.beginTransaction( type, securityContext, timeoutMillis ), spi::currentStatement );
+    }
+
     private ResourceIterator<Node> nodesByLabelAndProperty( Label myLabel, String key, Object value )
     {
         Statement statement = spi.currentStatement();
@@ -576,7 +658,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
                 .newResourceIterator( statement, map( nodeId -> new NodeProxy( nodeActions, nodeId ), nodeIds ) );
     }
 
-    protected ResourceIterator<Node> map2nodes( PrimitiveLongIterator input, Statement statement )
+    private ResourceIterator<Node> map2nodes( PrimitiveLongIterator input, Statement statement )
     {
         return ResourceClosingIterator
                 .newResourceIterator( statement, map( id -> new NodeProxy( nodeActions, id ), input ) );
@@ -667,11 +749,12 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
         }
     }
 
-    protected void assertTransactionOpen()
+    private void assertTransactionOpen()
     {
-        if ( spi.currentTransaction().shouldBeTerminated() )
+        Status reason = spi.currentTransaction().getReasonIfTerminated();
+        if ( reason != null )
         {
-            throw new TransactionTerminatedException();
+            throw new TransactionTerminatedException( reason );
         }
     }
 }

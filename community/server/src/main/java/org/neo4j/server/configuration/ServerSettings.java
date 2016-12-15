@@ -23,26 +23,20 @@ import java.io.File;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.function.Function;
 
 import org.neo4j.bolt.BoltKernelExtension;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.factory.Description;
-import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.helpers.HostnamePort;
-import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.configuration.Internal;
 import org.neo4j.kernel.configuration.Settings;
+import org.neo4j.server.web.JettyThreadCalculator;
 
-import static org.neo4j.graphdb.factory.GraphDatabaseSettings.Connector.ConnectorType.HTTP;
-import static org.neo4j.kernel.configuration.GroupSettingSupport.enumerate;
 import static org.neo4j.kernel.configuration.Settings.BOOLEAN;
 import static org.neo4j.kernel.configuration.Settings.BYTES;
 import static org.neo4j.kernel.configuration.Settings.DURATION;
 import static org.neo4j.kernel.configuration.Settings.EMPTY;
 import static org.neo4j.kernel.configuration.Settings.FALSE;
-import static org.neo4j.kernel.configuration.Settings.HOSTNAME_PORT;
 import static org.neo4j.kernel.configuration.Settings.INTEGER;
 import static org.neo4j.kernel.configuration.Settings.NORMALIZED_RELATIVE_URI;
 import static org.neo4j.kernel.configuration.Settings.NO_DEFAULT;
@@ -51,8 +45,8 @@ import static org.neo4j.kernel.configuration.Settings.STRING_LIST;
 import static org.neo4j.kernel.configuration.Settings.TRUE;
 import static org.neo4j.kernel.configuration.Settings.max;
 import static org.neo4j.kernel.configuration.Settings.min;
-import static org.neo4j.kernel.configuration.Settings.options;
 import static org.neo4j.kernel.configuration.Settings.pathSetting;
+import static org.neo4j.kernel.configuration.Settings.range;
 import static org.neo4j.kernel.configuration.Settings.setting;
 
 @Description("Settings used by the server configuration")
@@ -71,61 +65,17 @@ public interface ServerSettings
     @Description("Comma-seperated list of custom security rules for Neo4j to use.")
     Setting<List<String>> security_rules = setting( "dbms.security.http_authorization_classes", STRING_LIST, EMPTY );
 
-    @Description("Configuration options for HTTP connectors. " +
-                 "\"(http-connector-key)\" is a placeholder for a unique name for the connector, for instance " +
-                 "\"http-public\" or some other name that describes what the connector is for.")
-    class HttpConnector extends GraphDatabaseSettings.Connector
-    {
-        @Description("Enable TLS for this connector")
-        public final Setting<Encryption> encryption;
+    @Description( "Number of Neo4j worker threads, your OS might enforce a lower limit than the maximum value " +
+            "specified here." )
+    Setting<Integer> webserver_max_threads = setting( "dbms.threads.worker_count", INTEGER,
+            "" + Math.min( Runtime.getRuntime().availableProcessors(), 500 ),
+            range( 1, JettyThreadCalculator.MAX_THREADS ) );
 
-        @Description("Address the connector should bind to")
-        public final Setting<HostnamePort> address;
-
-        public HttpConnector()
-        {
-            this( "(http-connector-key)" );
-        }
-
-        public HttpConnector( String key )
-        {
-            super( key, ConnectorType.HTTP.name() );
-            address = group.scope( setting( "address", HOSTNAME_PORT, "localhost:7474" ) );
-            encryption = group.scope( setting( "encryption", options( Encryption.class ), Encryption.NONE.name() ) );
-        }
-
-        public enum Encryption
-        {
-            NONE, TLS
-        }
-    }
-
-    static HttpConnector httpConnector( String key )
-    {
-        return new HttpConnector( key );
-    }
-
-    static Optional<HttpConnector> httpConnector( Config config, HttpConnector.Encryption encryption )
-    {
-        return config
-                .view( enumerate( GraphDatabaseSettings.Connector.class ) )
-                .map( HttpConnector::new )
-                .filter( ( connConfig ) -> {
-                    return config.get( connConfig.type ) == HTTP
-                            && config.get( connConfig.enabled )
-                            && config.get( connConfig.encryption ) == encryption;
-                } )
-                .findFirst();
-    }
-
-    @Description("Number of Neo4j worker threads.")
-    Setting<Integer> webserver_max_threads = setting( "dbms.threads.worker_count",
-            INTEGER, "" + Math.min( Runtime.getRuntime().availableProcessors(), 500 ), min( 1 ) );
-
-    @Description("If execution time limiting is enabled in the database, this configures the maximum request execution time.")
+    @Description( "If execution time limiting is enabled in the database, this configures the maximum request execution time. " +
+            "Please use dbms.transaction.timeout instead." )
     @Internal
-    Setting<Long> webserver_limit_execution_time =
-            setting( "unsupported.dbms.executiontime_limit.time", DURATION, NO_DEFAULT );
+    @Deprecated
+    Setting<Long> webserver_limit_execution_time = setting( "unsupported.dbms.executiontime_limit.time", DURATION, NO_DEFAULT );
 
     @Internal
     Setting<List<String>> console_module_engines = setting(
@@ -211,15 +161,17 @@ public interface ServerSettings
     Setting<Long> gc_logging_rotation_size = setting("dbms.logs.gc.rotation.size", BYTES, "20m", min(0L), max( Long.MAX_VALUE ) );
 
     @SuppressWarnings("unused") // used only in the startup scripts
-    @Description("Path of the run directory")
+    @Description("Path of the run directory. This directory holds Neo4j's runtime state, such as a pidfile when it is" +
+            " running in the background. The pidfile is created when starting neo4j and removed when stopping it." +
+            " It may be placed on an in-memory filesystem such as tmpfs.")
     Setting<File> run_directory = pathSetting( "dbms.directories.run", "run" );
 
     @SuppressWarnings("unused") // used only in the startup scripts
     @Description("Path of the lib directory")
     Setting<File> lib_directory = pathSetting( "dbms.directories.lib", "lib" );
 
-    @Description("Timeout for idle transactions.")
-    Setting<Long> transaction_timeout = setting( "dbms.transaction_timeout", DURATION, "60s" );
+    @Description("Timeout for idle transactions in the REST endpoint.")
+    Setting<Long> transaction_idle_timeout = setting( "dbms.rest.transaction.idle_timeout", DURATION, "60s" );
 
     @Internal
     Setting<URI> rest_api_path = setting( "unsupported.dbms.uris.rest", NORMALIZED_RELATIVE_URI, "/db/data" );

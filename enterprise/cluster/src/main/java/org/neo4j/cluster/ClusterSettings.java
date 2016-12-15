@@ -31,12 +31,14 @@ import static org.neo4j.kernel.configuration.Settings.ANY;
 import static org.neo4j.kernel.configuration.Settings.BOOLEAN;
 import static org.neo4j.kernel.configuration.Settings.DURATION;
 import static org.neo4j.kernel.configuration.Settings.HOSTNAME_PORT;
+import static org.neo4j.kernel.configuration.Settings.INTEGER;
 import static org.neo4j.kernel.configuration.Settings.MANDATORY;
 import static org.neo4j.kernel.configuration.Settings.STRING;
 import static org.neo4j.kernel.configuration.Settings.TRUE;
 import static org.neo4j.kernel.configuration.Settings.illegalValueMessage;
 import static org.neo4j.kernel.configuration.Settings.list;
 import static org.neo4j.kernel.configuration.Settings.matches;
+import static org.neo4j.kernel.configuration.Settings.min;
 import static org.neo4j.kernel.configuration.Settings.setting;
 
 /**
@@ -102,8 +104,13 @@ public class ClusterSettings
     public static final Setting<Long> heartbeat_interval = setting( "ha.heartbeat_interval", DURATION,
             default_timeout );
 
-    @Description( "Timeout for heartbeats between cluster members. Should be at least twice that of ha.heartbeat_interval." )
-    public static final Setting<Long> heartbeat_timeout = setting( "ha.heartbeat_timeout", DURATION, "11s" );
+    @Description( "How long to wait for heartbeats from other instances before marking them as suspects for failure. " +
+            "This value reflects considerations of network latency, expected duration of garbage collection pauses " +
+            "and other factors that can delay message sending and processing. Larger values will result in more " +
+            "stable masters but also will result in longer waits before a failover in case of master failure. This " +
+            "value should not be set to less than twice the ha.heartbeat_interval value otherwise there is a high " +
+            "risk of frequent master switches and possibly branched data occurrence." )
+    public static final Setting<Long> heartbeat_timeout = setting( "ha.heartbeat_timeout", DURATION, "40s" );
 
     /*
      * ha.join_timeout
@@ -127,14 +134,20 @@ public class ClusterSettings
      *  ha.phase2_timeout
      *  ha.election_timeout
      */
-    @Description( "Default timeout for all Paxos timeouts. Defaults to ha.default_timeout. This value is the default" +
-            " value for the ha.phase1_timeout, ha.phase2_timeout and ha.election_timeout settings." )
+    @Description( "Default value for all Paxos timeouts. This setting controls the default value for the ha.phase1_timeout, " +
+            "ha.phase2_timeout and ha.election_timeout settings. If it is not given a value it " +
+            "defaults to ha.default_timeout and will implicitly change if ha.default_timeout changes. This is an " +
+            "advanced parameter which should only be changed if specifically advised by Neo4j Professional Services." )
     public static final Setting<Long> paxos_timeout = setting( "ha.paxos_timeout", DURATION, default_timeout );
 
-    @Description( "Timeout for Paxos phase 1. Defaults to ha.paxos_timeout." )
+    @Description( "Timeout for Paxos phase 1. If it is not given a value it defaults to ha.paxos_timeout and will " +
+            "implicitly change if ha.paxos_timeout changes. This is an advanced parameter which should only be " +
+            "changed if specifically advised by Neo4j Professional Services. " )
     public static final Setting<Long> phase1_timeout = setting( "ha.phase1_timeout", DURATION, paxos_timeout );
 
-    @Description( "Timeout for Paxos phase 2. Defaults to ha.paxos_timeout." )
+    @Description( "Timeout for Paxos phase 2. If it is not given a value it defaults to ha.paxos_timeout and will " +
+            "implicitly change if ha.paxos_timeout changes. This is an advanced parameter which should only be " +
+            "changed if specifically advised by Neo4j Professional Services. " )
     public static final Setting<Long> phase2_timeout = setting( "ha.phase2_timeout", DURATION, paxos_timeout );
 
     @Description( "Timeout for learning values. Defaults to ha.default_timeout." )
@@ -145,4 +158,10 @@ public class ClusterSettings
 
     @Internal
     public static final Setting<String> instance_name = setting("unsupported.ha.instance_name", STRING, (String) null);
+
+    @Description( "Maximum number of servers to involve when agreeing to membership changes. " +
+            "In very large clusters, the probability of half the cluster failing is low, but protecting against " +
+            "any arbitrary half failing is expensive. Therefore you may wish to set this parameter to a value less " +
+            "than the cluster size." )
+    public static final Setting<Integer> max_acceptors = setting( "ha.max_acceptors", INTEGER, "21", min( 1 ) );
 }

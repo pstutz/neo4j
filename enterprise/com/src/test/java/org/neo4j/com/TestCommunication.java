@@ -23,7 +23,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.io.IOException;
@@ -51,9 +50,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.neo4j.com.MadeUpServer.FRAME_LENGTH;
-import static org.neo4j.com.TxChecksumVerifier.ALWAYS_MATCH;
-import static org.neo4j.com.storecopy.ResponseUnpacker.NO_OP_TX_HANDLER;
 import static org.neo4j.com.StoreIdTestFactory.newStoreIdForCurrentVersion;
+import static org.neo4j.com.TxChecksumVerifier.ALWAYS_MATCH;
+import static org.neo4j.com.storecopy.ResponseUnpacker.TxHandler.NO_OP_TX_HANDLER;
 
 public class TestCommunication
 {
@@ -130,7 +129,6 @@ public class TestCommunication
         MadeUpServer server = builder.server();
         MadeUpClient client = builder.client();
         addToLifeAndStart( server, client );
-
 
         client.fetchDataStream( new ToAssertionWriter(), FRAME_LENGTH * 3 );
     }
@@ -390,14 +388,10 @@ public class TestCommunication
         // Given
         final String comExceptionMessage = "The ComException";
 
-        MadeUpCommunicationInterface communication = mock( MadeUpCommunicationInterface.class, new Answer<Response<?>>()
-        {
-            @Override
-            public Response<?> answer( InvocationOnMock _ ) throws ComException
-            {
-                throw new ComException( comExceptionMessage );
-            }
-        } );
+        MadeUpCommunicationInterface communication = mock( MadeUpCommunicationInterface.class,
+                (Answer<Response<?>>) ingored -> {
+                    throw new ComException( comExceptionMessage );
+                } );
 
         ComExceptionHandler handler = mock( ComExceptionHandler.class );
 
@@ -587,14 +581,19 @@ public class TestCommunication
 
         public MadeUpClient client()
         {
-            return new MadeUpClient( port, storeId, internalProtocolVersion, applicationProtocolVersion, chunkSize,
-                    ResponseUnpacker.NO_OP_RESPONSE_UNPACKER );
+            return clientWith( ResponseUnpacker.NO_OP_RESPONSE_UNPACKER );
         }
 
         public MadeUpClient clientWith( ResponseUnpacker responseUnpacker )
         {
-            return new MadeUpClient( port, storeId, internalProtocolVersion, applicationProtocolVersion, chunkSize,
-                    responseUnpacker );
+            return new MadeUpClient( port, storeId, chunkSize, responseUnpacker )
+            {
+                @Override
+                public ProtocolVersion getProtocolVersion()
+                {
+                    return new ProtocolVersion( applicationProtocolVersion, internalProtocolVersion );
+                }
+            };
         }
 
         public ServerInterface serverInOtherJvm()

@@ -30,19 +30,17 @@ import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.schema.IndexDefinition;
-import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.impl.api.KernelStatement;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
+import org.neo4j.kernel.impl.factory.CanWrite;
 import org.neo4j.kernel.impl.proc.Procedures;
+import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StoreReadLayer;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.neo4j.graphdb.Label.label;
 
 /**
@@ -68,8 +66,7 @@ public abstract class DiskLayerTest
         db = (GraphDatabaseAPI) createGraphDatabase();
         DependencyResolver resolver = db.getDependencyResolver();
         this.disk = resolver.resolveDependency( StorageEngine.class ).storeReadLayer();
-        this.state = new KernelStatement( null,
-                null, null, disk.newStatement(), new Procedures() );
+        this.state = new KernelStatement( null, null, disk.newStatement(), new Procedures(), new CanWrite() );
     }
 
     protected GraphDatabaseService createGraphDatabase()
@@ -94,23 +91,6 @@ public abstract class DiskLayerTest
             }
             tx.success();
             return node;
-        }
-    }
-
-    protected IndexDescriptor createIndexAndAwaitOnline( Label label, String propertyKey ) throws Exception
-    {
-        IndexDefinition index;
-        try ( Transaction tx = db.beginTx() )
-        {
-            index = db.schema().indexFor( label ).on( propertyKey ).create();
-            tx.success();
-        }
-
-        try ( Transaction ignored = db.beginTx() )
-        {
-            db.schema().awaitIndexOnline( index, 10, SECONDS );
-            return disk.indexGetForLabelAndPropertyKey( disk.labelGetForName( label.name() ),
-                    disk.propertyKeyGetForName( propertyKey ) );
         }
     }
 

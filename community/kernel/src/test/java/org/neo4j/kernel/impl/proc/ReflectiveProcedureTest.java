@@ -20,7 +20,6 @@
 package org.neo4j.kernel.impl.proc;
 
 import org.hamcrest.Matchers;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -33,18 +32,25 @@ import org.neo4j.collection.RawIterator;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
+import org.neo4j.kernel.api.proc.BasicContext;
 import org.neo4j.kernel.api.proc.CallableProcedure;
-import org.neo4j.kernel.api.proc.CallableProcedure.BasicContext;
 import org.neo4j.kernel.api.proc.Neo4jTypes;
 import org.neo4j.logging.Log;
+import org.neo4j.logging.NullLog;
 import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Procedure;
 
 import static junit.framework.TestCase.assertEquals;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.Matchers.contains;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.neo4j.helpers.collection.Iterators.asList;
 import static org.neo4j.kernel.api.proc.ProcedureSignature.procedureSignature;
 
@@ -60,7 +66,7 @@ public class ReflectiveProcedureTest
     public void setUp() throws Exception
     {
         components = new ComponentRegistry();
-        procedureCompiler = new ReflectiveProcedureCompiler( new TypeMappers(), components );
+        procedureCompiler = new ReflectiveProcedureCompiler( new TypeMappers(), components, NullLog.getInstance(), ProcedureAllowedConfig.DEFAULT );
     }
 
     @Test
@@ -69,7 +75,7 @@ public class ReflectiveProcedureTest
         // Given
         Log log = spy( Log.class );
         components.register( Log.class, (ctx) -> log );
-        CallableProcedure procedure = procedureCompiler.compile( LoggingProcedure.class ).get( 0 );
+        CallableProcedure procedure = procedureCompiler.compileProcedure( LoggingProcedure.class ).get( 0 );
 
         // When
         procedure.apply( new BasicContext(), new Object[0] );
@@ -89,12 +95,11 @@ public class ReflectiveProcedureTest
 
         // Then
         assertEquals( 1, procedures.size() );
-        Assert.assertThat( procedures.get( 0 ).signature(), Matchers.equalTo(
+        assertThat( procedures.get( 0 ).signature(), Matchers.equalTo(
                 procedureSignature( "org", "neo4j", "kernel", "impl", "proc", "listCoolPeople" )
                         .out( "name", Neo4jTypes.NTString )
                         .build() ) );
     }
-
 
     @Test
     public void shouldRunSimpleReadOnlyProcedure() throws Throwable
@@ -106,7 +111,7 @@ public class ReflectiveProcedureTest
         RawIterator<Object[],ProcedureException> out = proc.apply( new BasicContext(), new Object[0] );
 
         // Then
-        Assert.assertThat( asList( out ), contains(
+        assertThat( asList( out ), contains(
                 new Object[]{"Bonnie"},
                 new Object[]{"Clyde"}
         ) );
@@ -135,12 +140,12 @@ public class ReflectiveProcedureTest
         RawIterator<Object[],ProcedureException> bananaOut = bananaPeople.apply( new BasicContext(), new Object[0] );
 
         // Then
-        Assert.assertThat( asList( coolOut ), contains(
+        assertThat( asList( coolOut ), contains(
                 new Object[]{"Bonnie"},
                 new Object[]{"Clyde"}
         ) );
 
-        Assert.assertThat( asList( bananaOut ), contains(
+        assertThat( asList( bananaOut ), contains(
                 new Object[]{"Jake", 18L},
                 new Object[]{"Pontus", 2L}
         ) );
@@ -261,6 +266,40 @@ public class ReflectiveProcedureTest
         proc.apply( new BasicContext(), new Object[0] );
     }
 
+    @Test
+    public void shouldSupportProcedureDeprecation() throws Throwable
+    {
+        // Given
+        Log log = mock(Log.class);
+        ReflectiveProcedureCompiler procedureCompiler = new ReflectiveProcedureCompiler( new TypeMappers(), components, log,
+                ProcedureAllowedConfig.DEFAULT );
+
+        // When
+        List<CallableProcedure> procs = procedureCompiler.compileProcedure( ProcedureWithDeprecation.class );
+
+        // Then
+        verify( log ).warn( "Use of @Procedure(deprecatedBy) without @Deprecated in badProc" );
+        verifyNoMoreInteractions( log );
+        for ( CallableProcedure proc : procs )
+        {
+            String name = proc.signature().name().name();
+            proc.apply( new BasicContext(), new Object[0] );
+            switch ( name )
+            {
+            case "newProc":
+                assertFalse( "Should not be deprecated", proc.signature().deprecated().isPresent() );
+                break;
+            case "oldProc":
+            case "badProc":
+                assertTrue( "Should be deprecated", proc.signature().deprecated().isPresent() );
+                assertThat( proc.signature().deprecated().get(), equalTo( "newProc" ) );
+                break;
+            default:
+                fail( "Unexpected procedure: " + name );
+            }
+        }
+    }
+
     public static class MyOutputRecord
     {
         public String name;
@@ -270,7 +309,6 @@ public class ReflectiveProcedureTest
             this.name = name;
         }
     }
-
 
     public static class SomeOtherOutputRecord
     {
@@ -462,8 +500,27 @@ public class ReflectiveProcedureTest
         }
     }
 
+    public static class ProcedureWithDeprecation
+    {
+        @Procedure("newProc")
+        public void newProc()
+        {
+        }
+
+        @Deprecated
+        @Procedure(value = "oldProc", deprecatedBy = "newProc")
+        public void oldProc()
+        {
+        }
+
+        @Procedure(value = "badProc", deprecatedBy = "newProc")
+        public void badProc()
+        {
+        }
+    }
+
     private List<CallableProcedure> compile( Class<?> clazz ) throws KernelException
     {
-        return procedureCompiler.compile( clazz );
+        return procedureCompiler.compileProcedure( clazz );
     }
 }

@@ -25,21 +25,21 @@
                 </fileset>
             </copy>
 
+            <!-- Make the default values file available to debuild -->
+            <copy file="${project.build.sourceDirectory}/../resources/common/default/neo4j"
+                  tofile="${project.build.outputDirectory}/@{name}/server/default/neo4j"/>
+
             <!-- Make the Neo4j wrapper scripts available to debuild -->
             <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
                   toFile="${project.build.outputDirectory}/@{name}/server/scripts/neo4j"/>
             <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
                   toFile="${project.build.outputDirectory}/@{name}/server/scripts/neo4j-admin"/>
             <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
-                  toFile="${project.build.outputDirectory}/@{name}/server/scripts/neo4j-backup"/>
-            <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
                   toFile="${project.build.outputDirectory}/@{name}/server/scripts/neo4j-import"/>
             <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
                   toFile="${project.build.outputDirectory}/@{name}/server/scripts/neo4j-shell"/>
-
-            <replace file="${project.build.outputDirectory}/@{name}/server/conf/neo4j-wrapper.conf"
-                     token="unsupported.dbms.udc.source=tarball"
-                     value="unsupported.dbms.udc.source=debian"/>
+            <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
+                  toFile="${project.build.outputDirectory}/@{name}/server/scripts/cypher-shell"/>
 
             <!-- Set the directories to match the FHS. -->
             <replace file="${project.build.outputDirectory}/@{name}/server/conf/neo4j.conf"
@@ -55,13 +55,9 @@
                      value="dbms.directories.import=/var/lib/neo4j/import"/>
 
             <concat destfile="${project.build.outputDirectory}/@{name}/server/conf/neo4j.conf"
-                    append="true">
-
-# Directory settings.
-dbms.directories.logs=/var/log/neo4j
-dbms.directories.run=/var/run/neo4j
-dbms.directories.lib=/usr/share/neo4j/lib
-dbms.directories.certificates=/var/lib/neo4j/certificates
+                    append="true"
+                    fixlastline="true">
+                <fileset file="${project.build.sourceDirectory}/../resources/common/directories.conf" />
             </concat>
 
             <chmod perm="700">
@@ -71,18 +67,20 @@ dbms.directories.certificates=/var/lib/neo4j/certificates
                     <include name="**/server/bin/neo4j-import"/>
                     <include name="**/server/bin/neo4j-backup"/>
                     <include name="**/server/bin/neo4j-admin"/>
+                    <include name="**/server/bin/cypher-shell"/>
 
                     <include name="**/server/scripts/neo4j"/>
                     <include name="**/server/scripts/neo4j-shell"/>
                     <include name="**/server/scripts/neo4j-import"/>
                     <include name="**/server/scripts/neo4j-backup"/>
                     <include name="**/server/scripts/neo4j-admin"/>
+                    <include name="**/server/scripts/cypher-shell"/>
                 </fileset>
             </chmod>
 
             <!-- Copy manpages into build folder -->
             <copy toDir="${project.build.outputDirectory}/@{name}/manpages">
-                <fileset dir="${project.build.directory}/manpages" includes="**"/>
+                <fileset dir="${project.build.outputDirectory}/common/manpages" includes="**"/>
             </copy>
 
             <!-- Run installer projects -->
@@ -97,10 +95,17 @@ dbms.directories.certificates=/var/lib/neo4j/certificates
         </sequential>
     </macrodef>
 
-    <target name="generate">
+    <target name="generate-community">
         <package name="community"/>
-        <package name="enterprise"/>
     </target>
+
+    <target name="generate-enterprise">
+        <package name="enterprise"/>
+        <copy file="${project.build.sourceDirectory}/../resources/common/neo4j-script"
+              toFile="${project.build.outputDirectory}/@{name}/server/scripts/neo4j-backup"/>
+    </target>
+
+    <target name="generate" depends="generate-community,generate-enterprise" />
 
     <target name="publish_to_target" depends="generate">
         <!-- Copy installers from classes/ to target/ -->

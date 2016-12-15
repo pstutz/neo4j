@@ -47,7 +47,7 @@ setup_arbiter_options() {
       echo "This instance is now joining the cluster."
     }
   else
-    SHUTDOWN_TIMEOUT=120
+    SHUTDOWN_TIMEOUT="${NEO4J_SHUTDOWN_TIMEOUT:-120}"
     MIN_ALLOWED_OPEN_FILES=40000
     MAIN_CLASS="#{neo4j.mainClass}"
 
@@ -87,8 +87,36 @@ check_limits() {
 setup_java_opts() {
   JAVA_OPTS=("-server")
 
-  [[ -n "${dbms_memory_heap_initial_size:-}" ]] && JAVA_MEMORY_OPTS+=("-Xms${dbms_memory_heap_initial_size}m")
-  [[ -n "${dbms_memory_heap_max_size:-}" ]] && JAVA_MEMORY_OPTS+=("-Xmx${dbms_memory_heap_max_size}m")
+  if [[ -n "${dbms_memory_heap_initial_size:-}" ]]; then
+    local mem="${dbms_memory_heap_initial_size}"
+    if ! [[ ${mem} =~ .*[gGmMkK] ]]; then
+      mem="${mem}m"
+      cat >&2 <<EOF
+WARNING: dbms.memory.heap.initial_size will require a unit suffix in a
+         future version of Neo4j. Please add a unit suffix to your
+         configuration. Example:
+
+         dbms.memory.heap.initial_size=512m
+                                          ^
+EOF
+    fi
+    JAVA_MEMORY_OPTS+=("-Xms${mem}")
+  fi
+  if [[ -n "${dbms_memory_heap_max_size:-}" ]]; then
+    local mem="${dbms_memory_heap_max_size}"
+    if ! [[ ${mem} =~ .*[gGmMkK] ]]; then
+      mem="${mem}m"
+      cat >&2 <<EOF
+WARNING: dbms.memory.heap.max_size will require a unit suffix in a
+         future version of Neo4j. Please add a unit suffix to your
+         configuration. Example:
+
+         dbms.memory.heap.max_size=512m
+                                      ^
+EOF
+    fi
+    JAVA_MEMORY_OPTS+=("-Xmx${mem}")
+  fi
   [[ -n "${JAVA_MEMORY_OPTS:-}" ]] && JAVA_OPTS+=("${JAVA_MEMORY_OPTS[@]}")
 
   if [[ "${dbms_logs_gc_enabled:-}" = "true" ]]; then
@@ -111,7 +139,7 @@ setup_java_opts() {
 
 assemble_command_line() {
   retval=("${JAVA_CMD}" "-cp" "${CLASSPATH}" "${JAVA_OPTS[@]}" "-Dfile.encoding=UTF-8" "${MAIN_CLASS}" \
-          "--config-dir=${NEO4J_CONF}")
+          "--home-dir=${NEO4J_HOME}" "--config-dir=${NEO4J_CONF}")
 }
 
 do_console() {
@@ -216,7 +244,7 @@ do_status() {
 
 main() {
   setup_environment
-  CONSOLE_LOG="$(cd "${NEO4J_LOGS}" && pwd)/neo4j.log"
+  CONSOLE_LOG="${NEO4J_LOGS}/neo4j.log"
   NEO4J_PIDFILE="${NEO4J_RUN}/neo4j.pid"
   readonly CONSOLE_LOG NEO4J_PIDFILE
 
@@ -246,8 +274,13 @@ main() {
       do_status
       ;;
 
-    *)
+    help)
       echo "Usage: ${PROGRAM} { console | start | stop | restart | status }"
+      ;;
+
+    *)
+      echo >&2 "Usage: ${PROGRAM} { console | start | stop | restart | status }"
+      exit 1
       ;;
   esac
 }

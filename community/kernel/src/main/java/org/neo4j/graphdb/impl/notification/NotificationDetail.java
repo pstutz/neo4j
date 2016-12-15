@@ -30,6 +30,11 @@ public interface NotificationDetail
 
     final class Factory
     {
+        public static NotificationDetail deprecatedName( final String oldName, final String newName )
+        {
+            return createDeprecationNotificationDetail( oldName, newName );
+        }
+
         public static NotificationDetail index( final String labelName, final String propertyKeyName )
         {
             return createNotificationDetail( "hinted index",
@@ -123,6 +128,37 @@ public interface NotificationDetail
                 public String toString()
                 {
                     return String.format( "%s %s %s", name, singular ? "is:" : "are:", value );
+                }
+            };
+        }
+
+        private static NotificationDetail createDeprecationNotificationDetail( final String oldName, final String newName )
+        {
+            return new NotificationDetail()
+            {
+                @Override
+                public String name()
+                {
+                    return oldName;
+                }
+
+                @Override
+                public String value()
+                {
+                    return newName;
+                }
+
+                @Override
+                public String toString()
+                {
+                    if ( newName == null || newName.trim().isEmpty() )
+                    {
+                        return String.format( "'%s' is no longer supported", oldName );
+                    }
+                    else
+                    {
+                        return String.format( "'%s' has been replaced by '%s'", oldName, newName );
+                    }
                 }
             };
         }

@@ -21,12 +21,12 @@ package org.neo4j.kernel.impl.store;
 
 import java.io.File;
 import java.nio.ByteBuffer;
+import java.nio.file.OpenOption;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.List;
 
-import org.neo4j.helpers.collection.Iterators;
+import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.Pair;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.PageCursor;
@@ -65,7 +65,6 @@ import org.neo4j.logging.LogProvider;
 public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRecord,IntStoreHeader>
         implements DynamicRecordAllocator
 {
-
     public AbstractDynamicStore(
             File fileName,
             Config conf,
@@ -76,19 +75,19 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
             String typeDescriptor,
             int dataSizeFromConfiguration,
             RecordFormat<DynamicRecord> recordFormat,
-            String storeVersion )
+            String storeVersion,
+            OpenOption... openOptions )
     {
         super( fileName, conf, idType, idGeneratorFactory, pageCache, logProvider, typeDescriptor,
                 recordFormat, new DynamicStoreHeaderFormat( dataSizeFromConfiguration, recordFormat ),
-                storeVersion );
+                storeVersion, openOptions );
     }
 
-    public static void allocateRecordsFromBytes(
-            Collection<DynamicRecord> recordList, byte src[], Iterator<DynamicRecord> recordsToUseFirst,
+    public static void allocateRecordsFromBytes( Collection<DynamicRecord> recordList, byte[] src,
             DynamicRecordAllocator dynamicRecordAllocator )
     {
         assert src != null : "Null src argument";
-        DynamicRecord nextRecord = dynamicRecordAllocator.nextUsedRecordOrNew( recordsToUseFirst );
+        DynamicRecord nextRecord = dynamicRecordAllocator.nextRecord();
         int srcOffset = 0;
         int dataSize = dynamicRecordAllocator.getRecordDataSize();
         do
@@ -97,16 +96,16 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
             record.setStartRecord( srcOffset == 0 );
             if ( src.length - srcOffset > dataSize )
             {
-                byte data[] = new byte[dataSize];
+                byte[] data = new byte[dataSize];
                 System.arraycopy( src, srcOffset, data, 0, dataSize );
                 record.setData( data );
-                nextRecord = dynamicRecordAllocator.nextUsedRecordOrNew( recordsToUseFirst );
+                nextRecord = dynamicRecordAllocator.nextRecord();
                 record.setNextBlock( nextRecord.getId() );
                 srcOffset += dataSize;
             }
             else
             {
-                byte data[] = new byte[src.length - srcOffset];
+                byte[] data = new byte[src.length - srcOffset];
                 System.arraycopy( src, srcOffset, data, 0, data.length );
                 record.setData( data );
                 nextRecord = null;
@@ -166,7 +165,8 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
             totalSize += (record.getData().length - offset);
         }
         byte[] bArray = new byte[totalSize];
-        assert header != null : "header should be non-null since records should not be empty";
+        assert header != null :
+                "header should be non-null since records should not be empty: " + Iterables.toString( records, ", " );
         int sourceOffset = header.length;
         int offset = 0;
         for ( byte[] currentArray : byteList )
@@ -180,29 +180,17 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
     }
 
     @Override
-    public DynamicRecord nextUsedRecordOrNew( Iterator<DynamicRecord> recordsToUseFirst )
+    public DynamicRecord nextRecord()
     {
-        DynamicRecord record;
-        if ( recordsToUseFirst.hasNext() )
-        {
-            record = recordsToUseFirst.next();
-            if ( !record.inUse() )
-            {
-                record.setCreated();
-            }
-        }
-        else
-        {
-            record = new DynamicRecord( nextId() );
-            record.setCreated();
-        }
+        DynamicRecord record = new DynamicRecord( nextId() );
+        record.setCreated();
         record.setInUse( true );
         return record;
     }
 
-    public void allocateRecordsFromBytes( Collection<DynamicRecord> target, byte src[] )
+    public void allocateRecordsFromBytes( Collection<DynamicRecord> target, byte[] src )
     {
-        allocateRecordsFromBytes( target, src, Iterators.<DynamicRecord>emptyIterator(), this );
+        allocateRecordsFromBytes( target, src, this );
     }
 
     @Override

@@ -19,7 +19,7 @@
  */
 package org.neo4j.kernel.api;
 
-import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
@@ -62,8 +62,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.neo4j.graphdb.Label.label;
-import static org.neo4j.graphdb.RelationshipType.withName;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.graphdb.DynamicRelationshipType.withName;
 import static org.neo4j.helpers.collection.Iterables.count;
 import static org.neo4j.helpers.collection.Iterables.single;
 import static org.neo4j.io.fs.FileUtils.deleteRecursively;
@@ -76,10 +76,6 @@ import static org.neo4j.io.fs.FileUtils.deleteRecursively;
 } )
 public class ConstraintHaIT
 {
-    @ClassRule
-    public static ClusterRule clusterRule = new ClusterRule( AbstractConstraintHaIT.class )
-            .withSharedSetting( HaSettings.read_timeout, "4000s" );
-
     public static class NodePropertyExistenceConstraintHaIT extends AbstractConstraintHaIT
     {
         @Override
@@ -262,6 +258,10 @@ public class ConstraintHaIT
 
     public abstract static class AbstractConstraintHaIT
     {
+        @Rule
+        public ClusterRule clusterRule = new ClusterRule( getClass() )
+                .withSharedSetting( HaSettings.read_timeout, "4000s" );
+
         private static final String TYPE = "Type";
         private static final String PROPERTY_KEY = "name";
 

@@ -19,22 +19,33 @@
  */
 package org.neo4j.kernel.impl.factory;
 
+import java.io.File;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.graphdb.security.URLAccessRule;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.kernel.AvailabilityGuard;
+import org.neo4j.kernel.NeoStoreDataSource;
 import org.neo4j.kernel.configuration.Settings;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.coreapi.CoreAPIAvailabilityGuard;
 import org.neo4j.kernel.impl.query.QueryEngineProvider;
+import org.neo4j.kernel.impl.query.QueryExecutionEngine;
+import org.neo4j.kernel.impl.transaction.state.DataSourceManager;
 import org.neo4j.kernel.monitoring.Monitors;
 import org.neo4j.logging.LogProvider;
 import org.neo4j.logging.Logger;
 
-import java.io.File;
-import java.util.Map;
-
-import static org.neo4j.kernel.configuration.Settings.*;
+import static org.neo4j.kernel.configuration.Settings.ANY;
+import static org.neo4j.kernel.configuration.Settings.STRING;
+import static org.neo4j.kernel.configuration.Settings.illegalValueMessage;
+import static org.neo4j.kernel.configuration.Settings.matches;
+import static org.neo4j.kernel.configuration.Settings.setting;
+import static org.neo4j.kernel.impl.query.QueryEngineProvider.noEngine;
 
 /**
  * This is the main factory for creating database instances. It delegates creation to three different modules
@@ -43,14 +54,14 @@ import static org.neo4j.kernel.configuration.Settings.*;
  * <p/>
  * It is abstract in order for subclasses to specify their own {@link org.neo4j.kernel.impl.factory.EditionModule}
  * implementations. Subclasses also have to set the edition name
- * in overridden version of {@link #newFacade(File, Map, GraphDatabaseFacadeFactory.Dependencies, GraphDatabaseFacade)},
+ * in overridden version of {@link #initFacade(File, Map, GraphDatabaseFacadeFactory.Dependencies, GraphDatabaseFacade)},
  * which is used for logging and similar.
  * <p/>
  * To create test versions of databases, override an edition factory (e.g. {@link org.neo4j.kernel.impl.factory
  * .CommunityFacadeFactory}), and replace modules
  * with custom versions that instantiate alternative services.
  */
-public abstract class GraphDatabaseFacadeFactory
+public class GraphDatabaseFacadeFactory
 {
     public interface Dependencies
     {
@@ -74,12 +85,13 @@ public abstract class GraphDatabaseFacadeFactory
 
     public static class Configuration
     {
-        public static final Setting<Boolean> ephemeral = setting( "unsupported.dbms.ephemeral", Settings.BOOLEAN, Settings.FALSE );
-        public static final Setting<String> ephemeral_keep_logical_logs = setting( "dbms.tx_log.rotation.retention_policy", STRING, "1 " +
-                "files", illegalValueMessage( "must be `true`/`false` or of format '<number><optional unit> <type>' " +
-                "for example `100M size` for " +
-                "limiting logical log space on disk to 100Mb," +
-                " or `200k txs` for limiting the number of transactions to keep to 200 000", matches( ANY ) ) );
+        public static final Setting<Boolean> ephemeral =
+                setting( "unsupported.dbms.ephemeral", Settings.BOOLEAN, Settings.FALSE );
+        public static final Setting<String> ephemeral_keep_logical_logs =
+                setting( "dbms.tx_log.rotation.retention_policy", STRING, "1 " + "files", illegalValueMessage( "must be `true`/`false` or of format '<number><optional unit> <type>' " +
+                        "for example `100M size` for " +
+                        "limiting logical log space on disk to 100Mb," +
+                        " or `200k txs` for limiting the number of transactions to keep to 200 000", matches( ANY ) ) );
 
         // Kept here to have it not be publicly documented.
         public static final Setting<String> lock_manager = setting( "unsupported.dbms.lock_manager", Settings.STRING, "" );
@@ -87,8 +99,16 @@ public abstract class GraphDatabaseFacadeFactory
         public static final Setting<String> tracer =
                 setting( "unsupported.dbms.tracer", Settings.STRING, (String) null ); // 'null' default.
 
-        public static final Setting<String> editionName = setting( "unsupported.dbms.edition", Settings.STRING,
-                Edition.unknown.toString() );
+        public static final Setting<String> editionName = setting( "unsupported.dbms.edition", Settings.STRING, Edition.unknown.toString() );
+    }
+
+    protected final DatabaseInfo databaseInfo;
+    private final Function<PlatformModule,EditionModule> editionFactory;
+
+    public GraphDatabaseFacadeFactory( DatabaseInfo databaseInfo, Function<PlatformModule,EditionModule> editionFactory )
+    {
+        this.databaseInfo = databaseInfo;
+        this.editionFactory = editionFactory;
     }
 
     /**
@@ -99,10 +119,9 @@ public abstract class GraphDatabaseFacadeFactory
      * @param dependencies the dependencies required to construct the {@link GraphDatabaseFacade}
      * @return the newly constructed {@link GraphDatabaseFacade}
      */
-    public GraphDatabaseFacade newFacade( File storeDir, Map<String, String> params, final Dependencies dependencies )
+    public GraphDatabaseFacade newFacade( File storeDir, Map<String,String> params, final Dependencies dependencies )
     {
-        //return newFacade( storeDir, params, dependencies, new EnhancedGraphDatabaseFacade() );
-        return newFacade( storeDir, params, dependencies, new GraphDatabaseFacade() );
+        return initFacade( storeDir, params, dependencies, new GraphDatabaseFacade() );
     }
 
     /**
@@ -115,17 +134,50 @@ public abstract class GraphDatabaseFacadeFactory
      * @param graphDatabaseFacade the already created facade which needs initialisation
      * @return the initialised {@link GraphDatabaseFacade}
      */
-    public GraphDatabaseFacade newFacade( File storeDir, Map<String, String> params, final Dependencies dependencies,
-                                          final GraphDatabaseFacade graphDatabaseFacade )
+    public GraphDatabaseFacade initFacade( File storeDir, Map<String,String> params, final Dependencies dependencies,
+            final GraphDatabaseFacade graphDatabaseFacade )
     {
         PlatformModule platform = createPlatform( storeDir, params, dependencies, graphDatabaseFacade );
-        EditionModule edition = createEdition( platform );
-        final DataSourceModule dataSource = createDataSource( dependencies, platform, edition );
+        EditionModule edition = editionFactory.apply( platform );
+
+        AtomicReference<QueryExecutionEngine> queryEngine = new AtomicReference<>( noEngine() );
+
+        final DataSourceModule dataSource = createDataSource( platform, edition, queryEngine::get );
         Logger msgLog = platform.logging.getInternalLog( getClass() ).infoLogger();
         CoreAPIAvailabilityGuard coreAPIAvailabilityGuard = edition.coreAPIAvailabilityGuard;
 
+        ClassicCoreSPI spi = new ClassicCoreSPI( platform, dataSource, msgLog, coreAPIAvailabilityGuard );
+        graphDatabaseFacade.init(
+            spi,
+            dataSource.guard,
+            dataSource.threadToTransactionBridge,
+            platform.config
+        );
+
         // Start it
-        graphDatabaseFacade.init( new ClassicCoreSPI( platform, dataSource, msgLog, coreAPIAvailabilityGuard ) );
+        platform.dataSourceManager.addListener( new DataSourceManager.Listener()
+        {
+            private QueryExecutionEngine engine;
+
+            @Override
+            public void registered( NeoStoreDataSource dataSource )
+            {
+                if ( engine == null )
+                {
+                    engine = QueryEngineProvider.initialize(
+                        platform.dependencies, platform.graphDatabaseFacade, dependencies.executionEngines()
+                    );
+                }
+
+                queryEngine.set( engine );
+            }
+
+            @Override
+            public void unregistered( NeoStoreDataSource dataSource )
+            {
+                queryEngine.set( noEngine() );
+            }
+        } );
 
         Throwable error = null;
         try
@@ -168,25 +220,21 @@ public abstract class GraphDatabaseFacadeFactory
     /**
      * Create the platform module. Override to replace with custom module.
      */
-    protected PlatformModule createPlatform( File storeDir, Map<String, String> params, final Dependencies dependencies,
-                                             final GraphDatabaseFacade graphDatabaseFacade )
+    protected PlatformModule createPlatform( File storeDir, Map<String,String> params, final Dependencies dependencies,
+            final GraphDatabaseFacade graphDatabaseFacade )
     {
-        return new PlatformModule( storeDir, params, databaseInfo(), dependencies, graphDatabaseFacade );
+        return new PlatformModule( storeDir, params, databaseInfo, dependencies, graphDatabaseFacade );
     }
-
-    /**
-     * Create the edition module. Implement to provide the edition services specified by the public fields in {@link
-     * org.neo4j.kernel.impl.factory.EditionModule}.
-     */
-    protected abstract EditionModule createEdition( PlatformModule platformModule );
 
     /**
      * Create the datasource module. Override to replace with custom module.
      */
-    protected DataSourceModule createDataSource( final Dependencies dependencies,
-                                                 final PlatformModule platformModule, EditionModule editionModule )
+    protected DataSourceModule createDataSource(
+        PlatformModule platformModule,
+        EditionModule editionModule,
+        Supplier<QueryExecutionEngine> queryEngine )
     {
-        return new DataSourceModule( dependencies, platformModule, editionModule );
+        return new DataSourceModule( platformModule, editionModule, queryEngine );
     }
 
     private void enableAvailabilityLogging( AvailabilityGuard availabilityGuard, final Logger msgLog )
@@ -206,6 +254,4 @@ public abstract class GraphDatabaseFacadeFactory
             }
         } );
     }
-
-    protected abstract DatabaseInfo databaseInfo();
 }

@@ -40,8 +40,8 @@ import org.neo4j.function.Factory;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.helpers.collection.PrefetchingIterator;
 import org.neo4j.helpers.progress.ProgressListener;
-import org.neo4j.test.RandomRule;
 import org.neo4j.test.RepeatRule;
+import org.neo4j.test.rule.RandomRule;
 import org.neo4j.unsafe.impl.batchimport.InputIterable;
 import org.neo4j.unsafe.impl.batchimport.InputIterator;
 import org.neo4j.unsafe.impl.batchimport.cache.NumberArrayFactory;
@@ -66,8 +66,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
-
 import static org.neo4j.helpers.progress.ProgressListener.NONE;
+import static org.neo4j.unsafe.impl.batchimport.cache.idmapping.IdMapper.ID_NOT_FOUND;
 import static org.neo4j.unsafe.impl.batchimport.cache.idmapping.string.EncodingIdMapper.NO_MONITOR;
 import static org.neo4j.unsafe.impl.batchimport.input.Collectors.badCollector;
 import static org.neo4j.unsafe.impl.batchimport.input.Group.GLOBAL;
@@ -138,7 +138,7 @@ public class EncodingIdMapperTest
         for ( Object id : ids )
         {
             // the UUIDs here will be generated in the same sequence as above because we reset the random
-            if ( idMapper.get( id, GLOBAL ) == -1 )
+            if ( idMapper.get( id, GLOBAL ) == ID_NOT_FOUND )
             {
                 fail( "Couldn't find " + id + " even though I added it just previously" );
             }
@@ -156,7 +156,7 @@ public class EncodingIdMapperTest
         long id = idMapper.get( "123", GLOBAL );
 
         // THEN
-        assertEquals( -1L, id );
+        assertEquals( ID_NOT_FOUND, id );
     }
 
     @Test
@@ -171,7 +171,7 @@ public class EncodingIdMapperTest
         long id = idMapper.get( "123", GLOBAL );
 
         // THEN
-        assertEquals( -1L, id );
+        assertEquals( ID_NOT_FOUND, id );
         verify( progress, times( 3 ) ).started( anyString() );
         verify( progress, times( 3 ) ).done();
     }
@@ -408,15 +408,15 @@ public class EncodingIdMapperTest
 
         // WHEN/THEN
         assertEquals( 0L, mapper.get( "8", firstGroup ) );
-        assertEquals( -1L, mapper.get( "8", secondGroup ) );
-        assertEquals( -1L, mapper.get( "8", thirdGroup ) );
+        assertEquals( ID_NOT_FOUND, mapper.get( "8", secondGroup ) );
+        assertEquals( ID_NOT_FOUND, mapper.get( "8", thirdGroup ) );
 
-        assertEquals( -1L, mapper.get( "9", firstGroup ) );
+        assertEquals( ID_NOT_FOUND, mapper.get( "9", firstGroup ) );
         assertEquals( 1L, mapper.get( "9", secondGroup ) );
-        assertEquals( -1L, mapper.get( "9", thirdGroup ) );
+        assertEquals( ID_NOT_FOUND, mapper.get( "9", thirdGroup ) );
 
-        assertEquals( -1L, mapper.get( "10", firstGroup ) );
-        assertEquals( -1L, mapper.get( "10", secondGroup ) );
+        assertEquals( ID_NOT_FOUND, mapper.get( "10", firstGroup ) );
+        assertEquals( ID_NOT_FOUND, mapper.get( "10", secondGroup ) );
         assertEquals( 2L, mapper.get( "10", thirdGroup ) );
     }
 
@@ -778,6 +778,8 @@ public class EncodingIdMapperTest
         abstract Factory<Object> data( Random random );
     }
 
-    public final @Rule RandomRule random = new RandomRule().withSeed( 1436724681847L );
-    public final @Rule RepeatRule repeater = new RepeatRule();
+    @Rule
+    public final RandomRule random = new RandomRule().withSeed( 1436724681847L );
+    @Rule
+    public final RepeatRule repeater = new RepeatRule();
 }

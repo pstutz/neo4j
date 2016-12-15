@@ -24,7 +24,8 @@ import org.junit.Test;
 
 import org.neo4j.helpers.ArrayUtil;
 import org.neo4j.test.Race;
-import org.neo4j.test.ThreadingRule;
+import org.neo4j.test.rule.concurrent.ThreadingRule;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -103,7 +104,7 @@ public class ArrayEncoderTest
                 "Since my imagination for coming up with test data is usually poor, I figured I'd do something useful.",
                 "Hopefully this isn't just nonsensical drivel, and maybe, just maybe someone might actually read it."};
 
-        Race race = new Race( false );
+        Race race = new Race();
         for ( String input : INPUT )
         {
             final String[] inputArray = new String[] {input};

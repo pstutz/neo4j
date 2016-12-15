@@ -17,6 +17,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 package org.neo4j.bolt.v1.transport.integration;
 
 import org.junit.Rule;
@@ -33,22 +34,27 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import org.neo4j.bolt.v1.messaging.message.Messages;
-import org.neo4j.bolt.v1.transport.socket.client.Connection;
+import org.neo4j.bolt.v1.messaging.message.InitMessage;
+import org.neo4j.bolt.v1.transport.socket.client.TransportConnection;
 import org.neo4j.function.Factory;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.helpers.HostnamePort;
 
-import static java.util.Arrays.asList;
+import static java.util.Collections.emptyList;
 import static java.util.Collections.emptyMap;
+import static java.util.Collections.singletonList;
+import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.neo4j.bolt.v1.messaging.message.Messages.pullAll;
-import static org.neo4j.bolt.v1.messaging.message.Messages.run;
+import static org.hamcrest.Matchers.hasEntry;
+import static org.hamcrest.Matchers.hasKey;
+import static org.neo4j.bolt.v1.messaging.message.PullAllMessage.pullAll;
+import static org.neo4j.bolt.v1.messaging.message.RunMessage.run;
 import static org.neo4j.bolt.v1.messaging.util.MessageMatchers.msgSuccess;
 import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.acceptedVersions;
 import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.chunk;
-import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.eventuallyRecieves;
-import static org.neo4j.helpers.collection.MapUtil.map;
+import static org.neo4j.bolt.v1.transport.integration.TransportTestUtil.eventuallyReceives;
 
 /**
  * Multiple concurrent users should be able to connect simultaneously. We test this with multiple users running
@@ -58,14 +64,13 @@ import static org.neo4j.helpers.collection.MapUtil.map;
 public class ConcurrentAccessIT
 {
     @Rule
-    public Neo4jWithSocket server = new Neo4jWithSocket(settings ->
-            settings.put( GraphDatabaseSettings.auth_enabled, "false"  ));
+    public Neo4jWithSocket server = new Neo4jWithSocket( getClass(), settings ->
+            settings.put( GraphDatabaseSettings.auth_enabled.name(), "false" ) );
 
+    @Parameterized.Parameter( 0 )
+    public Factory<TransportConnection> cf;
 
-    @Parameterized.Parameter(0)
-    public Factory<Connection> cf;
-
-    @Parameterized.Parameter(1)
+    @Parameterized.Parameter( 1 )
     public HostnamePort address;
 
     @Parameterized.Parameters
@@ -101,7 +106,7 @@ public class ConcurrentAccessIT
 
     private List<Callable<Void>> createWorkers( int numWorkers, int numRequests ) throws Exception
     {
-        List<Callable<Void>> workers = new LinkedList<>(  );
+        List<Callable<Void>> workers = new LinkedList<>();
         for ( int i = 0; i < numWorkers; i++ )
         {
             workers.add( newWorker( numRequests ) );
@@ -113,7 +118,7 @@ public class ConcurrentAccessIT
     {
         return new Callable<Void>()
         {
-            private final byte[] init = chunk( Messages.init( "TestClient", emptyMap() ) );
+            private final byte[] init = chunk( InitMessage.init( "TestClient", emptyMap() ) );
             private final byte[] createAndRollback = chunk(
                     run( "BEGIN" ), pullAll(),
                     run( "CREATE (n)" ), pullAll(),
@@ -126,43 +131,47 @@ public class ConcurrentAccessIT
             public Void call() throws Exception
             {
                 // Connect
-                Connection client = cf.newInstance();
+                TransportConnection client = cf.newInstance();
                 client.connect( address ).send( acceptedVersions( 1, 0, 0, 0 ) );
-                assertThat( client, eventuallyRecieves( new byte[]{0, 0, 0, 1} ) );
+                assertThat( client, eventuallyReceives( new byte[]{0, 0, 0, 1} ) );
 
                 init( client );
 
                 for ( int i = 0; i < iterationsToRun; i++ )
                 {
-                    creaeteAndRollback( client );
+                    createAndRollback( client );
                 }
 
                 return null;
             }
 
-            private void init( Connection client ) throws Exception
+            private void init( TransportConnection client ) throws Exception
             {
                 client.send( init );
-                assertThat( client, eventuallyRecieves(
-                    msgSuccess()
-                ));
+                assertThat( client, eventuallyReceives(
+                        msgSuccess()
+                ) );
             }
 
-            private void creaeteAndRollback(Connection client) throws Exception
+            private void createAndRollback( TransportConnection client ) throws Exception
             {
                 client.send( createAndRollback );
-                assertThat( client, eventuallyRecieves(
-                        msgSuccess( map( "fields", asList() ) ),
+                assertThat( client, eventuallyReceives(
+                        msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( emptyList() ) ),
+                                hasKey( "result_available_after" ) ) ),
                         msgSuccess(),
-                        msgSuccess( map( "fields", asList() ) ),
+                        msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( emptyList() ) ),
+                                hasKey( "result_available_after" ) ) ),
                         msgSuccess(),
-                        msgSuccess( map( "fields", asList() ) ),
-                        msgSuccess()) );
+                        msgSuccess( allOf( hasEntry( is( "fields" ), equalTo( emptyList() ) ),
+                                hasKey( "result_available_after" ) ) ),
+                        msgSuccess() ) );
 
                 // Verify no visible data
                 client.send( matchAll );
-                assertThat( client, eventuallyRecieves(
-                        msgSuccess( map( "fields", asList( "n" ) ) ),
+                assertThat( client, eventuallyReceives(
+                        msgSuccess(allOf( hasEntry( is( "fields" ), equalTo( singletonList( "n" ) ) ),
+                                hasKey( "result_available_after" ) ) ),
                         msgSuccess() ) );
 
             }

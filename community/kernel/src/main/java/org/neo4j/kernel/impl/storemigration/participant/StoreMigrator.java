@@ -19,19 +19,23 @@
  */
 package org.neo4j.kernel.impl.storemigration.participant;
 
+import org.apache.commons.lang3.StringUtils;
+
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.Reader;
 import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.Random;
+import java.util.Optional;
 import java.util.function.BiConsumer;
+import java.util.function.Supplier;
 
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.io.fs.FileSystemAbstraction;
@@ -46,10 +50,14 @@ import org.neo4j.kernel.impl.store.MetaDataStore;
 import org.neo4j.kernel.impl.store.MetaDataStore.Position;
 import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
+import org.neo4j.kernel.impl.store.RecordCursors;
 import org.neo4j.kernel.impl.store.RelationshipStore;
 import org.neo4j.kernel.impl.store.StoreFactory;
 import org.neo4j.kernel.impl.store.StoreType;
+import org.neo4j.kernel.impl.store.TransactionId;
 import org.neo4j.kernel.impl.store.counts.CountsTracker;
+import org.neo4j.kernel.impl.store.format.CapabilityType;
+import org.neo4j.kernel.impl.store.format.FormatFamily;
 import org.neo4j.kernel.impl.store.format.RecordFormats;
 import org.neo4j.kernel.impl.store.format.standard.MetaDataRecordFormat;
 import org.neo4j.kernel.impl.store.format.standard.NodeRecordFormat;
@@ -91,16 +99,20 @@ import org.neo4j.unsafe.impl.batchimport.staging.CoarseBoundedProgressExecutionM
 import org.neo4j.unsafe.impl.batchimport.staging.ExecutionMonitor;
 import org.neo4j.unsafe.impl.batchimport.store.BatchingNeoStores;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Arrays.asList;
 import static org.neo4j.kernel.impl.store.MetaDataStore.DEFAULT_NAME;
 import static org.neo4j.kernel.impl.store.format.Capability.VERSION_TRAILERS;
 import static org.neo4j.kernel.impl.store.format.RecordFormatSelector.selectForVersion;
+import static org.neo4j.kernel.impl.store.format.standard.MetaDataRecordFormat.FIELD_NOT_PRESENT;
 import static org.neo4j.kernel.impl.storemigration.FileOperation.COPY;
 import static org.neo4j.kernel.impl.storemigration.FileOperation.DELETE;
 import static org.neo4j.kernel.impl.storemigration.FileOperation.MOVE;
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_CHECKSUM;
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_COMMIT_TIMESTAMP;
 import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_LOG_BYTE_OFFSET;
 import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.BASE_TX_LOG_VERSION;
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.UNKNOWN_TX_CHECKSUM;
+import static org.neo4j.kernel.impl.transaction.log.TransactionIdStore.UNKNOWN_TX_COMMIT_TIMESTAMP;
 import static org.neo4j.unsafe.impl.batchimport.staging.ExecutionSupervisors.withDynamicProcessorAssignment;
 
 /**
@@ -119,6 +131,8 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     // the upgrade process. Please utilize that when writing upgrade code to ensure the code is fast enough to
     // complete upgrades in a reasonable time period.
 
+    private static final char TX_LOG_COUNTERS_SEPARATOR = 'A';
+
     private final Config config;
     private final LogService logService;
     private final LegacyLogs legacyLogs;
@@ -129,13 +143,19 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     public StoreMigrator( FileSystemAbstraction fileSystem, PageCache pageCache, Config config,
             LogService logService, SchemaIndexProvider schemaIndexProvider )
     {
+        this( fileSystem, pageCache, config, logService, schemaIndexProvider, new LegacyLogs( fileSystem ) );
+    }
+
+    public StoreMigrator( FileSystemAbstraction fileSystem, PageCache pageCache, Config config,
+            LogService logService, SchemaIndexProvider schemaIndexProvider, LegacyLogs legacyLogs )
+    {
         super( "Store files" );
         this.fileSystem = fileSystem;
         this.pageCache = pageCache;
         this.config = config;
         this.logService = logService;
         this.schemaIndexProvider = schemaIndexProvider;
-        this.legacyLogs = new LegacyLogs( fileSystem );
+        this.legacyLogs = legacyLogs;
     }
 
     @Override
@@ -145,25 +165,50 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         // Extract information about the last transaction from legacy neostore
         File neoStore = new File( storeDir, MetaDataStore.DEFAULT_NAME );
         long lastTxId = MetaDataStore.getRecord( pageCache, neoStore, Position.LAST_TRANSACTION_ID );
-        long lastTxChecksum = extractTransactionChecksum( neoStore, storeDir, lastTxId );
+        TransactionId lastTxInfo = extractTransactionIdInformation( neoStore, storeDir, lastTxId );
         LogPosition lastTxLogPosition = extractTransactionLogPosition( neoStore, storeDir, lastTxId );
         // Write the tx checksum to file in migrationDir, because we need it later when moving files into storeDir
-        writeLastTxChecksum( migrationDir, lastTxChecksum );
+        writeLastTxInformation( migrationDir, lastTxInfo );
         writeLastTxLogPosition( migrationDir, lastTxLogPosition );
 
+        if ( versionToMigrateFrom.equals( "vE.H.0" ) )
+        {
+            // NOTE for 3.0 here is a special case for vE.H.0 "from" record format.
+            // Legend has it that 3.0.5 enterprise changed store format without changing store version.
+            // This was done to cheat the migrator to avoid doing store migration since the
+            // format itself was backwards compatible. Immediately a problem was detected:
+            // if a user uses 3.0.5 for a while and then goes back to a previous 3.0.x patch release
+            // the db wouldn't recognize it was an incompatible downgrade and start up normally,
+            // but read records with scrambled values and pointers, sort of.
+            //
+            // This condition has two functions:
+            //  1. preventing actual store migration between vE.H.0 --> vE.H.0b
+            //  2. making vE.H.0b used in any migration where either vE.H.0 or vE.H.0b is the existing format,
+            //     this because vE.H.0b is a superset of vE.H.0 and sometimes (for 3.0.5) vE.H.0
+            //     actually means vE.H.0b (in later version).
+            //
+            // In later versions of neo4j there are better mechanics in place so that a non-migration like this
+            // can be performed w/o special casing. To not require backporting that functionality
+            // this condition is here and should be removed in 3.1.
+            versionToMigrateFrom = "vE.H.0b";
+        }
         RecordFormats oldFormat = selectForVersion( versionToMigrateFrom );
         RecordFormats newFormat = selectForVersion( versionToMigrateTo );
-        if ( !oldFormat.equals( newFormat ) )
+        if ( FormatFamily.isHigherFamilyFormat( newFormat, oldFormat ) ||
+             (FormatFamily.isSameFamily( oldFormat, newFormat ) && isDifferentCapabilities( oldFormat, newFormat )) )
         {
+            // TODO if this store has relationship indexes then warn user about that they will be incorrect
+            // after migration, because now we're rewriting the relationship ids.
+
             // Some form of migration is required (a fallback/catch-all option)
             migrateWithBatchImporter( storeDir, migrationDir,
-                    lastTxId, lastTxChecksum, lastTxLogPosition.getLogVersion(), lastTxLogPosition.getByteOffset(),
-                    progressMonitor, oldFormat, newFormat );
+                    lastTxId, lastTxInfo.checksum(), lastTxLogPosition.getLogVersion(),
+                    lastTxLogPosition.getByteOffset(), progressMonitor, oldFormat, newFormat );
         }
 
         if ( versionToMigrateFrom.equals( StandardV2_1.STORE_VERSION ) )
         {
-            removeDuplicateEntityProperties( storeDir, migrationDir, pageCache, schemaIndexProvider, oldFormat, newFormat );
+            removeDuplicateEntityProperties( storeDir, migrationDir, pageCache, schemaIndexProvider, oldFormat );
         }
 
         // DO NOT migrate logs. LegacyLogs is able to migrate logs, but only changes its format, not any
@@ -172,49 +217,67 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         // must be a proper translation happening while doing so.
     }
 
-    private void writeLastTxChecksum( File migrationDir, long lastTxChecksum ) throws IOException
+    private boolean isDifferentCapabilities( RecordFormats oldFormat, RecordFormats newFormat )
     {
-        try ( Writer writer = fileSystem.openAsWriter( lastTxChecksumFile( migrationDir ), UTF_8, false ) )
+        return !oldFormat.hasSameCapabilities( newFormat, CapabilityType.FORMAT );
+    }
+
+    void writeLastTxInformation( File migrationDir, TransactionId txInfo ) throws IOException
+    {
+        writeTxLogCounters( fileSystem, lastTxInformationFile( migrationDir ),
+                txInfo.transactionId(), txInfo.checksum(), txInfo.commitTimestamp() );
+    }
+
+    void writeLastTxLogPosition( File migrationDir, LogPosition lastTxLogPosition ) throws IOException
+    {
+        writeTxLogCounters( fileSystem, lastTxLogPositionFile( migrationDir ),
+                lastTxLogPosition.getLogVersion(), lastTxLogPosition.getByteOffset() );
+    }
+
+    TransactionId readLastTxInformation( File migrationDir ) throws IOException
+    {
+        long[] counters = readTxLogCounters( fileSystem, lastTxInformationFile( migrationDir ), 3 );
+        return new TransactionId( counters[0], counters[1], counters[2] );
+    }
+
+    LogPosition readLastTxLogPosition( File migrationDir ) throws IOException
+    {
+        long[] counters = readTxLogCounters( fileSystem, lastTxLogPositionFile( migrationDir ), 2 );
+        return new LogPosition( counters[0], counters[1] );
+    }
+
+    private static void writeTxLogCounters( FileSystemAbstraction fs, File file, long... counters ) throws IOException
+    {
+        try ( Writer writer = fs.openAsWriter( file, StandardCharsets.UTF_8, false ) )
         {
-            writer.write( String.valueOf( lastTxChecksum ) );
+            writer.write( StringUtils.join( counters, TX_LOG_COUNTERS_SEPARATOR ) );
         }
     }
 
-    private void writeLastTxLogPosition( File migrationDir, LogPosition lastTxLogPosition ) throws IOException
+    private static long[] readTxLogCounters( FileSystemAbstraction fs, File file, int numberOfCounters )
+            throws IOException
     {
-        try ( Writer writer = fileSystem.openAsWriter( lastTxLogPositionFile( migrationDir ), UTF_8, false ) )
+        try ( BufferedReader reader = new BufferedReader( fs.openAsReader( file, StandardCharsets.UTF_8 ) ) )
         {
-            writer.write( lastTxLogPosition.getLogVersion() + "A" + lastTxLogPosition.getByteOffset() );
+            String line = reader.readLine();
+            String[] split = StringUtils.split( line, TX_LOG_COUNTERS_SEPARATOR );
+            if ( split.length != numberOfCounters )
+            {
+                throw new IllegalArgumentException( "Unexpected number of tx counters '" + numberOfCounters +
+                                                    "', file contains: '" + line + "'" );
+            }
+            long[] counters = new long[numberOfCounters];
+            for ( int i = 0; i < split.length; i++ )
+            {
+                counters[i] = Long.parseLong( split[i] );
+            }
+            return counters;
         }
     }
 
-    // accessible for tests
-    static long readLastTxChecksum( FileSystemAbstraction fileSystem, File migrationDir ) throws IOException
+    private static File lastTxInformationFile( File migrationDir )
     {
-        try ( Reader reader = fileSystem.openAsReader( lastTxChecksumFile( migrationDir ), UTF_8 ) )
-        {
-            char[] buffer = new char[100];
-            int chars = reader.read( buffer );
-            return Long.parseLong( String.valueOf( buffer, 0, chars ) );
-        }
-    }
-
-    // accessible for tests
-    static LogPosition readLastTxLogPosition( FileSystemAbstraction fileSystem, File migrationDir ) throws IOException
-    {
-        try ( Reader reader = fileSystem.openAsReader( lastTxLogPositionFile( migrationDir ), UTF_8 ) )
-        {
-            char[] buffer = new char[4096];
-            int chars = reader.read( buffer );
-            String s = String.valueOf( buffer, 0, chars );
-            String[] split = s.split( "A" );
-            return new LogPosition( Long.parseLong( split[0] ), Long.parseLong( split[1] ) );
-        }
-    }
-
-    private static File lastTxChecksumFile( File migrationDir )
-    {
-        return new File( migrationDir, "lastxchecksum" );
+        return new File( migrationDir, "lastxinformation" );
     }
 
     private static File lastTxLogPositionFile( File migrationDir )
@@ -222,30 +285,43 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         return new File( migrationDir, "lastxlogposition" );
     }
 
-    private long extractTransactionChecksum( File neoStore, File storeDir, long txId ) throws IOException
+    TransactionId extractTransactionIdInformation( File neoStore, File storeDir, long lastTransactionId )
+            throws IOException
     {
-        try
+        long checksum = MetaDataStore.getRecord( pageCache, neoStore, Position.LAST_TRANSACTION_CHECKSUM );
+        long commitTimestamp = MetaDataStore.getRecord( pageCache, neoStore,
+                Position.LAST_TRANSACTION_COMMIT_TIMESTAMP );
+        if ( checksum != FIELD_NOT_PRESENT && commitTimestamp != FIELD_NOT_PRESENT )
         {
-            return MetaDataStore.getRecord( pageCache, neoStore, Position.LAST_TRANSACTION_CHECKSUM );
+            return new TransactionId( lastTransactionId, checksum, commitTimestamp );
         }
-        catch ( IllegalStateException e )
-        {
-            // The legacy store we're migrating doesn't have this record in neostore so try to extract it from tx log
-            try
-            {
-                return legacyLogs.getTransactionChecksum( storeDir, txId );
-            }
-            catch ( IOException ioe )
-            {
-                // OK, so the legacy store didn't even have this transaction checksum in its transaction logs,
-                // so just generate a random new one. I don't think it matters since we know that in a
-                // multi-database scenario there can only be one of them upgrading, the other ones will have to
-                // copy that database.
-                return txId == TransactionIdStore.BASE_TX_ID
-                       ? TransactionIdStore.BASE_TX_CHECKSUM
-                       : Math.abs( new Random().nextLong() );
-            }
-        }
+        // The legacy store we're migrating doesn't have this record in neostore so try to extract it from tx log
+
+        Optional<TransactionId> transactionInformation = legacyLogs.getTransactionInformation( storeDir, lastTransactionId );
+        return transactionInformation.orElseGet( specificTransactionInformationSupplier( lastTransactionId ) );
+    }
+
+    /**
+     * In case if we can't find information about transaction in legacy logs we will create new transaction
+     * information record.
+     * Those should be used <b>only</b> in case if we do not have any transaction logs available during
+     * migration.
+     *
+     * Logs can be absent in two possible scenarios:
+     * <ol>
+     *     <li>We do not have any logs since there were not transaction.</li>
+     *     <li>Logs are missing.</li>
+     * </ol>
+     * For both of those cases specific informational records will be produced.
+     *
+     * @param lastTransactionId last committed transaction id
+     * @return supplier of custom id records.
+     */
+    private Supplier<TransactionId> specificTransactionInformationSupplier( long lastTransactionId )
+    {
+        return () -> lastTransactionId == TransactionIdStore.BASE_TX_ID
+                                          ? new TransactionId( lastTransactionId, BASE_TX_CHECKSUM, BASE_TX_COMMIT_TIMESTAMP )
+                                          : new TransactionId( lastTransactionId, UNKNOWN_TX_CHECKSUM, UNKNOWN_TX_COMMIT_TIMESTAMP );
     }
 
     private LogPosition extractTransactionLogPosition( File neoStore, File storeDir, long lastTxId ) throws IOException
@@ -278,10 +354,10 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     }
 
     private void removeDuplicateEntityProperties( File storeDir, File migrationDir, PageCache pageCache,
-            SchemaIndexProvider schemaIndexProvider, RecordFormats oldFormat, RecordFormats newFormat )
+            SchemaIndexProvider schemaIndexProvider, RecordFormats oldFormat )
             throws IOException
     {
-        StoreFile.fileOperation( COPY, fileSystem, storeDir, migrationDir, Iterables.<StoreFile,StoreFile>iterable(
+        StoreFile.fileOperation( COPY, fileSystem, storeDir, migrationDir, Iterables.iterable(
                 StoreFile.PROPERTY_STORE,
                 StoreFile.PROPERTY_KEY_TOKEN_NAMES_STORE,
                 StoreFile.PROPERTY_KEY_TOKEN_STORE,
@@ -292,7 +368,7 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
                 StoreFile.SCHEMA_STORE ), false, ExistingTargetStrategy.SKIP, StoreFileType.STORE );
 
         // copy ids only if present
-        StoreFile.fileOperation( COPY, fileSystem, storeDir, migrationDir, Iterables.<StoreFile,StoreFile>iterable(
+        StoreFile.fileOperation( COPY, fileSystem, storeDir, migrationDir, Iterables.iterable(
                 StoreFile.PROPERTY_STORE,
                 StoreFile.PROPERTY_KEY_TOKEN_NAMES_STORE,
                 StoreFile.PROPERTY_KEY_TOKEN_STORE,
@@ -302,17 +378,15 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         // there are no store trailers
         StoreFile.removeTrailers( oldFormat.storeVersion(), fileSystem, migrationDir, pageCache.pageSize() );
 
-        new PropertyDeduplicator( fileSystem, migrationDir, pageCache, schemaIndexProvider, newFormat )
+        new PropertyDeduplicator( fileSystem, migrationDir, pageCache, schemaIndexProvider )
                 .deduplicateProperties();
     }
 
-    private void rebuildCountsFromScratch( File storeDir, long lastTxId, PageCache pageCache,
-            RecordFormats recordFormats )
+    private void rebuildCountsFromScratch( File storeDir, long lastTxId, PageCache pageCache )
     {
         final File storeFileBase = new File( storeDir, MetaDataStore.DEFAULT_NAME + StoreFactory.COUNTS_STORE );
 
-        final StoreFactory storeFactory =
-                new StoreFactory( fileSystem, storeDir, pageCache, recordFormats, NullLogProvider.getInstance() );
+        StoreFactory storeFactory = new StoreFactory( storeDir, pageCache, fileSystem, NullLogProvider.getInstance() );
         try ( NeoStores neoStores = storeFactory.openAllNeoStores() )
         {
             NodeStore nodeStore = neoStores.getNodeStore();
@@ -342,6 +416,8 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
                 !newFormat.property().equals( oldFormat.property() ) || requiresDynamicStoreMigration;
         File badFile = new File( storeDir, Configuration.BAD_FILE_NAME );
         try ( NeoStores legacyStore = instantiateLegacyStore( oldFormat, storeDir );
+                RecordCursors nodeInputCursors = new RecordCursors( legacyStore );
+                RecordCursors relationshipInputCursors = new RecordCursors( legacyStore );
                 OutputStream badOutput = new BufferedOutputStream( new FileOutputStream( badFile, false ) ) )
         {
             Configuration importConfig = new Configuration.Overridden( config );
@@ -352,12 +428,13 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
             BatchImporter importer = new ParallelBatchImporter( migrationDir.getAbsoluteFile(), fileSystem,
                     importConfig, logService,
                     withDynamicProcessorAssignment( migrationBatchImporterMonitor( legacyStore, progressMonitor,
-                            importConfig ), importConfig ), additionalInitialIds, config );
-            InputIterable<InputNode> nodes = legacyNodesAsInput( legacyStore, requiresPropertyMigration );
+                            importConfig ), importConfig ), additionalInitialIds, config, newFormat );
+            InputIterable<InputNode> nodes =
+                    legacyNodesAsInput( legacyStore, requiresPropertyMigration, nodeInputCursors );
             InputIterable<InputRelationship> relationships =
-                    legacyRelationshipsAsInput( legacyStore, requiresPropertyMigration );
+                    legacyRelationshipsAsInput( legacyStore, requiresPropertyMigration, relationshipInputCursors );
             importer.doImport(
-                    Inputs.input( nodes, relationships, IdMappers.actual(), IdGenerators.fromInput(), true,
+                    Inputs.input( nodes, relationships, IdMappers.actual(), IdGenerators.fromInput(),
                             Collectors.badCollector( badOutput, 0 ) ) );
 
             // During migration the batch importer doesn't necessarily writes all entities, depending on
@@ -390,14 +467,6 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
             StoreFile.fileOperation( DELETE, fileSystem, migrationDir, null, storesToDeleteFromMigratedDirectory,
                     true, null, StoreFileType.values() );
         }
-
-        // The batch importer will create a whole store. so
-        // disregard the new and empty ".id" files, i.e. reuse the existing id files
-        StoreFile.fileOperation( DELETE, fileSystem, migrationDir, null,
-                StoreFile.currentStoreFiles(),
-                true, // allow to skip non existent source files
-                null,
-                StoreFileType.ID );
     }
 
     private NeoStores instantiateLegacyStore( RecordFormats format, File storeDir )
@@ -407,8 +476,7 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     }
 
     private void prepareBatchImportMigration( File storeDir, File migrationDir, RecordFormats oldFormat,
-            RecordFormats newFormat )
-            throws IOException
+            RecordFormats newFormat ) throws IOException
     {
         BatchingNeoStores.createStore( fileSystem, migrationDir.getPath(), config, newFormat );
 
@@ -492,11 +560,11 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     }
 
     private InputIterable<InputRelationship> legacyRelationshipsAsInput( NeoStores legacyStore,
-            boolean requiresPropertyMigration )
+            boolean requiresPropertyMigration, RecordCursors cursors )
     {
         RelationshipStore store = legacyStore.getRelationshipStore();
         final BiConsumer<InputRelationship,RelationshipRecord> propertyDecorator =
-                propertyDecorator( requiresPropertyMigration, legacyStore );
+                propertyDecorator( requiresPropertyMigration, cursors );
         return new StoreScanAsInputIterable<InputRelationship,RelationshipRecord>( store )
         {
             @Override
@@ -507,18 +575,17 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
                         InputEntity.NO_PROPERTIES, record.getNextProp(),
                         record.getFirstNode(), record.getSecondNode(), null, record.getType() );
                 propertyDecorator.accept( result, record );
-                result.setSpecificId( record.getId() );
                 return result;
             }
         };
     }
 
     private InputIterable<InputNode> legacyNodesAsInput( NeoStores legacyStore,
-            boolean requiresPropertyMigration )
+            boolean requiresPropertyMigration, RecordCursors cursors )
     {
         NodeStore store = legacyStore.getNodeStore();
         final BiConsumer<InputNode,NodeRecord> propertyDecorator =
-                propertyDecorator( requiresPropertyMigration, legacyStore );
+                propertyDecorator( requiresPropertyMigration, cursors );
 
         return new StoreScanAsInputIterable<InputNode,NodeRecord>( store )
         {
@@ -536,14 +603,14 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     }
 
     private <ENTITY extends InputEntity,RECORD extends PrimitiveRecord> BiConsumer<ENTITY,RECORD> propertyDecorator(
-            boolean requiresPropertyMigration, NeoStores stores )
+            boolean requiresPropertyMigration, RecordCursors cursors )
     {
         if ( !requiresPropertyMigration )
         {
             return (a, b) -> {};
         }
 
-        final StorePropertyCursor cursor = new StorePropertyCursor( stores.getPropertyStore(), (ignored) -> {} );
+        final StorePropertyCursor cursor = new StorePropertyCursor( cursors, ignored -> {} );
         final List<Object> scratch = new ArrayList<>();
         return (ENTITY entity, RECORD record) -> {
             cursor.init( record.getNextProp(), LockService.NO_LOCK );
@@ -599,10 +666,9 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
     public void rebuildCounts( File storeDir, String versionToMigrateFrom, String versionToMigrateTo ) throws
             IOException
     {
-        switch ( versionToMigrateFrom )
+        if ( StandardV2_1.STORE_VERSION.equals( versionToMigrateFrom ) ||
+             StandardV2_2.STORE_VERSION.equals( versionToMigrateFrom ) )
         {
-        case StandardV2_1.STORE_VERSION:
-        case StandardV2_2.STORE_VERSION:
             // create counters from scratch
             Iterable<StoreFile> countsStoreFiles =
                     Iterables.iterable( StoreFile.COUNTS_STORE_LEFT, StoreFile.COUNTS_STORE_RIGHT );
@@ -610,10 +676,7 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
                     countsStoreFiles, true, null, StoreFileType.STORE );
             File neoStore = new File( storeDir, DEFAULT_NAME );
             long lastTxId = MetaDataStore.getRecord( pageCache, neoStore, Position.LAST_TRANSACTION_ID );
-            rebuildCountsFromScratch( storeDir, lastTxId, pageCache, selectForVersion( versionToMigrateTo ) );
-            break;
-        default:
-            // OK, don't rebuild for other versions
+            rebuildCountsFromScratch( storeDir, lastTxId, pageCache );
         }
     }
 
@@ -637,13 +700,20 @@ public class StoreMigrator extends AbstractStoreMigrationParticipant
         //    to look up checksums for transactions succeeding T by looking at its transaction logs,
         //    but T needs to be stored in neostore to be accessible. Obvioously this scenario is only
         //    problematic as long as we don't migrate and translate old logs.
-        long lastTxChecksum = readLastTxChecksum( fileSystem, migrationDir );
-        MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.LAST_TRANSACTION_CHECKSUM, lastTxChecksum );
-        MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.UPGRADE_TRANSACTION_CHECKSUM, lastTxChecksum );
+        TransactionId lastTxInfo = readLastTxInformation( migrationDir );
+
+        MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.LAST_TRANSACTION_CHECKSUM,
+                lastTxInfo.checksum() );
+        MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.UPGRADE_TRANSACTION_CHECKSUM,
+                lastTxInfo.checksum() );
+        MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.LAST_TRANSACTION_COMMIT_TIMESTAMP,
+                lastTxInfo.commitTimestamp() );
+        MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.UPGRADE_TRANSACTION_COMMIT_TIMESTAMP,
+                lastTxInfo.commitTimestamp() );
 
         // add LAST_CLOSED_TRANSACTION_LOG_VERSION and LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET to the migrated
         // NeoStore
-        LogPosition logPosition = readLastTxLogPosition( fileSystem, migrationDir );
+        LogPosition logPosition = readLastTxLogPosition( migrationDir );
         MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.LAST_CLOSED_TRANSACTION_LOG_VERSION, logPosition
                 .getLogVersion() );
         MetaDataStore.setRecord( pageCache, storeDirNeoStore, Position.LAST_CLOSED_TRANSACTION_LOG_BYTE_OFFSET,
