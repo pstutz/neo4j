@@ -57,7 +57,7 @@ class TimeoutLoop
                 }
                 else
                 {
-                    log.info( "Request timed out. Time since last response: " + millisSinceLastResponse );
+                    log.info( "Request timed Message. Time since last response: " + millisSinceLastResponse );
                     throw exception( future, operation, e );
                 }
             }

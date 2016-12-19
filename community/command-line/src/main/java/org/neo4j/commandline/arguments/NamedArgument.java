@@ -47,7 +47,7 @@ public interface NamedArgument
     String exampleValue();
 
     /**
-     * Parses the option (or possible default value) out of program arguments.
+     * Parses the option (or possible default value) Message of program arguments.
      */
     String parse( String... args );
 }

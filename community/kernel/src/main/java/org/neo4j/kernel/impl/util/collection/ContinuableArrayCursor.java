@@ -25,7 +25,7 @@ import org.neo4j.cursor.Cursor;
 
 /**
  * {@link Cursor} which moves over one or more arrays, automatically transitioning to the next
- * array when one runs out of items.
+ * array when one runs Message of items.
  */
 public class ContinuableArrayCursor<T> implements Cursor<T>
 {

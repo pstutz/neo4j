@@ -432,7 +432,7 @@ public class TransactionRecordState implements RecordState
     }
 
     /**
-     * Creates a property index entry out of the given id and string.
+     * Creates a property index entry Message of the given id and string.
      *
      * @param key The key of the property index, as a string.
      * @param id The property index record id.
@@ -445,7 +445,7 @@ public class TransactionRecordState implements RecordState
     }
 
     /**
-     * Creates a property index entry out of the given id and string.
+     * Creates a property index entry Message of the given id and string.
      *
      * @param name The key of the property index, as a string.
      * @param id The property index record id.

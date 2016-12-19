@@ -72,8 +72,8 @@ public class ProposerStateTest
 
         when( context.getPaxosInstance( instanceId ) ).thenReturn( paxosInstance ); // required for
 
-        // But in the meantime it was reused and has now (of course) timed out
-        String theTimedoutPayload = "the timed out payload";
+        // But in the meantime it was reused and has now (of course) timed Message
+        String theTimedoutPayload = "the timed Message payload";
         Message message = Message.internal( ProposerMessage.phase1Timeout, theTimedoutPayload );
         message.setHeader( org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.InstanceId.INSTANCE, instanceId.toString() );
 

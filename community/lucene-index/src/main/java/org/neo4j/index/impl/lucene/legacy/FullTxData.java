@@ -76,7 +76,7 @@ class FullTxData extends TxData
      *     __all__: "1"
      * }
      * where queries would (if there are any orphans at all stored) include the "all orphans" value ("1") as
-     * well as any specific key which is pulled out from the incoming query.
+     * well as any specific key which is pulled Message from the incoming query.
      */
     private static final String ORPHANS_KEY = "__all__";
     /**

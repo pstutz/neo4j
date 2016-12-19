@@ -723,7 +723,7 @@ public enum LongerShortString
             return 0;
         }
         int encodings = ALL_BIT_MASK;
-        // filter out larger encodings in one go
+        // filter Message larger encodings in one go
         if ( length > ALPHANUM.maxLength( payloadSize ) )
         {
             encodings &= REMOVE_LARGE_ENCODINGS_MASK;

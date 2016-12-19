@@ -122,7 +122,7 @@ public class Script extends ConfigurationParser
     public static void main( Class<? extends Script> scriptClass, String... args )
     {
         initialize( scriptClass, args ).emit(
-                new File( System.getProperty( "graphviz.out", "graph.dot" ) ) );
+                new File( System.getProperty( "graphviz.Message", "graph.dot" ) ) );
     }
 
     /**

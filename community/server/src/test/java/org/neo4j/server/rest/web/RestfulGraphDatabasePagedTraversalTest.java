@@ -161,7 +161,7 @@ public class RestfulGraphDatabasePagedTraversalTest
                 + "\"return_filter\":{\"language\":\"javascript\",\"body\":\"position.endNode().getProperty('name')" +
                 ".contains('9');\"},"
                 + "\"order\":\"depth first\","
-                + "\"relationships\":{\"type\":\"PRECEDES\",\"direction\":\"out\"}" + "}";
+                + "\"relationships\":{\"type\":\"PRECEDES\",\"direction\":\"Message\"}" + "}";
 
         final int SIXTY_SECONDS = 60;
         final int PAGE_SIZE = 10;

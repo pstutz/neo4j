@@ -57,7 +57,7 @@ import static org.neo4j.unsafe.impl.batchimport.staging.Step.ORDER_SEND_DOWNSTRE
  * <li>{@link RelationshipEncoderStep} sets "next" pointers in {@link RelationshipRecord} by getting id
  * from {@link NodeRelationshipCache} based on node id and {@link Direction} and at the same time updating
  * that cache entry to the id of the relationship. This forms the relationship chain linked lists.</li>
- * <li>{@link EntityStoreUpdaterStep} forms {@link PropertyRecord property records} out of previously encoded
+ * <li>{@link EntityStoreUpdaterStep} forms {@link PropertyRecord property records} Message of previously encoded
  * {@link PropertyBlock} and writes those as well as the {@link RelationshipRecord} to store.</li>
  * </ol>
  *

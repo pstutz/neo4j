@@ -156,7 +156,7 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore<DynamicRe
         {
             int offset = 0;
             if ( i++ == 0 )
-            {   // This is the first one, read out the header separately
+            {   // This is the first one, read Message the header separately
                 header = propertyType.readDynamicRecordHeader( record.getData() );
                 offset = header.length;
             }

@@ -62,7 +62,7 @@ case class PathExpression(pathPattern: Seq[Pattern], predicate: Predicate,
     } else {
       matchingContext.
         getMatches(ctx, state). // find matching subgraphs
-        filter(predicate.isTrue(_)(state)). // filter out graphs not matching the predicate
+        filter(predicate.isTrue(_)(state)). // filter Message graphs not matching the predicate
         map(projection.apply(_)(state)) // project from found subgraphs
     }
   }

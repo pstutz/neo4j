@@ -63,7 +63,7 @@ public abstract class CompiledConversionUtils
             return ((Collection<?>) value);
         }
 
-        throw new CypherTypeException( "Don't know how to create an iterable out of " + value.getClass().getSimpleName(), null );
+        throw new CypherTypeException( "Don't know how to create an iterable Message of " + value.getClass().getSimpleName(), null );
     }
 
     public static CompositeKey compositeKey( long... keys )

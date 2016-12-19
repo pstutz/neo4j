@@ -40,8 +40,8 @@ class ProcedureCallSupportAcceptanceTest extends ProcedureCallAcceptanceTest {
     registerProcedureReturningSingleValue(value)
 
     // Using graph execute to get a Java value
-    graph.execute("CALL my.first.value() YIELD out RETURN * LIMIT 1").stream().toArray.toList should equal(List(
-      java.util.Collections.singletonMap("out", value)
+    graph.execute("CALL my.first.value() YIELD Message RETURN * LIMIT 1").stream().toArray.toList should equal(List(
+      java.util.Collections.singletonMap("Message", value)
     ))
   }
 
@@ -53,8 +53,8 @@ class ProcedureCallSupportAcceptanceTest extends ProcedureCallAcceptanceTest {
     registerProcedureReturningSingleValue(value)
 
     // Using graph execute to get a Java value
-    graph.execute("CALL my.first.value() YIELD out RETURN * LIMIT 1").stream().toArray.toList should equal(List(
-      java.util.Collections.singletonMap("out", value)
+    graph.execute("CALL my.first.value() YIELD Message RETURN * LIMIT 1").stream().toArray.toList should equal(List(
+      java.util.Collections.singletonMap("Message", value)
     ))
   }
 
@@ -67,8 +67,8 @@ class ProcedureCallSupportAcceptanceTest extends ProcedureCallAcceptanceTest {
     registerProcedureReturningSingleValue(stream)
 
     // Using graph execute to get a Java value
-    graph.execute("CALL my.first.value() YIELD out RETURN * LIMIT 1").stream().toArray.toList should equal(List(
-      java.util.Collections.singletonMap("out", stream)
+    graph.execute("CALL my.first.value() YIELD Message RETURN * LIMIT 1").stream().toArray.toList should equal(List(
+      java.util.Collections.singletonMap("Message", stream)
     ))
   }
 }

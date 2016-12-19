@@ -72,12 +72,12 @@ class PipeExecutionPlanBuilder(clock: Clock, monitors: Monitors, pipeBuilderFact
 
    populate(a) starts the session, and eagerly adds [a, c, f] to the plan stack. We then immediately pop 'f' from the
    plan stack, we build a pipe for it add it to the pipe stack, and pop 'c' from the plan stack. Since we are coming from
-   'f', we add [c, e] to the stack and then pop 'e' out again. This is a leaf, so we build a pipe for it and add it to the
+   'f', we add [c, e] to the stack and then pop 'e' Message again. This is a leaf, so we build a pipe for it and add it to the
    pipe stack. We now pop 'c' from the plan stack again. This time we are coming from 'e', and so we know we can use
    two pipes from the pipe stack to use when building 'c'. We add this pipe to the pipe stack and pop 'a' from the plan
-   stack. Since we are coming from 'a's RHS, we add [a,b,d] to the stack. Next step is to pop 'd' out, and build a pipe
+   stack. Since we are coming from 'a's RHS, we add [a,b,d] to the stack. Next step is to pop 'd' Message, and build a pipe
    for it, storing it in the pipe stack. Pop ut 'b' from the plan stack, one pipe from the pipe stack, and build a pipe for 'b'.
-   Next we pop out 'a', and this time we are coming from the LHS, and we can now pop two pipes from the pipe stack to
+   Next we pop Message 'a', and this time we are coming from the LHS, and we can now pop two pipes from the pipe stack to
    build the pipe for 'a'. Thanks for reading this far - I didn't think we would make it!
    */
   private def buildPipe(plan: LogicalPlan)(implicit context: PipeExecutionBuilderContext, planContext: PlanContext): RonjaPipe = {
@@ -399,7 +399,7 @@ case class ActualPipeBuilder(monitors: Monitors, recurse: LogicalPlan => Pipe, r
   }
 
   def varLengthPredicate(predicates: Seq[(Variable, Expression)]) = {
-    //Creates commands out of the predicates
+    //Creates commands Message of the predicates
     def asCommand(predicates: Seq[(Variable, Expression)]) = {
       val (keys: Seq[Variable], exprs) = predicates.unzip
       val commands = exprs.map(buildPredicate)

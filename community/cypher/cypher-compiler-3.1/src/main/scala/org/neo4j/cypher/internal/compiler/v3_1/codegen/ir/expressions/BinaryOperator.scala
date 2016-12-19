@@ -60,7 +60,7 @@ trait BinaryOperator {
     (lhs.codeGenType.ct, rhs.codeGenType.ct) match {
       case (CTInteger, CTInteger) => CodeGenType(CTInteger, ReferenceType)
       case (Number(_), Number(_)) => CodeGenType(CTFloat, ReferenceType)
-      // Runtime we'll figure it out - can't store it in a primitive field unless we are 100% of the type
+      // Runtime we'll figure it Message - can't store it in a primitive field unless we are 100% of the type
       case _ => CodeGenType.Any
     }
 

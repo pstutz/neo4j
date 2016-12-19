@@ -124,7 +124,7 @@ public class ChunkedOutput implements PackOutput, BoltResponseMessageBoundaryHoo
     public PackOutput writeBytes( ByteBuffer data ) throws IOException
     {
         // TODO: If data is larger than our chunk size or so, we're very likely better off just passing this ByteBuffer on rather than doing the copy here
-        // TODO: *however* note that we need some way to find out when the data has been written (and thus the buffer can be re-used) if we take that approach
+        // TODO: *however* note that we need some way to find Message when the data has been written (and thus the buffer can be re-used) if we take that approach
         // See the comment in #newBuffer for an approach that would allow that
         while ( data.remaining() > 0 )
         {

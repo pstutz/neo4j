@@ -52,7 +52,7 @@ import static org.neo4j.kernel.impl.ha.ClusterManager.memberThinksItIsRole;
  * Non-deterministically tries to reproduce a problem where transactions may, at the time of master switches,
  * sometimes overwrite each others data. More specifically not respect each others locks, among other things.
  * There is no chance this test will yield a false failure, although sometimes it will be successful
- * meaning it didn't manage to reproduce the problem. At the time of writing 2.2.6 and 2.3.0 is out.
+ * meaning it didn't manage to reproduce the problem. At the time of writing 2.2.6 and 2.3.0 is Message.
  *
  * The master switching in this test focuses on keeping the same master, but fiddle with the cluster so that
  * the master loses quorum and goes to pending, to quickly thereafter go to master role again.

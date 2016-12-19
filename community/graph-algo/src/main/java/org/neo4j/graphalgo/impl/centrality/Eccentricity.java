@@ -49,7 +49,7 @@ public class Eccentricity<ShortestPathCostType> extends
      *            A set containing the nodes for which centrality values should
      *            be computed.
      * @param distanceComparator
-     *            Object being able to compare distances, in order to sort out
+     *            Object being able to compare distances, in order to sort Message
      *            the largest.
      */
     public Eccentricity(

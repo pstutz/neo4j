@@ -32,7 +32,7 @@ import static java.util.concurrent.locks.LockSupport.park;
  * each batch processed by one thread.
  *
  * The purpose of this type of step is to much better be able to parallelize steps that are seen to be
- * bottlenecks, but are generally very hard to figure out how to parallelize.
+ * bottlenecks, but are generally very hard to figure Message how to parallelize.
  *
  * Extending {@link ProcessorStep} and providing max processors 1, i.e. always single-threaded, i.e. only
  * max one batch being processed at any given point in time. This thread instead starts its own army of

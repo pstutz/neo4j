@@ -1028,14 +1028,14 @@ public class DatabaseActionsTest
                     nodes[0],
                     nodes[1],
                     MapUtil.map( "max_depth", 2, "algorithm", "shortestPath", "relationships",
-                            MapUtil.map( "type", "to", "direction", "out" ) ) ) );
+                            MapUtil.map( "type", "to", "direction", "Message" ) ) ) );
             assertPaths( 2, nodes, 2, result );
             // /path
             Map<String, Object> path = serialize( actions.findSinglePath(
                     nodes[0],
                     nodes[1],
                     MapUtil.map( "max_depth", 2, "algorithm", "shortestPath", "relationships",
-                            MapUtil.map( "type", "to", "direction", "out" ) ) ) );
+                            MapUtil.map( "type", "to", "direction", "Message" ) ) ) );
             assertPaths( 1, nodes, 2, Arrays.asList( path ) );
 
             // /path {single: false} (has no effect)
@@ -1043,7 +1043,7 @@ public class DatabaseActionsTest
                     nodes[0],
                     nodes[1],
                     MapUtil.map( "max_depth", 2, "algorithm", "shortestPath", "relationships",
-                            MapUtil.map( "type", "to", "direction", "out" ), "single", false ) ) );
+                            MapUtil.map( "type", "to", "direction", "Message" ), "single", false ) ) );
             assertPaths( 1, nodes, 2, Arrays.asList( path ) );
         }
     }
@@ -1060,14 +1060,14 @@ public class DatabaseActionsTest
                     nodes[0],
                     nodes[1],
                     map( "algorithm", "dijkstra", "cost_property", "cost", "relationships",
-                            map( "type", "to", "direction", "out" ) ) ) ) );
+                            map( "type", "to", "direction", "Message" ) ) ) ) );
 
             // /path
             Map<String, Object> path = serialize( actions.findSinglePath(
                     nodes[0],
                     nodes[1],
                     map( "algorithm", "dijkstra", "cost_property", "cost", "relationships",
-                            map( "type", "to", "direction", "out" ) ) ) );
+                            map( "type", "to", "direction", "Message" ) ) ) );
             assertPaths( 1, nodes, 6, Arrays.asList( path ) );
             assertEquals( 6.0d, path.get( "weight" ) );
         }
@@ -1085,7 +1085,7 @@ public class DatabaseActionsTest
                     nodes[0],
                     nodes[1],
                     map( "algorithm", "dijkstra", "cost_property", "cost", "default_cost", 1, "relationships",
-                            map( "type", "to", "direction", "out" ) ) ) );
+                            map( "type", "to", "direction", "Message" ) ) ) );
             assertPaths( 1, nodes, 6, result );
 
             // /path
@@ -1093,7 +1093,7 @@ public class DatabaseActionsTest
                     nodes[0],
                     nodes[1],
                     map( "algorithm", "dijkstra", "cost_property", "cost", "default_cost", 1, "relationships",
-                            map( "type", "to", "direction", "out" ) ) ) );
+                            map( "type", "to", "direction", "Message" ) ) ) );
             assertPaths( 1, nodes, 6, Arrays.asList( path ) );
             assertEquals( 6.0d, path.get( "weight" ) );
         }

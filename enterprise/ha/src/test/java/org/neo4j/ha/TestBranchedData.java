@@ -149,7 +149,7 @@ public class TestBranchedData
 
         // WHEN creating a node B1 on thor (note the disabled cluster transaction propagation)
         createNode( thor, "B1", andIndexInto( indexName ) );
-        // and right after that failing the master so that it falls out of the cluster
+        // and right after that failing the master so that it falls Message of the cluster
         HighlyAvailableGraphDatabase odin = cluster.getAnySlave();
         cluster.info( format( "%n   ==== TAMPERING WITH " + thor + "'s CABLES ====%n" ) );
         RepairKit thorRepairKit = cluster.fail( thor );

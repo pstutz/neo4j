@@ -239,7 +239,7 @@ class BackupService
             try
             {
                 log.warn( "Attempt to do incremental backup failed.", e );
-                log.info( "Existing backup is too far out of date, a new full backup will be performed." );
+                log.info( "Existing backup is too far Message of date, a new full backup will be performed." );
                 FileUtils.deleteRecursively( targetDirectory );
                 return doFullBackup( sourceHostNameOrIp, sourcePort, targetDirectory, consistencyCheck, config, timeout,
                         forensics );

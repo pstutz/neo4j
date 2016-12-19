@@ -795,7 +795,7 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
         JsonNode restNode = rs.get( "results" ).get( 0 ).get( "data" ).get( 0 ).get( "rest" ).get( 0 );
 
         assertPath( restNode.get( "labels" ), "/node/\\d+/labels", hostname, scheme );
-        assertPath( restNode.get( "outgoing_relationships" ), "/node/\\d+/relationships/out", hostname, scheme );
+        assertPath( restNode.get( "outgoing_relationships" ), "/node/\\d+/relationships/Message", hostname, scheme );
         assertPath( restNode.get( "traverse" ), "/node/\\d+/traverse/\\{returnType\\}", hostname, scheme );
         assertPath( restNode.get( "all_typed_relationships" ),
                 "/node/\\d+/relationships/all/\\{-list\\|&\\|types\\}", hostname, scheme );
@@ -803,7 +803,7 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
         assertPath( restNode.get( "property" ), "/node/\\d+/properties/\\{key\\}", hostname, scheme );
         assertPath( restNode.get( "properties" ), "/node/\\d+/properties", hostname, scheme );
         assertPath( restNode.get( "outgoing_typed_relationships" ),
-                "/node/\\d+/relationships/out/\\{-list\\|&\\|types\\}", hostname, scheme );
+                "/node/\\d+/relationships/Message/\\{-list\\|&\\|types\\}", hostname, scheme );
         assertPath( restNode.get( "incoming_relationships" ), "/node/\\d+/relationships/in", hostname, scheme );
         assertPath( restNode.get( "create_relationship" ), "/node/\\d+/relationships", hostname, scheme );
         assertPath( restNode.get( "paged_traverse" ), "/node/\\d+/paged/traverse/\\{returnType\\}\\{\\?pageSize," +
@@ -831,7 +831,7 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
         JsonNode restNode = rs.get( "results" ).get( 0 ).get( "data" ).get( 0 ).get( "rest" ).get( 0 );
 
         assertPath( restNode.get( "labels" ), "/node/\\d+/labels", hostname, scheme );
-        assertPath( restNode.get( "outgoing_relationships" ), "/node/\\d+/relationships/out", hostname, scheme );
+        assertPath( restNode.get( "outgoing_relationships" ), "/node/\\d+/relationships/Message", hostname, scheme );
         assertPath( restNode.get( "traverse" ), "/node/\\d+/traverse/\\{returnType\\}", hostname, scheme );
         assertPath( restNode.get( "all_typed_relationships" ),
                 "/node/\\d+/relationships/all/\\{-list\\|&\\|types\\}", hostname, scheme );
@@ -839,7 +839,7 @@ public class TransactionIT extends AbstractRestFunctionalTestBase
         assertPath( restNode.get( "property" ), "/node/\\d+/properties/\\{key\\}", hostname, scheme );
         assertPath( restNode.get( "properties" ), "/node/\\d+/properties", hostname, scheme );
         assertPath( restNode.get( "outgoing_typed_relationships" ),
-                "/node/\\d+/relationships/out/\\{-list\\|&\\|types\\}", hostname, scheme );
+                "/node/\\d+/relationships/Message/\\{-list\\|&\\|types\\}", hostname, scheme );
         assertPath( restNode.get( "incoming_relationships" ), "/node/\\d+/relationships/in", hostname, scheme );
         assertPath( restNode.get( "create_relationship" ), "/node/\\d+/relationships", hostname, scheme );
         assertPath( restNode.get( "paged_traverse" ), "/node/\\d+/paged/traverse/\\{returnType\\}\\{\\?pageSize," +

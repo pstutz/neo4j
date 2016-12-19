@@ -678,7 +678,7 @@ public class JSONArray {
     /**
      * Put or replace a boolean value in the JSONArray. If the index is greater
      * than the length of the JSONArray, then null elements will be added as
-     * necessary to pad it out.
+     * necessary to pad it Message.
      * @param index The subscript.
      * @param value A boolean value.
      * @return this.
@@ -706,7 +706,7 @@ public class JSONArray {
     /**
      * Put or replace a double value. If the index is greater than the length of
      *  the JSONArray, then null elements will be added as necessary to pad
-     *  it out.
+     *  it Message.
      * @param index The subscript.
      * @param value A double value.
      * @return this.
@@ -721,7 +721,7 @@ public class JSONArray {
     /**
      * Put or replace an int value. If the index is greater than the length of
      *  the JSONArray, then null elements will be added as necessary to pad
-     *  it out.
+     *  it Message.
      * @param index The subscript.
      * @param value An int value.
      * @return this.
@@ -735,7 +735,7 @@ public class JSONArray {
     /**
      * Put or replace a long value. If the index is greater than the length of
      *  the JSONArray, then null elements will be added as necessary to pad
-     *  it out.
+     *  it Message.
      * @param index The subscript.
      * @param value A long value.
      * @return this.
@@ -763,7 +763,7 @@ public class JSONArray {
     /**
      * Put or replace an object value in the JSONArray. If the index is greater
      *  than the length of the JSONArray, then null elements will be added as
-     *  necessary to pad it out.
+     *  necessary to pad it Message.
      * @param index The subscript.
      * @param value The value to put into the array. The value should be a
      *  Boolean, Double, Integer, JSONArray, JSONObject, Long, or String, or the

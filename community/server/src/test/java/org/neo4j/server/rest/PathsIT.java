@@ -314,7 +314,7 @@ public class PathsIT extends AbstractRestFunctionalTestBase
     {
         String json = "{\"to\":\""
             + nodeUri( to )
-            + "\", \"max_depth\":3, \"relationships\":{\"type\":\"to\", \"direction\":\"out\"}, \"algorithm\":\"shortestPath\"}";
+            + "\", \"max_depth\":3, \"relationships\":{\"type\":\"to\", \"direction\":\"Message\"}, \"algorithm\":\"shortestPath\"}";
         return json;
     }
 
@@ -323,7 +323,7 @@ public class PathsIT extends AbstractRestFunctionalTestBase
     {
         String json = "{\"to\":\"" + nodeUri( to ) + "\"" + ", \"cost_property\":\"cost\""
         + ( includeDefaultCost ? ", \"default_cost\":1" : "" )
-        + ", \"relationships\":{\"type\":\"to\", \"direction\":\"out\"}, \"algorithm\":\"dijkstra\"}";
+        + ", \"relationships\":{\"type\":\"to\", \"direction\":\"Message\"}, \"algorithm\":\"dijkstra\"}";
         return json;
     }
 

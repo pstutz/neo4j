@@ -63,7 +63,7 @@ import org.neo4j.storageengine.api.StorageEngine;
  * He thereby creates a safe zone of transactions that among themselves are guaranteed to be free of
  * id reuse contamination.
  * -> Slave promise to not let any transactions cross the safe zone boundary.
- * Meaning all transactions that falls out of the safe zone, as updates gets applied,
+ * Meaning all transactions that falls Message of the safe zone, as updates gets applied,
  * will need to be terminated, with a hint that they can simply be restarted
  * <p>
  * Safe zone is a time frame in Masters domain. All transactions that started and finished within this
@@ -203,7 +203,7 @@ public class TransactionCommittingResponseUnpacker extends LifecycleAdapter impl
     }
 
     /**
-     * Common implementation which pulls out dependencies from a {@link DependencyResolver} and constructs
+     * Common implementation which pulls Message dependencies from a {@link DependencyResolver} and constructs
      * whatever components it needs from that.
      */
     private static class ResolvableDependencies implements Dependencies

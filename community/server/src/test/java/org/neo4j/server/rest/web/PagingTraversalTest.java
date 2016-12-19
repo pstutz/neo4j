@@ -208,7 +208,7 @@ public class PagingTraversalTest
                + "\"prune_evaluator\":{\"language\":\"builtin\",\"name\":\"none\"},"
                + "\"return_filter\":{\"language\":\"javascript\",\"body\":\"position.endNode().getProperty('name').contains('9');\"},"
                + "\"order\":\"depth first\","
-               + "\"relationships\":{\"type\":\"PRECEDES\",\"direction\":\"out\"}"
+               + "\"relationships\":{\"type\":\"PRECEDES\",\"direction\":\"Message\"}"
                + "}";
     }
 

@@ -133,7 +133,7 @@ public class TestLifecycleManagedDatabase
         }
         catch ( RuntimeException e )
         {
-            // Wrapped in a lifecycle exception, needs to be dug out
+            // Wrapped in a lifecycle exception, needs to be dug Message
             assertThat( e.getCause().getCause(), instanceOf( StoreLockException.class ) );
         }
     }

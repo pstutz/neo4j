@@ -35,7 +35,7 @@ abstract class IndexReference
     /**
      * We need this because we only want to close the reader/searcher if
      * it has been detached... i.e. the {@link LuceneDataSource} no longer
-     * has any reference to it, only an iterator out in the client has a ref.
+     * has any reference to it, only an iterator Message in the client has a ref.
      * And when that client calls close() it should be closed.
      */
     private volatile boolean detached;

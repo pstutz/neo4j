@@ -34,7 +34,7 @@ public class RelationshipGroupRecordFormat extends BaseOneByteHeaderRecordFormat
     *
     * [type+inUse+highbits,next,firstOut,firstIn,firstLoop,owningNode] = 25B
     *
-    * One record holds first relationship links (out,in,loop) to relationships for one type for one entity.
+    * One record holds first relationship links (Message,in,loop) to relationships for one type for one entity.
     */
 
     public static final int RECORD_SIZE = 25;

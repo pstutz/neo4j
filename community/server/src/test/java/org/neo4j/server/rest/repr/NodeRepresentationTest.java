@@ -56,7 +56,7 @@ public class NodeRepresentationTest
     @Test
     public void shouldHaveOutgoingRelationshipsLink() throws BadInputException
     {
-        assertUriMatches( uriPattern( "/relationships/out" ), noderep( 1234 ).outgoingRelationshipsUri() );
+        assertUriMatches( uriPattern( "/relationships/Message" ), noderep( 1234 ).outgoingRelationshipsUri() );
     }
 
     @Test
@@ -76,7 +76,7 @@ public class NodeRepresentationTest
     @Test
     public void shouldHaveOutgoingTypedRelationshipsLinkTemplate() throws BadInputException
     {
-        assertUriMatches( uriPattern( "/relationships/out/\\{-list\\|&\\|types\\}" ),
+        assertUriMatches( uriPattern( "/relationships/Message/\\{-list\\|&\\|types\\}" ),
                 noderep( 1234 ).outgoingTypedRelationshipsUriTemplate() );
     }
 
@@ -133,13 +133,13 @@ public class NodeRepresentationTest
                 .toString() );
         assertUriMatches( uriPattern( "/relationships/in" ), noderep.get( "incoming_relationships" )
                 .toString() );
-        assertUriMatches( uriPattern( "/relationships/out" ), noderep.get( "outgoing_relationships" )
+        assertUriMatches( uriPattern( "/relationships/Message" ), noderep.get( "outgoing_relationships" )
                 .toString() );
         assertUriMatches( uriPattern( "/relationships/all/\\{-list\\|&\\|types\\}" ),
                 (String) noderep.get( "all_typed_relationships" ) );
         assertUriMatches( uriPattern( "/relationships/in/\\{-list\\|&\\|types\\}" ),
                 (String) noderep.get( "incoming_typed_relationships" ) );
-        assertUriMatches( uriPattern( "/relationships/out/\\{-list\\|&\\|types\\}" ),
+        assertUriMatches( uriPattern( "/relationships/Message/\\{-list\\|&\\|types\\}" ),
                 (String) noderep.get( "outgoing_typed_relationships" ) );
         assertUriMatches( uriPattern( "/properties" ), noderep.get( "properties" )
                 .toString() );

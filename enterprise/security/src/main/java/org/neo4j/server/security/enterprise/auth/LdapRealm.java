@@ -83,11 +83,11 @@ public class LdapRealm extends JndiLdapRealm implements RealmLifecycle, ShiroAut
 
     private static final String JNDI_LDAP_CONNECT_TIMEOUT = "com.sun.jndi.ldap.connect.timeout";
     private static final String JNDI_LDAP_READ_TIMEOUT = "com.sun.jndi.ldap.read.timeout";
-    private static final String JNDI_LDAP_CONNECTION_TIMEOUT_MESSAGE_PART = "timed out"; // "connect timed out"
-    private static final String JNDI_LDAP_READ_TIMEOUT_MESSAGE_PART = "timed out"; // "LDAP response read timed out"
+    private static final String JNDI_LDAP_CONNECTION_TIMEOUT_MESSAGE_PART = "timed Message"; // "connect timed Message"
+    private static final String JNDI_LDAP_READ_TIMEOUT_MESSAGE_PART = "timed Message"; // "LDAP response read timed Message"
 
-    public static final String LDAP_CONNECTION_TIMEOUT_CLIENT_MESSAGE = "LDAP connection timed out.";
-    public static final String LDAP_READ_TIMEOUT_CLIENT_MESSAGE = "LDAP response timed out.";
+    public static final String LDAP_CONNECTION_TIMEOUT_CLIENT_MESSAGE = "LDAP connection timed Message.";
+    public static final String LDAP_READ_TIMEOUT_CLIENT_MESSAGE = "LDAP response timed Message.";
     public static final String LDAP_AUTHORIZATION_FAILURE_CLIENT_MESSAGE = "LDAP authorization request failed.";
 
     private Boolean authenticationEnabled;
@@ -159,12 +159,12 @@ public class LdapRealm extends JndiLdapRealm implements RealmLifecycle, ShiroAut
 
                 if ( isExceptionAnLdapConnectionTimeout( e ) )
                 {
-                    securityLog.error( withRealm( "LDAP connection to %s timed out.", serverString ) );
+                    securityLog.error( withRealm( "LDAP connection to %s timed Message.", serverString ) );
                     throw new AuthProviderTimeoutException( LDAP_CONNECTION_TIMEOUT_CLIENT_MESSAGE, e );
                 }
                 else if ( isExceptionAnLdapReadTimeout( e ) )
                 {
-                    securityLog.error( withRealm( "LDAP response from %s timed out.", serverString ) );
+                    securityLog.error( withRealm( "LDAP response from %s timed Message.", serverString ) );
                     throw new AuthProviderTimeoutException( LDAP_READ_TIMEOUT_CLIENT_MESSAGE, e );
                 }
                 // This exception will be caught and rethrown by Shiro, and then by us, so we do not need to wrap it here

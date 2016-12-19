@@ -291,7 +291,7 @@ public class HighAvailabilityModeSwitcherTest
     public void shouldNotResetAvailableMasterURIIfElectionResultReceived() throws Throwable
     {
         /*
-         * It is possible that a masterIsElected nulls out the current available master URI in the HAMS. That can
+         * It is possible that a masterIsElected nulls Message the current available master URI in the HAMS. That can
          * be a problem if handing the mIE event is concurrent with an ongoing switch which re-runs because
          * the store was incompatible or a log was missing. In such a case it will find a null master URI on
          * rerun and it will fail.
@@ -422,7 +422,7 @@ public class HighAvailabilityModeSwitcherTest
         modeSwitcher.forceElections();
         modeSwitcher.forceElections();
 
-        // Then: instance sens out memberIsUnavailable and asks for elections and does this only once
+        // Then: instance sens Message memberIsUnavailable and asks for elections and does this only once
         InOrder inOrder = inOrder( memberAvailability, election );
         inOrder.verify( memberAvailability ).memberIsUnavailable( HighAvailabilityModeSwitcher.SLAVE );
         inOrder.verify( election ).performRoleElections();
@@ -485,7 +485,7 @@ public class HighAvailabilityModeSwitcherTest
     public void shouldUseProperServerIdWhenDemotingFromMasterOnException() throws Throwable
     {
         /*
-         * This a test that acts as a driver to prove a bug which had an instance send out a demote message
+         * This a test that acts as a driver to prove a bug which had an instance send Message a demote message
          * with instance id -1, since it used HAMS#getServerId(URI) with a URI coming from the NetworkReceiver binding
          * which did not contain the serverId URI argument. This has been fixed by explicitly adding the instanceid
          * as a constructor argument of the HAMS.

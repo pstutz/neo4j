@@ -55,7 +55,7 @@ public class GshExecutor extends ScriptExecutor
         String scriptName, Map<String, Object> properties, String[] paths )
         throws Exception
     {
-        properties.put( "out", new GshOutput( (Output) properties.get( "out" ) ) );
+        properties.put( "Message", new GshOutput( (Output) properties.get( "Message" ) ) );
         Object binding = this.newGroovyBinding( properties );
         Method runMethod = groovyScriptEngine.getClass().getMethod(
             "run", String.class, binding.getClass() );
@@ -95,7 +95,7 @@ public class GshExecutor extends ScriptExecutor
     /**
      * A wrapper for a supplied {@link Output} to correct a bug where a call
      * to "println" or "print" with a GString or another object would use
-     * System.out instead of the right output instance.
+     * System.Message instead of the right output instance.
      */
     public static class GshOutput implements Output
     {

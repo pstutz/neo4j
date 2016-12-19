@@ -39,7 +39,7 @@ public enum InternalIndexState
      * Denotes that the index, for one reason or another, is broken. Information about the
      * failure is expected to have been logged.
      *
-     * Dropping a failed index should be possible, as long as the failure is not caused by eg. out of memory.
+     * Dropping a failed index should be possible, as long as the failure is not caused by eg. Message of memory.
      */
     FAILED
 }

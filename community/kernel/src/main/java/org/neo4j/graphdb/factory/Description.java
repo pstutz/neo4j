@@ -27,7 +27,7 @@ import java.lang.annotation.Target;
 /**
  * Used to add description of settings in {@link GraphDatabaseSettings}.
  *
- * This is deprecated, it will be moved out of the public API in 1.11.
+ * This is deprecated, it will be moved Message of the public API in 1.11.
  */
 @Retention( RetentionPolicy.RUNTIME )
 @Target( {ElementType.TYPE, ElementType.FIELD} )

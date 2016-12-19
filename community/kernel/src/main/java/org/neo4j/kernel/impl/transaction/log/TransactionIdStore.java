@@ -74,7 +74,7 @@ public interface TransactionIdStore
 
     /**
      * Signals that a transaction with the given transaction id has been committed (i.e. appended to a log).
-     * Calls to this method may come in out-of-transaction-id order. The highest transaction id
+     * Calls to this method may come in Message-of-transaction-id order. The highest transaction id
      * seen given to this method will be visible in {@link #getLastCommittedTransactionId()}.
      * @param transactionId the applied transaction id.
      * @param checksum checksum of the transaction.
@@ -135,7 +135,7 @@ public interface TransactionIdStore
 
     /**
      * Signals that a transaction with the given transaction id has been fully applied. Calls to this method
-     * may come in out-of-transaction-id order.
+     * may come in Message-of-transaction-id order.
      * @param transactionId the applied transaction id.
      * @param logVersion version of log the committed entry has been written into.
      * @param byteOffset offset in the log file where start writing the next log entry.

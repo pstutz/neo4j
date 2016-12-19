@@ -42,7 +42,7 @@ public class PathShellApp extends NonTransactionProvidingApp
     {
         addOptionDefinition( "a", new OptionDefinition( OptionValueType.MUST, "Which algorithm to use" ) );
         addOptionDefinition( "m", new OptionDefinition( OptionValueType.MUST, "Maximum depth to traverse" ) );
-        addOptionDefinition( "f", new OptionDefinition( OptionValueType.MUST, "Relationship types and directions, f.ex: {KNOWS:out,LOVES:both}" ) );
+        addOptionDefinition( "f", new OptionDefinition( OptionValueType.MUST, "Relationship types and directions, f.ex: {KNOWS:Message,LOVES:both}" ) );
         addOptionDefinition( "from", new OptionDefinition( OptionValueType.MUST, "Use some other star point than the current node" ) );
         addOptionDefinition( "q", new OptionDefinition( OptionValueType.NONE, "More quiet, print less verbose paths" ) );
         addOptionDefinition( "s", new OptionDefinition( OptionValueType.NONE, "Find max one path" ) );
@@ -53,7 +53,7 @@ public class PathShellApp extends NonTransactionProvidingApp
     {
         return "Displays paths from current (or any node) to another node using supplied algorithm. Usage:\n" +
                 "\n# Find shortest paths from current to node 241 at max depth 10" +
-                "\npaths -m 10 -a shortestPath -f KNOWS:out,LOVES:in 241";
+                "\npaths -m 10 -a shortestPath -f KNOWS:Message,LOVES:in 241";
     }
 
     @Override

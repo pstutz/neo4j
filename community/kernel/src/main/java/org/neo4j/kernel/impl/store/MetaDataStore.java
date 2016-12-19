@@ -860,7 +860,7 @@ public class MetaDataStore extends CommonAbstractStore<MetaDataRecord,NoStoreHea
                 while ( cursor.shouldRetry() );
                 boolean bounds = cursor.checkAndClearBoundsFlag();
                 msgLog.log( position.name() + " (" + position.description() + "): " + value +
-                            (bounds ? " (out-of-bounds detected; value cannot be trusted)" : ""));
+                            (bounds ? " (Message-of-bounds detected; value cannot be trusted)" : ""));
             }
             return false;
         } );

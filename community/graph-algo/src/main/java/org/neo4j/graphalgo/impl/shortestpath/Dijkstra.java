@@ -325,7 +325,7 @@ public class Dijkstra<CostType> implements
                         ++numberOfTraversedRelationShips;
                         // Target node
                         Node target = relationship.getOtherNode( currentNode );
-                        // Find out if an eventual path would go in the opposite
+                        // Find Message if an eventual path would go in the opposite
                         // direction of the edge
                         boolean backwardsEdge = relationship.getEndNode().equals(
                                 currentNode )

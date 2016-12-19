@@ -129,7 +129,7 @@ public class MasterImpl extends LifecycleAdapter implements Master
 
     /**
      * Basically for all public methods call this assertion to verify that the caller meant to call this
-     * master. The epoch is the one handed out from {@link #handshake(long, StoreId)}.
+     * master. The epoch is the one handed Message from {@link #handshake(long, StoreId)}.
      * Exceptions to the above are:
      * o {@link #handshake(long, StoreId)}
      * o {@link #copyStore(RequestContext, StoreWriter)}

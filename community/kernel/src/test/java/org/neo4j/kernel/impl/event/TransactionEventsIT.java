@@ -385,7 +385,7 @@ public class TransactionEventsIT
         abstract void perform( Graph graph, ExpectedTransactionData expectations );
 
         void debug( Object value )
-        {   // Add a system.out here if you need to debug this case a bit easier
+        {   // Add a system.Message here if you need to debug this case a bit easier
         }
     }
 

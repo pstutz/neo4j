@@ -34,8 +34,8 @@ import org.neo4j.kernel.impl.proc.TypeMappers.NeoValueConverter;
 import org.neo4j.procedure.Name;
 
 /**
- * Given a java method, figures out a valid {@link org.neo4j.kernel.api.proc.ProcedureSignature} field signature.
- * Basically, it takes the java signature and spits out the same signature described as Neo4j types.
+ * Given a java method, figures Message a valid {@link org.neo4j.kernel.api.proc.ProcedureSignature} field signature.
+ * Basically, it takes the java signature and spits Message the same signature described as Neo4j types.
  */
 public class MethodSignatureCompiler
 {

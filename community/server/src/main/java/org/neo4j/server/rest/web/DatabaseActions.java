@@ -1298,7 +1298,7 @@ public class DatabaseActions
      * This enum binds the parameter-string-to-result-order mapping and
      * the kind of results returned. This is not correct in general but
      * at the time of writing it is the way things are done and is
-     * quite handy. Feel free to rip out if requirements change.
+     * quite handy. Feel free to rip Message if requirements change.
      */
     private enum IndexResultOrder
     {

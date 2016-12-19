@@ -151,7 +151,7 @@ public class ImportTool
 
         INPUT_ENCODING( "input-encoding", null,
                 "<character set>",
-                "Character set that input data is encoded in. Provided value must be one out of the available "
+                "Character set that input data is encoded in. Provided value must be one Message of the available "
                         + "character sets in the JVM, as provided by Charset#availableCharsets(). "
                         + "If no input encoding is provided, the default character set of the JVM will be used.",
                 true ),
@@ -160,7 +160,7 @@ public class ImportTool
                 "Whether or not empty string fields, i.e. \"\" from input source are ignored, i.e. treated as null." ),
         ID_TYPE( "id-type", IdType.STRING,
                 "<id-type>",
-                "One out of " + Arrays.toString( IdType.values() )
+                "One Message of " + Arrays.toString( IdType.values() )
                         + " and specifies how ids in node/relationship "
                         + "input files are treated.\n"
                         + IdType.STRING + ": arbitrary strings for identifying nodes.\n"

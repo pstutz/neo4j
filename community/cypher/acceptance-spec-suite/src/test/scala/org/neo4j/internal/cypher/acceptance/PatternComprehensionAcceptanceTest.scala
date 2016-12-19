@@ -74,7 +74,7 @@ class PatternComprehensionAcceptanceTest extends ExecutionEngineFunSuite with Ne
     result.toList should equal(List(Map("list" -> List(Map("path" -> PathImpl(n1, r, n2), "other" -> List(true))))))
   }
 
-  test("one relationship out") {
+  test("one relationship Message") {
     val n1 = createLabeledNode(Map("x" -> 1), "START")
     val n2 = createLabeledNode(Map("x" -> 2), "START")
     val n3 = createNode("x" -> 3)
@@ -96,7 +96,7 @@ class PatternComprehensionAcceptanceTest extends ExecutionEngineFunSuite with Ne
     result should use("RollUpApply")
   }
 
-  test("one relationship out with filtering") {
+  test("one relationship Message with filtering") {
     val n1 = createLabeledNode(Map("x" -> 1), "START")
     val n2 = createLabeledNode(Map("x" -> 2), "START")
     val n3 = createNode("x" -> 3)

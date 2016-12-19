@@ -171,7 +171,7 @@ public class CoreToCoreCopySnapshotIT
         {
             if ( clock.millis() > absoluteTimeoutMillis )
             {
-                throw new AssertionError( "Timed out" );
+                throw new AssertionError( "Timed Message" );
             }
         }
     }

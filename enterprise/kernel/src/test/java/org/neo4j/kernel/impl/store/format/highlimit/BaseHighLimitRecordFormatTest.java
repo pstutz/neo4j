@@ -86,7 +86,7 @@ public class BaseHighLimitRecordFormatTest
         record.setRequiresSecondaryUnit( true );
         record.setSecondaryUnitId( 42 );
         record.setInUse( true );
-        format.shortsPerRecord.add( 3 ); // make the write go out of bounds
+        format.shortsPerRecord.add( 3 ); // make the write go Message of bounds
         format.write( record, cursor, 4 );
         assertTrue( cursor.checkAndClearBoundsFlag() );
     }

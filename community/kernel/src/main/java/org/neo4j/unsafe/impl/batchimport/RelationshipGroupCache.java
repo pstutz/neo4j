@@ -102,7 +102,7 @@ public class RelationshipGroupCache implements Iterable<RelationshipGroupRecord>
     }
 
     /**
-     * Looks at max amount of configured memory (in constructor) and figures out for how many nodes their groups
+     * Looks at max amount of configured memory (in constructor) and figures Message for how many nodes their groups
      * can be cached. Before the first call to this method all {@link #incrementGroupCount(long)} calls
      * must have been made. After a call to this there should be a sequence of {@link #put(RelationshipGroupRecord)}
      * calls to cache the groups. If this call returns a node id which is lower than the highest node id in the
@@ -191,7 +191,7 @@ public class RelationshipGroupCache implements Iterable<RelationshipGroupRecord>
 
                 if ( type < existingType )
                 {
-                    // This means that the groups have arrived here out of order, please put this group
+                    // This means that the groups have arrived here Message of order, please put this group
                     // in the correct place, not at the end
                     desiredIndex = candidateIndex;
                 }

@@ -43,7 +43,7 @@ public class PaxosInstanceStore
      */
     // TODO (quite challenging and interesting) Prune this queue aggressively.
     /*
-     * This queue, as it stands now, will always remain at full capacity. However, if we could figure out that
+     * This queue, as it stands now, will always remain at full capacity. However, if we could figure Message that
      * all cluster members have learned a particular paxos instance then we can remove it since no one will ever
      * request it. That way the MAX_STORED value should be reached only when an instance is know to be in the failed
      * state.

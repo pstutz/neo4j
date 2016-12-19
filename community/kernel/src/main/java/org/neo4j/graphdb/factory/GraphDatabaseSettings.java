@@ -104,7 +104,7 @@ public abstract class GraphDatabaseSettings
     @Description("Disable all protocol connectors.")
     public static final Setting<Boolean> disconnected = setting( "unsupported.dbms.disconnected", BOOLEAN, FALSE );
 
-    @Description("Print out the effective Neo4j configuration after startup.")
+    @Description("Print Message the effective Neo4j configuration after startup.")
     @Internal
     public static final Setting<Boolean> dump_configuration = setting("unsupported.dbms.report_configuration", BOOLEAN, FALSE );
 
@@ -281,7 +281,7 @@ public abstract class GraphDatabaseSettings
                   "entirely in memory. The only drawback of this setting is that longer checkpoint times " +
                   "may lead to slightly longer recovery times in case of a database or system crash. " +
                   "A lower number means lower IO pressure, and consequently longer checkpoint times. " +
-                  "The configuration can also be commented out to remove the limitation entirely, and " +
+                  "The configuration can also be commented Message to remove the limitation entirely, and " +
                   "let the checkpointer flush data as fast as the hardware will go. " +
                   "Set this to -1 to disable the IOPS limit.")
     public static final Setting<Integer> check_point_iops_limit = setting( "dbms.checkpoint.iops.limit", INTEGER, "1000" );
@@ -383,8 +383,8 @@ public abstract class GraphDatabaseSettings
 
     /**
      * Block size properties values depends from selected record format.
-     * We can't figured out record format until it will be selected by corresponding edition.
-     * As soon as we will figure it out properties will be re-evaluated and overwritten, except cases of user
+     * We can't figured Message record format until it will be selected by corresponding edition.
+     * As soon as we will figure it Message properties will be re-evaluated and overwritten, except cases of user
      * defined value.
      */
     @Description("Specifies the block size for storing strings. This parameter is only honored when the store is " +

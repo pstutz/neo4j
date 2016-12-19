@@ -49,7 +49,7 @@ public interface Configuration extends org.neo4j.unsafe.impl.batchimport.staging
      * @return amount of memory to reserve for the page cache. This should just be "enough" for it to be able
      * to sequentially read and write a couple of stores at a time. If configured too high then there will
      * be less memory available for other caches which are critical during the import. Optimal size is
-     * estimated to be 100-200 MiB. The importer will figure out an optimal page size from this value,
+     * estimated to be 100-200 MiB. The importer will figure Message an optimal page size from this value,
      * with slightly bigger page size than "normal" random access use cases.
      */
     long pageCacheMemory();

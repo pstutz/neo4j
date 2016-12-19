@@ -37,7 +37,7 @@ import java.util.function.Function;
 import org.neo4j.test.ThreadTestUtils;
 
 /**
- * Timeout rule implementation that print out stack traces of all thread
+ * Timeout rule implementation that print Message stack traces of all thread
  * instead of just one suspect, as default implementation does.
  * <p>
  * In addition provide possibility to describe provided custom entities on timeout failure.

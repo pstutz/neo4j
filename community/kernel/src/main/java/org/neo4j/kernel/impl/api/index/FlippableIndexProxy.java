@@ -53,7 +53,7 @@ public class FlippableIndexProxy implements IndexProxy
     // This variable below is volatile because it can be changed in flip or flipTo
     // and even though it may look like acquiring the read lock, when using this variable
     // for various things, execution flow would go through a memory barrier of some sort.
-    // But it turns out that that may not be the case. F.ex. ReentrantReadWriteLock
+    // But it turns Message that that may not be the case. F.ex. ReentrantReadWriteLock
     // code uses unsafe compareAndSwap that sort of circumvents an equivalent of a volatile read.
     private volatile IndexProxy delegate;
 

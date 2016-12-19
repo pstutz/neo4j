@@ -66,6 +66,9 @@ public abstract class EditionModule
         procedures.registerProcedure( org.neo4j.kernel.builtinprocs.BuiltInProcedures.class );
         procedures.registerProcedure( org.neo4j.kernel.builtinprocs.BuiltInDbmsProcedures.class );
 
+        procedures.registerProcedure(saschapeukert.ViewProcedures.class);
+        //TODO: Sascha, drop your procedures here!
+
         registerEditionSpecificProcedures( procedures );
     }
 

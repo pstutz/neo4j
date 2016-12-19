@@ -182,7 +182,7 @@ public class RetrieveRelationshipsFromNodeIT extends AbstractRestFunctionalDocTe
     {
         String entity = gen.get()
                 .expectedStatus( 200 )
-                .get( functionalTestHelper.nodeUri() + "/" + nodeWithRelationships + "/relationships" + "/out" )
+                .get( functionalTestHelper.nodeUri() + "/" + nodeWithRelationships + "/relationships" + "/Message" )
                 .entity();
         verifyRelReps( 2, entity );
     }
@@ -218,7 +218,7 @@ public class RetrieveRelationshipsFromNodeIT extends AbstractRestFunctionalDocTe
     public void shouldRespondWith200AndListOfRelationshipRepresentationsWhenGettingOutgoingTypedRelationshipsForANode()
             throws JsonParseException
     {
-        JaxRsResponse response = sendRetrieveRequestToServer( nodeWithRelationships, "/out/HATES" );
+        JaxRsResponse response = sendRetrieveRequestToServer( nodeWithRelationships, "/Message/HATES" );
         assertEquals( 200, response.getStatus() );
         assertThat( response.getType().toString(), containsString( MediaType.APPLICATION_JSON ) );
         verifyRelReps( 1, response.getEntity() );
@@ -252,7 +252,7 @@ public class RetrieveRelationshipsFromNodeIT extends AbstractRestFunctionalDocTe
     public void shouldRespondWith200AndEmptyListOfRelationshipRepresentationsWhenGettingOutgoingRelationshipsForANodeWithoutRelationships()
             throws JsonParseException
     {
-        JaxRsResponse response = sendRetrieveRequestToServer( nodeWithoutRelationships, "/out" );
+        JaxRsResponse response = sendRetrieveRequestToServer( nodeWithoutRelationships, "/Message" );
         assertEquals( 200, response.getStatus() );
         assertThat( response.getType().toString(), containsString( MediaType.APPLICATION_JSON ) );
         verifyRelReps( 0, response.getEntity() );
@@ -286,7 +286,7 @@ public class RetrieveRelationshipsFromNodeIT extends AbstractRestFunctionalDocTe
     @Test
     public void shouldRespondWith404WhenGettingOutgoingRelationshipsForNonExistingNode()
     {
-        JaxRsResponse response = sendRetrieveRequestToServer( nonExistingNode, "/out" );
+        JaxRsResponse response = sendRetrieveRequestToServer( nonExistingNode, "/Message" );
         assertEquals( 404, response.getStatus() );
         response.close();
     }

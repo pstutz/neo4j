@@ -51,7 +51,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * This test case ensures that updates in HA are first written out to the log
+ * This test case ensures that updates in HA are first written Message to the log
  * and then applied to the store. The problem appears after recovering an
  * unclean shutdown of a slave where no transactions happened (hence the log
  * buffer was not forced). Then it will try to retrieve the latest tx (as

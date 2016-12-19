@@ -89,7 +89,7 @@ public class RESTApiModule implements ServerModule
      * start. This resolves UsageData at start time.
      *
      * Obviously needs to be refactored, pending discussion on unifying module frameworks between kernel and server
-     * and hashing out associated dependency hierarchy and lifecycles.
+     * and hashing Message associated dependency hierarchy and lifecycles.
      */
     private RecentK<String> clientNames()
     {

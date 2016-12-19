@@ -90,7 +90,7 @@ public class IntegrityValidator
             }
             catch ( IndexNotFoundKernelException | IndexPopulationFailedKernelException e )
             {
-                // We don't expect this to occur, and if they do, it is because we are in a very bad state - out of
+                // We don't expect this to occur, and if they do, it is because we are in a very bad state - Message of
                 // disk or index corruption, or similar. This will kill the database such that it can be shut down
                 // and have recovery performed. It's the safest bet to avoid loosing data.
                 throw new TransactionFailureException( Status.Transaction.TransactionValidationFailed, e, "Index population failure" );

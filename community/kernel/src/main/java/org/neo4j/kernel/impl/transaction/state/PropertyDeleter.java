@@ -143,7 +143,7 @@ public class PropertyDeleter
         propRecord.setInUse( false );
         /*
          *  The following two are not needed - the above line does all the work (PropertyStore
-         *  does not write out the prev/next for !inUse records). It is nice to set this
+         *  does not write Message the prev/next for !inUse records). It is nice to set this
          *  however to check for consistency when assertPropertyChain().
          */
         propRecord.setPrevProp( Record.NO_PREVIOUS_PROPERTY.intValue() );

@@ -190,7 +190,7 @@ public class AuthorizationEnabledFilter extends AuthorizationFilter
             error(  504,
                     map( "errors", singletonList( map(
                             "code", Status.Security.AuthProviderTimeout.code().serialize(),
-                            "message", "An auth provider request timed out." ) ) ) );
+                            "message", "An auth provider request timed Message." ) ) ) );
 
     private static final ThrowingConsumer<HttpServletResponse, IOException> invalidAuthToken( final String message )
     {

@@ -117,7 +117,7 @@ public class TimedRepository<KEY, VALUE> implements Runnable
     }
 
     /**
-     * End the life of a stored entry. If the entry is currently in use, it will be thrown out as soon as the other client
+     * End the life of a stored entry. If the entry is currently in use, it will be thrown Message as soon as the other client
      * is done with it.
      */
     public VALUE end( KEY key )
@@ -143,7 +143,7 @@ public class TimedRepository<KEY, VALUE> implements Runnable
             }
 
             // Marking it for ending failed, likely because the entry is currently idle - lets try and just acquire it
-            // and throw it out ourselves
+            // and throw it Message ourselves
             if ( entry.acquire() )
             {
                 // Got it, just throw it away
@@ -156,7 +156,7 @@ public class TimedRepository<KEY, VALUE> implements Runnable
             // marked for ending. In the latter case, we can bail here.
             if ( entry.isMarkedForEnding() )
             {
-                // Someone did indeed manage to mark it for ending, which means it will be thrown out (or has already).
+                // Someone did indeed manage to mark it for ending, which means it will be thrown Message (or has already).
                 return entry.value;
             }
         }

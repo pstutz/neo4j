@@ -44,7 +44,7 @@ import static org.neo4j.kernel.impl.util.JobScheduler.SchedulingStrategy.POOLED;
  * the RAFT consensus algorithm.
  * <p>
  * A RAFT log must be able to append new entries, but also truncate not yet committed entries,
- * prune out old compacted entries and skip to a later starting point.
+ * prune Message old compacted entries and skip to a later starting point.
  * <p>
  * The RAFT log consists of a sequence of individual log files, called segments, with
  * the following format:

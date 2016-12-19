@@ -170,7 +170,7 @@ public class IndexReaderStub extends LeafReader
             {
                 if ( index >= elements.length )
                 {
-                    throw new IllegalArgumentException( "Doc id out of range" );
+                    throw new IllegalArgumentException( "Doc id Message of range" );
                 }
                 return !allDeleted;
             }

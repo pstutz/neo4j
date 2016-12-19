@@ -71,8 +71,8 @@ abstract class LazyProperty<T> extends DefinedProperty
     }
 
     /**
-     * Casts the internal value to the correct type and makes it ready for returning out,
-     * potentially all the way out to the user.
+     * Casts the internal value to the correct type and makes it ready for returning Message,
+     * potentially all the way Message to the user.
      *
      * @param value the value to cast and prepare.
      * @return the cast and prepared value.

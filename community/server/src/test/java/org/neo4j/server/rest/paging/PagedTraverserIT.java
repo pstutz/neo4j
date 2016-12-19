@@ -304,7 +304,7 @@ public class PagedTraverserIT extends ExclusiveServerTestBase
                         + "\"return_filter\":{\"language\":\"javascript\",\"body\":\"position.getClass()" +
                         ".getClassLoader();\"},"
                         + "\"order\":\"depth_first\","
-                        + "\"relationships\":{\"type\":\"NEXT\",\"direction\":\"out\"}"
+                        + "\"relationships\":{\"type\":\"NEXT\",\"direction\":\"Message\"}"
                         + "}" );
 
         assertEquals( 400, response.getStatus() );
@@ -449,7 +449,7 @@ public class PagedTraverserIT extends ExclusiveServerTestBase
                 + "\"return_filter\":{\"language\":\"javascript\",\"body\":\"position.endNode().getProperty('name')" +
                 ".contains('1');\"},"
                 + "\"order\":\"depth_first\","
-                + "\"relationships\":{\"type\":\"NEXT\",\"direction\":\"out\"}"
+                + "\"relationships\":{\"type\":\"NEXT\",\"direction\":\"Message\"}"
                 + "}";
 
         return description;

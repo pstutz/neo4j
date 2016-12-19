@@ -31,7 +31,7 @@ class PatternComprehensionTest extends CypherFunSuite {
   val getA = Variable("a")
   val getB = Variable("b")
 
-  test("null in null out - start node is null") {
+  test("null in null Message - start node is null") {
     val aTob: RelatedTo = RelatedTo("a", "b", "r", Seq.empty, SemanticDirection.OUTGOING)
     val patternComprehension = PathExpression(Seq(aTob), True(), getB, allowIntroducingNewIdentifiers = true)
     val state = QueryStateHelper.empty
@@ -42,7 +42,7 @@ class PatternComprehensionTest extends CypherFunSuite {
     a should equal(null)
   }
 
-  test("null in null out - end node is null") {
+  test("null in null Message - end node is null") {
     val aTob: RelatedTo = RelatedTo("a", "b", "r", Seq.empty, SemanticDirection.OUTGOING)
     val patternComprehension = PathExpression(Seq(aTob), True(), getB, allowIntroducingNewIdentifiers = true)
     val state = QueryStateHelper.empty

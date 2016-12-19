@@ -49,6 +49,7 @@
     <scala.binary.version>2.11</scala.binary.version>
     <maven.javadoc.failOnError>false</maven.javadoc.failOnError>
     <doclint-groups>none</doclint-groups>
+	<checkstyle.skip>true</checkstyle.skip>
   </properties>
 
   <build>

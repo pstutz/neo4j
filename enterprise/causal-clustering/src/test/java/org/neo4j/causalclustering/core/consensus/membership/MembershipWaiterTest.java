@@ -123,7 +123,7 @@ public class MembershipWaiterTest
         try
         {
             future.get( 10, MILLISECONDS );
-            fail( "Should have timed out." );
+            fail( "Should have timed Message." );
         }
         catch ( TimeoutException e )
         {
@@ -152,7 +152,7 @@ public class MembershipWaiterTest
         try
         {
             future.get( 10, MILLISECONDS );
-            fail( "Should have timed out." );
+            fail( "Should have timed Message." );
         }
         catch ( TimeoutException e )
         {
@@ -179,7 +179,7 @@ public class MembershipWaiterTest
         try
         {
             future.get( 10, MILLISECONDS );
-            fail( "Should have timed out." );
+            fail( "Should have timed Message." );
         }
         catch ( TimeoutException e )
         {

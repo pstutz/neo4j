@@ -22,14 +22,6 @@ package org.neo4j.server.security.enterprise.auth;
 import com.github.benmanes.caffeine.cache.Ticker;
 import org.apache.shiro.cache.CacheManager;
 import org.apache.shiro.realm.Realm;
-
-import java.io.File;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.stream.Collectors;
-
 import org.neo4j.commandline.admin.security.SetDefaultAdminCommand;
 import org.neo4j.dbms.DatabaseManagementSystemSettings;
 import org.neo4j.helpers.Service;
@@ -46,11 +38,7 @@ import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.impl.util.JobScheduler;
 import org.neo4j.kernel.lifecycle.LifeSupport;
 import org.neo4j.logging.LogProvider;
-import org.neo4j.server.security.auth.BasicPasswordPolicy;
-import org.neo4j.server.security.auth.CommunitySecurityModule;
-import org.neo4j.server.security.auth.FileUserRepository;
-import org.neo4j.server.security.auth.RateLimitedAuthenticationStrategy;
-import org.neo4j.server.security.auth.UserRepository;
+import org.neo4j.server.security.auth.*;
 import org.neo4j.server.security.enterprise.auth.plugin.PluginRealm;
 import org.neo4j.server.security.enterprise.auth.plugin.spi.AuthPlugin;
 import org.neo4j.server.security.enterprise.auth.plugin.spi.AuthenticationPlugin;
@@ -58,6 +46,13 @@ import org.neo4j.server.security.enterprise.auth.plugin.spi.AuthorizationPlugin;
 import org.neo4j.server.security.enterprise.configuration.SecuritySettings;
 import org.neo4j.server.security.enterprise.log.SecurityLog;
 import org.neo4j.time.Clocks;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.lang.String.format;
 import static org.neo4j.kernel.api.proc.Context.SECURITY_CONTEXT;

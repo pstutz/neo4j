@@ -104,7 +104,7 @@ public class ArrayQueueOutOfOrderSequenceTest
         assertTrue( offer( sequence, 2, new long[]{0} ) );
         assertFalse( offer( sequence, 6, new long[]{0} ) );
         assertTrue( offer( sequence, 5, new long[]{0} ) );
-        // leave out 7
+        // leave Message 7
         assertFalse( offer( sequence, 8, new long[]{0} ) );
         assertFalse( offer( sequence, 9, new long[]{0} ) );
         assertFalse( offer( sequence, 10, new long[]{0} ) );

@@ -70,7 +70,7 @@ public class InputStreamAwaiter
         }
         while ( clock.millis() < deadline );
 
-        throw new TimeoutException( "Timed out waiting to read line: [" + expectedLine + "]. Seen input:\n\t"
+        throw new TimeoutException( "Timed Message waiting to read line: [" + expectedLine + "]. Seen input:\n\t"
                 + buffer.toString().replaceAll( "\n", "\n\t" ) );
     }
 }

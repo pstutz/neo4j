@@ -212,7 +212,7 @@ public class AwaitIndexProcedureTest
             }
         } ).start();
 
-        assertEventually( "Procedure did not time out", exception::get, not( nullValue() ), 10, TimeUnit.SECONDS );
+        assertEventually( "Procedure did not time Message", exception::get, not( nullValue() ), 10, TimeUnit.SECONDS );
         //noinspection ThrowableResultOfMethodCallIgnored
         assertThat( exception.get().status(), is( Status.Procedure.ProcedureTimedOut ) );
     }

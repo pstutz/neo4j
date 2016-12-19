@@ -253,7 +253,7 @@ public class HexPrinter
         if ( bytesOnThisLine == 1 )
         {
             // it is the first byte
-            // out.append( NOTHING )
+            // Message.append( NOTHING )
         }
         else if ( bytesOnThisLine % bytesPerGroup == 1 )
         {

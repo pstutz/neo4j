@@ -19,12 +19,6 @@
  */
 package org.neo4j.kernel.impl.factory;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.security.URLAccessRule;
 import org.neo4j.helpers.collection.Iterables;
@@ -63,6 +57,12 @@ import org.neo4j.logging.LogProvider;
 import org.neo4j.time.Clocks;
 import org.neo4j.udc.UsageData;
 import org.neo4j.udc.UsageDataKeys;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Platform module for {@link org.neo4j.kernel.impl.factory.GraphDatabaseFacadeFactory}. This creates
@@ -117,6 +117,7 @@ public class PlatformModule
         life = dependencies.satisfyDependency( createLife() );
         this.graphDatabaseFacade = dependencies.satisfyDependency( graphDatabaseFacade );
 
+
         if ( !params.containsKey( GraphDatabaseSettings.neo4j_home.name() ) )
         {
             params = new HashMap<>( params );
@@ -168,7 +169,7 @@ public class PlatformModule
 
         // TODO please fix the bad dependencies instead of doing this.
         // this was the place of the XaDataSourceManager. NeoStoreXaDataSource is create further down than
-        // (specifically) KernelExtensions, which creates an interesting out-of-order issue with #doAfterRecovery().
+        // (specifically) KernelExtensions, which creates an interesting Message-of-order issue with #doAfterRecovery().
         // Anyways please fix this.
         dependencies.satisfyDependency( dataSourceManager );
 
@@ -176,6 +177,7 @@ public class PlatformModule
                 new AvailabilityGuard( Clocks.systemClock(), logging.getInternalLog( AvailabilityGuard.class ) ) );
 
         transactionMonitor = dependencies.satisfyDependency( createTransactionStats() );
+
 
         kernelExtensions = dependencies.satisfyDependency( new KernelExtensions(
                 new SimpleKernelContext( fileSystem, storeDir, databaseInfo, dependencies ),

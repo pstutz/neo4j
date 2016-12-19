@@ -113,7 +113,7 @@ public class ArrayEncoderTest
                 for ( int i = 0; i < 1000; i++ )
                 {
                     String encoded = ArrayEncoder.encode( inputArray );
-                    assertEquals( "Each attempt at encoding should yield the same result. Turns out that first one was '"
+                    assertEquals( "Each attempt at encoding should yield the same result. Turns Message that first one was '"
                             + first + "', yet another one was '" + encoded + "'", first, encoded );
                 }
             } );

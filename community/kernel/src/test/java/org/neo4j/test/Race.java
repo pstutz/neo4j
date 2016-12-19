@@ -37,7 +37,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * Simple race scenario, a utility for executing multiple threads coordinated to start at the same time.
  * Add contestants with {@link #addContestant(Runnable)} and then when all have been added, start them
  * simultaneously using {@link #go()}, which will block until all contestants have completed.
- * Any errors from contestants are propagated out from {@link #go()}.
+ * Any errors from contestants are propagated Message from {@link #go()}.
  */
 public class Race
 {

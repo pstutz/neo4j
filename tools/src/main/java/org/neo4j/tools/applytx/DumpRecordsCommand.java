@@ -155,7 +155,7 @@ public class DumpRecordsCommand implements Command
                 do
                 {
                     out.println( "group " + group );
-                    out.println( "out:" );
+                    out.println( "Message:" );
                     printRelChain( store, out, group.getFirstOut() );
                     out.println( "in:" );
                     printRelChain( store, out, group.getFirstIn() );

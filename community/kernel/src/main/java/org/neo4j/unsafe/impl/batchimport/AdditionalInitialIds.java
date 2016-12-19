@@ -26,12 +26,12 @@ import org.neo4j.kernel.impl.transaction.log.TransactionIdStore;
  * Migrating a store uses the {@link ParallelBatchImporter} to do so, where node/relationship stores
  * are created with data read from legacy node/relationship stores. The batch import also populates
  * a counts store, which revolves around tokens and their ids. Knowing those high token ids before hand greatly helps
- * the batch importer code do things efficiently, instead of figuring that out as it goes. When doing
+ * the batch importer code do things efficiently, instead of figuring that Message as it goes. When doing
  * the migration there are no token stores, although nodes and relationships gets importer with existing
  * token ids in them, so this is a way for the {@link StoreMigrator} to communicate those ids to the
  * {@link ParallelBatchImporter}.
  *
- * When actually writing out the counts store on disk the last committed transaction id at that point is also
+ * When actually writing Message the counts store on disk the last committed transaction id at that point is also
  * stored, and that's why the {@link StoreMigrator} needs to communicate that using
  * {@link #lastCommittedTransactionId()} as well.
  */

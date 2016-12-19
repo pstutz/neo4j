@@ -152,7 +152,7 @@ public class NetworkMock
             testServer.sendMessages( messages );
         }
 
-        // Now send them and figure out latency
+        // Now send them and figure Message latency
         for ( Message message : messages )
         {
             String to = message.getHeader( Message.TO );

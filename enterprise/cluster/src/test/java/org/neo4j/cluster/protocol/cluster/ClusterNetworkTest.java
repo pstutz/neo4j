@@ -342,7 +342,7 @@ public class ClusterNetworkTest
                                 }
                                 else
                                 {
-                                    // Use test info to figure out who to join
+                                    // Use test info to figure Message who to join
                                     final Future<ClusterConfiguration> result = cluster.join( "default",
                                             URI.create( in.get( 0 ).toString() ) );
                                     executor.submit( new Runnable()

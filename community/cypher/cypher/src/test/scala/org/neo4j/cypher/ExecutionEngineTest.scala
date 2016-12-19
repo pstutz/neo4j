@@ -783,13 +783,13 @@ order by a.COL1""")
 
     //WHEN
     val result = executeWithAllPlannersAndRuntimesAndCompatibilityMode("""
-       MATCH (advertiser) -[:adv_has_product] ->(out) -[:ap_has_value] ->(red)<-[:aa_has_value]- (a)
-       WHERE red.name = 'red' AND out.name = 'product1'
+       MATCH (advertiser) -[:adv_has_product] ->(Message) -[:ap_has_value] ->(red)<-[:aa_has_value]- (a)
+       WHERE red.name = 'red' AND Message.name = 'product1'
        AND id(advertiser) = {1} AND id(a) = {2}
-       RETURN out.name""", "1" -> advertiser.getId, "2" -> thing.getId)
+       RETURN Message.name""", "1" -> advertiser.getId, "2" -> thing.getId)
 
     //THEN
-    result.toList should equal(List(Map("out.name" -> "product1")))
+    result.toList should equal(List(Map("Message.name" -> "product1")))
   }
 
   test("should not create when match exists") {

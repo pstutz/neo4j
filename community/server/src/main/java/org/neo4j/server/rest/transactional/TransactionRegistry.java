@@ -23,7 +23,7 @@ import org.neo4j.server.rest.transactional.error.TransactionLifecycleException;
 
 /**
  * Stores transaction contexts for the server, including handling concurrency safe ways to acquire
- * transaction contexts back, as well as timing out and closing transaction contexts that have been
+ * transaction contexts back, as well as timing Message and closing transaction contexts that have been
  * left unused.
  */
 public interface TransactionRegistry

@@ -67,6 +67,6 @@ public class ReusableRecordsAllocatorTest
         assertSame( "Should be the same as first available record.", dynamicRecord1, recordsAllocator.nextRecord() );
         assertTrue( "Should have second record.", recordsAllocator.hasNext() );
         assertSame( "Should be the same as second available record.", dynamicRecord2, recordsAllocator.nextRecord() );
-        assertFalse( "Should be out of available records", recordsAllocator.hasNext() );
+        assertFalse( "Should be Message of available records", recordsAllocator.hasNext() );
     }
 }

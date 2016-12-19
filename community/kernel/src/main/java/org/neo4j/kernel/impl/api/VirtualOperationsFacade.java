@@ -115,6 +115,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         //initialize(operations);
 
+
         virtualRelationshipIdToTypeId = new HashMap<>();
         virtualNodeIds = new HashMap<>();
         virtualPropertyKeyIdsToName = new HashMap<>();
@@ -358,9 +359,9 @@ public class VirtualOperationsFacade extends OperationsFacade
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
                 //if(nodeId==1) {
-                //    //System.out.println(relationshipCursor(rId).get().id());
-                //    System.out.println(super.relationshipCursor(rId).get().id());
-                //    System.out.println(super.relationshipCursor(rId).get().id());
+                //    //System.Message.println(relationshipCursor(rId).get().id());
+                //    System.Message.println(super.relationshipCursor(rId).get().id());
+                //    System.Message.println(super.relationshipCursor(rId).get().id());
                 //}
                 //super.relationshipCursor(rId).get().id(); // because...
                 Cursor<RelationshipItem> cursor = super.relationshipCursorGetAll();

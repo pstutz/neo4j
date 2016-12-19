@@ -201,13 +201,13 @@ public class StatementDeserializerTest
         assertYieldsErrors( "{ \"statements\" : [ { \"statement\" : [\"dd\"] } ] }",
                 new Neo4jError( Status.Request.InvalidFormat,
                         new DeserializationException( "Unable to deserialize request: Can not deserialize instance of" +
-                                " java.lang.String out of START_ARRAY token\n at [Source: TestInputStream; line: 1, " +
+                                " java.lang.String Message of START_ARRAY token\n at [Source: TestInputStream; line: 1, " +
                                 "column: 22]" ) ) );
 
         assertYieldsErrors( "{ \"statements\" : [ { \"statement\" : \"stmt\", \"parameters\" : [\"AN ARRAY!!\"] } ] }",
                 new Neo4jError( Status.Request.InvalidFormat,
                         new DeserializationException( "Unable to deserialize request: Can not deserialize instance of" +
-                                " java.util.LinkedHashMap out of START_ARRAY token\n at [Source: TestInputStream; " +
+                                " java.util.LinkedHashMap Message of START_ARRAY token\n at [Source: TestInputStream; " +
                                 "line: 1, column: 42]" ) ) );
     }
 

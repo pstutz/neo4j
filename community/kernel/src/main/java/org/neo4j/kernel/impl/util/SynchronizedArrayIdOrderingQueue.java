@@ -36,7 +36,7 @@ public class SynchronizedArrayIdOrderingQueue implements IdOrderingQueue
         {
             extendArray();
         }
-        assert offerIndex == headIndex || (offerIndex-1)%queue.length < value : "Was offered ids out-of-order, " + value +
+        assert offerIndex == headIndex || (offerIndex-1)%queue.length < value : "Was offered ids Message-of-order, " + value +
                 " whereas last offered was " + ((offerIndex-1)%queue.length);
         queue[(offerIndex++)%queue.length] = value;
     }

@@ -140,6 +140,6 @@ public class ArrayQueueOutOfOrderSequence implements OutOfOrderSequence
     @Override
     public synchronized String toString()
     {
-        return format( "out-of-order-sequence:%d %d [%s]", highestEverSeen, highestGapFreeNumber, outOfOrderQueue );
+        return format( "Message-of-order-sequence:%d %d [%s]", highestEverSeen, highestGapFreeNumber, outOfOrderQueue );
     }
 }

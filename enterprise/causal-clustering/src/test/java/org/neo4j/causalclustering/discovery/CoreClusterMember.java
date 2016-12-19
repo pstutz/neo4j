@@ -19,12 +19,6 @@
  */
 package org.neo4j.causalclustering.discovery;
 
-import java.io.File;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedMap;
-import java.util.function.IntFunction;
-
 import org.neo4j.causalclustering.core.CausalClusteringSettings;
 import org.neo4j.causalclustering.core.CoreGraphDatabase;
 import org.neo4j.causalclustering.core.consensus.RaftMachine;
@@ -41,9 +35,14 @@ import org.neo4j.logging.Level;
 import org.neo4j.server.configuration.ClientConnectorSettings;
 import org.neo4j.server.configuration.ClientConnectorSettings.HttpConnector.Encryption;
 
+import java.io.File;
+import java.util.List;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.function.IntFunction;
+
 import static java.lang.String.format;
 import static java.util.stream.Collectors.joining;
-
 import static org.neo4j.causalclustering.core.EnterpriseCoreEditionModule.CLUSTER_STATE_DIRECTORY_NAME;
 import static org.neo4j.causalclustering.core.consensus.log.RaftLog.PHYSICAL_LOG_DIRECTORY_NAME;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;

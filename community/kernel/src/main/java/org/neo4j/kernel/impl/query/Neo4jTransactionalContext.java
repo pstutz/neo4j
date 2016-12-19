@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel.impl.query;
 
-import java.util.function.Supplier;
-
 import org.neo4j.graphdb.Lock;
 import org.neo4j.graphdb.NotInTransactionException;
 import org.neo4j.graphdb.PropertyContainer;
@@ -34,6 +32,8 @@ import org.neo4j.kernel.impl.api.KernelStatement;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.coreapi.InternalTransaction;
 import org.neo4j.kernel.impl.coreapi.PropertyContainerLocker;
+
+import java.util.function.Supplier;
 
 public class Neo4jTransactionalContext implements TransactionalContext
 {

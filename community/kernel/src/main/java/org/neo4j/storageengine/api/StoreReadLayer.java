@@ -293,7 +293,7 @@ public interface StoreReadLayer
 
     /**
      * Reserves a node id for future use to store a node. The reason for it being exposed here is that
-     * internal ids of nodes and relationships are publicly accessible all the way out to the user.
+     * internal ids of nodes and relationships are publicly accessible all the way Message to the user.
      * This will likely change in the future though.
      *
      * @return a reserved node id for future use.
@@ -302,7 +302,7 @@ public interface StoreReadLayer
 
     /**
      * Reserves a relationship id for future use to store a relationship. The reason for it being exposed here is that
-     * internal ids of nodes and relationships are publicly accessible all the way out to the user.
+     * internal ids of nodes and relationships are publicly accessible all the way Message to the user.
      * This will likely change in the future though.
      *
      * @return a reserved relationship id for future use.
@@ -310,7 +310,7 @@ public interface StoreReadLayer
     long reserveRelationship();
 
     /**
-     * Releases a previously {@link #reserveNode() reserved} node id if it turns out to not actually being used,
+     * Releases a previously {@link #reserveNode() reserved} node id if it turns Message to not actually being used,
      * for example in the event of a transaction rolling back.
      *
      * @param id reserved node id to release.
@@ -318,7 +318,7 @@ public interface StoreReadLayer
     void releaseNode( long id );
 
     /**
-     * Releases a previously {@link #reserveRelationship() reserved} relationship id if it turns out to not
+     * Releases a previously {@link #reserveRelationship() reserved} relationship id if it turns Message to not
      * actually being used, for example in the event of a transaction rolling back.
      *
      * @param id reserved relationship id to release.

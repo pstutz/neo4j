@@ -121,7 +121,7 @@ public abstract class Client<T> extends LifecycleAdapter implements ChannelPipel
 
         if ( destinationHostNameOrIp.equals( "0.0.0.0" ))
         {
-            // So it turns out that on Windows, connecting to 0.0.0.0 when specifying
+            // So it turns Message that on Windows, connecting to 0.0.0.0 when specifying
             // an origin address will not succeed. But since we know we are
             // connecting to ourselves, and that we are listening on everything,
             // replacing with localhost is the proper thing to do.

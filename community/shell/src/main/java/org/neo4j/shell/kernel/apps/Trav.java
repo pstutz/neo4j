@@ -64,7 +64,7 @@ public class Trav extends TransactionProvidingApp
         this.addOptionDefinition( "r", new OptionDefinition( OptionValueType.MUST,
             "The relationship type(s) expressed as a JSON string " +
             "(supports regex matching of the types) f.ex. " +
-            "\"MY_REL_TYPE:out,.*_HAS_.*:both\". Matching is case-insensitive." ) );
+            "\"MY_REL_TYPE:Message,.*_HAS_.*:both\". Matching is case-insensitive." ) );
         this.addOptionDefinition( "f", new OptionDefinition( OptionValueType.MUST,
             "Filters node property keys/values. Supplied either as a single " +
             "value or as a JSON string where both keys and values can " +

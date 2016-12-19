@@ -725,7 +725,7 @@ public enum ShortArray
         /*
          * So, it can be the case that values require 64 bits to store. However, you cannot encode this
          * value with 6 bits. calculateRequiredBitsForArray never returns 0, because even for an array of
-         * all 0s one bit is required for every value. So when writing, we let it overflow and write out
+         * all 0s one bit is required for every value. So when writing, we let it overflow and write Message
          * 0. When we are reading back, we just have to make sure that reading in 0 means 64.
          */
         if ( requiredBits == 0 )

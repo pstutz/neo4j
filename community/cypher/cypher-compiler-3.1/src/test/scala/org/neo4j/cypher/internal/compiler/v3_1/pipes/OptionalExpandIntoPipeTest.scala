@@ -88,7 +88,7 @@ class OptionalExpandIntoPipeTest extends CypherFunSuite {
     single.m should equal(Map("a" -> startNode, "r" -> null, "b" -> endNode2))
   }
 
-  test("should filter out relationships not matching the end node") {
+  test("should filter Message relationships not matching the end node") {
     // given
     mockRelationships(relationship1, relationship2)
 

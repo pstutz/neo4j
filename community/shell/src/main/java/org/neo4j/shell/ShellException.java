@@ -26,7 +26,7 @@ import java.io.StringWriter;
 /**
  * A general shell exception when an error occurs. Standard Java exceptions (java.*)
  * gets wrapped normally in a ShellException. For other unknown exceptions the
- * actual stacktrace is taken out and injected as a string. This is done because
+ * actual stacktrace is taken Message and injected as a string. This is done because
  * we don't know how the clients classpath looks compared to the server and
  * we guard from ClassNotFoundExceptions on the client this way.
  */

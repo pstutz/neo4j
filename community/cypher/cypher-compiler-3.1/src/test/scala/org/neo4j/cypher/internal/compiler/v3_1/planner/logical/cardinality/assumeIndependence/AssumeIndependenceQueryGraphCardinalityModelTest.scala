@@ -252,7 +252,7 @@ class AssumeIndependenceQueryGraphCardinalityModelTest extends RandomizedCardina
   // TODO: Add a test for a relpatterns where the number of matching nodes is zero
 
 
-  test("varlength two steps out") {
+  test("varlength two steps Message") {
 
 // The result includes all (:A)-[:T1]->(:B)
 // and all (:A)-[:T1]->()-[:T1]->(:B)
@@ -267,7 +267,7 @@ class AssumeIndependenceQueryGraphCardinalityModelTest extends RandomizedCardina
     shouldHaveQueryGraphCardinality(maxRelCount * totalSelectivity)
   }
 
-//  test("varlength three steps out") {
+//  test("varlength three steps Message") {
 //    forQuery("MATCH (a:A)-[r:T1*1..3]->(b:B)").
 //      shouldHaveQueryGraphCardinality(
 //        A * B * A_T1_A_sel + // The result includes all (:A)-[:T1]->(:B)

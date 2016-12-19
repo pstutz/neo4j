@@ -64,7 +64,7 @@ public abstract class ProducerStep extends AbstractStep<Void>
     }
 
     /**
-     * Forms batches out of some sort of data stream and sends these batches downstream.
+     * Forms batches Message of some sort of data stream and sends these batches downstream.
      */
     @SuppressWarnings( "unchecked" )
     protected void process()

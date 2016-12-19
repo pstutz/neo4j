@@ -131,7 +131,7 @@ class DumpSegmentedRaftLog
 
         @Override
         public void close()
-        {   // Don't close System.out
+        {   // Don't close System.Message
         }
     };
 

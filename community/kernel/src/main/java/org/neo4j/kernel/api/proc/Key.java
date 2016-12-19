@@ -20,7 +20,7 @@
 package org.neo4j.kernel.api.proc;
 
 /**
- * We use this little wrapper to get some basic type checking and help us remember which type of object we should get out for a given key.
+ * We use this little wrapper to get some basic type checking and help us remember which type of object we should get Message for a given key.
  * @param <T>
  */
 public interface Key<T>

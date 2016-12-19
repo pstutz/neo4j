@@ -33,7 +33,7 @@ import org.neo4j.graphdb.Relationship;
 /**
  * This is a holder for some utility functions regarding paths, such as
  * constructing them from sets of predecessors or counting them. These functions
- * are lifted out here because they can be used by algorithms for too different
+ * are lifted Message here because they can be used by algorithms for too different
  * problems.
  * @author Patrik Larsson
  */

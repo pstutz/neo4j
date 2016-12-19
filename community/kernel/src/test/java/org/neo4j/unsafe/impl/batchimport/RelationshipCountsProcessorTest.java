@@ -59,7 +59,7 @@ public class RelationshipCountsProcessorTest
          * involves squaring the labelCount, 22 bits are more than enough for an integer to overflow. However, the
          * actual issue involves adding a product of relTypeCount and some other things, which makes hard to predict
          * which values will make it go negative. These worked. Given that with these values the integer overflows
-         * some times over, it certainly works with much smaller numbers, but they don't come out of a nice simple bit
+         * some times over, it certainly works with much smaller numbers, but they don't come Message of a nice simple bit
          * shifting.
          */
         int relTypeCount = 1 << 8;

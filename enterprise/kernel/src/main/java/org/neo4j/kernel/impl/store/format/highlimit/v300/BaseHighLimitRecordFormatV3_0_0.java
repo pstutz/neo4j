@@ -57,7 +57,7 @@ import static org.neo4j.kernel.impl.store.RecordPageLocationCalculator.pageIdFor
  * NOTE to the rest of the flags is that a good use of them is to denote whether or not an ID reference is
  * null (-1) as to save 3B (smallest compressed size) by not writing a reference at all.
  *
- * For records that are the first out of multiple record units, then immediately following the header byte is
+ * For records that are the first Message of multiple record units, then immediately following the header byte is
  * the reference (3-8B) to the secondary ID. After that the "statically sized" data and in the end the
  * dynamically sized data. The general thinking is that the break-off into the secondary record will happen in
  * the sequence of dynamically sized references and this will allow for crossing the record boundary

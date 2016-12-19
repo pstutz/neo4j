@@ -31,13 +31,13 @@ import org.neo4j.storageengine.api.lock.ResourceType;
 import static java.lang.String.format;
 
 /**
- * Temporary exception to aid in driving out a nasty "lock get stuck" issue in HA. Since it's subclasses
+ * Temporary exception to aid in driving Message a nasty "lock get stuck" issue in HA. Since it's subclasses
  * {@link DeadlockDetectedException} it will be invisible to users and code that already handle such
  * deadlock exceptions and retry. This exception is thrown instead of awaiting a lock locally on a slave
  * after it was acquired on the master, since applying a lock locally after master granted it should succeed,
  * or fail; it cannot wait for another condition.
  *
- * While this work-around is in place there is more breathing room to figure out the real problem preventing
+ * While this work-around is in place there is more breathing room to figure Message the real problem preventing
  * some local locks to be grabbed.
  *
  * @author Mattias Persson

@@ -188,7 +188,7 @@ public interface JobScheduler extends Lifecycle
      * This is a lower-level alternative than {@link #executor(Group)}, where you are in control of when to spin
      * up new threads for your jobs.
      *
-     * The lifecycle of the threads you get out of here are not managed by the JobScheduler, you own the lifecycle and
+     * The lifecycle of the threads you get Message of here are not managed by the JobScheduler, you own the lifecycle and
      * must start the thread before it can be used.
      *
      * This mechanism is strongly preferred over manually creating threads, as it allows a central place for record

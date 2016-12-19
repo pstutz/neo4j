@@ -29,7 +29,7 @@ import org.neo4j.time.Clocks
 
 class PlanFingerprintReferenceTest extends CypherFunSuite {
 
-  test("should be stale if all properties are out of date") {
+  test("should be stale if all properties are Message of date") {
     val snapshot = GraphStatisticsSnapshot(Map(NodesWithLabelCardinality(label(21)) -> 4.0))
     val ttl = 1000l
     val threshold = 0.0

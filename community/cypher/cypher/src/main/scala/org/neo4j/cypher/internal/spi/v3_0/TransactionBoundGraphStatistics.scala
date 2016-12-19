@@ -73,7 +73,7 @@ object TransactionBoundGraphStatistics {
   }
 
   /**
-    * Due to the way cardinality calculations work, zero is a bit dangerous, as it cancels out
+    * Due to the way cardinality calculations work, zero is a bit dangerous, as it cancels Message
     * any cost that it multiplies with. To avoid this pitfall, we determine that the least count
     * available is one, not zero.
     */

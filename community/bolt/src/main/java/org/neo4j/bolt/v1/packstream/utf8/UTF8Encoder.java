@@ -31,7 +31,7 @@ import java.nio.ByteBuffer;
  * We currently do "bulk" encoding, where the whole string is turned
  * into UTF-8 before it gets returned. This is simply a limitation in
  * PackStream currently in that we need to know the length of utf-8
- * strings up-front, so we can't stream them out.
+ * strings up-front, so we can't stream them Message.
  *
  * This becomes an issue for very large strings, and should be remedied
  * in Bolt V2 by introducing streaming options for Strings in the same

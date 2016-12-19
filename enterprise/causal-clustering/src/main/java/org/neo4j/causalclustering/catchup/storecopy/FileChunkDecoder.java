@@ -30,7 +30,7 @@ import org.neo4j.causalclustering.messaging.NetworkReadableClosableChannelNetty4
 /**
  * This class does not consume bytes during the decode method. Instead, it puts a {@link FileChunk} object with
  * a reference to the buffer, to be consumed later. This is the reason it does not extend
- * {@link io.netty.handler.codec.ByteToMessageDecoder}, since that class fails if an object is added in the out
+ * {@link io.netty.handler.codec.ByteToMessageDecoder}, since that class fails if an object is added in the Message
  * list but no bytes have been consumed.
  */
 public class FileChunkDecoder extends MessageToMessageDecoder<ByteBuf>

@@ -254,7 +254,7 @@ public class LeaderTest
 
         Outcome outcome = leader.handle( response, state, mock( Log.class ) );
 
-        // then the leader should not send anything, since this is a delayed, out of order response to a previous append
+        // then the leader should not send anything, since this is a delayed, Message of order response to a previous append
         // request
         assertTrue( outcome.getOutgoingMessages().isEmpty() );
         // The follower state should not be touched
@@ -489,7 +489,7 @@ public class LeaderTest
 
         Leader leader = new Leader();
 
-        // when a single instance responds (plus self == 2 out of 3 instances)
+        // when a single instance responds (plus self == 2 Message of 3 instances)
         Outcome outcome =
                 leader.handle( new RaftMessages.AppendEntries.Response( member1, 0, true, 0, 0 ), state, log() );
 

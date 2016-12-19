@@ -181,7 +181,7 @@ public class Leader implements RaftMessageHandler
                     /*
                      * Matches from older terms can in complicated leadership change / log truncation scenarios
                      * be overwritten, even if they were replicated to a majority of instances. Thus we must only
-                     * consider matches from this leader's term when figuring out which have been safely replicated
+                     * consider matches from this leader's term when figuring Message which have been safely replicated
                      * and are ready for commit.
                      * This is explained nicely in Figure 3.7 of the thesis
                      */

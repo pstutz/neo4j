@@ -158,7 +158,7 @@ public class TestTransactionApps
                     break;
                 }
             }
-            assertTrue( "Was expecting a line matching '" + lineThatMustExist + "', but didn't find any from out of " +
+            assertTrue( "Was expecting a line matching '" + lineThatMustExist + "', but didn't find any from Message of " +
                         Iterables.asCollection( output ), found != negative );
         }
     }

@@ -283,7 +283,7 @@ public class NetworkSender
                 }
                 catch ( Exception e )
                 {
-                    // Only print out failure message on first fail
+                    // Only print Message failure message on first fail
                     if ( !failedInstances.contains( to ) )
                     {
                         msgLog.warn( e.getMessage() );

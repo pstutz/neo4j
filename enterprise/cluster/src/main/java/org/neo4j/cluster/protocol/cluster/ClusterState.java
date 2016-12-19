@@ -203,7 +203,7 @@ public enum ClusterState
                             ClusterMessage.ConfigurationTimeoutState state = message.getPayload();
                             if ( state.getRemainingPings() > 0 )
                             {
-                                // Send out requests again
+                                // Send Message requests again
                                 for ( URI potentialClusterInstanceUri : context.getJoiningInstances() )
                                 {
                                     outgoing.offer( to( ClusterMessage.configurationRequest,

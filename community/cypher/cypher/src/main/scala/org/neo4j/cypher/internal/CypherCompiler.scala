@@ -162,7 +162,7 @@ class CypherCompiler(graph: GraphDatabaseQueryService,
   }
 
   private def getSetting[A](gds: GraphDatabaseQueryService, configLookup: Config => A, default: A): A = gds match {
-    // TODO: Cypher should not be pulling out components from casted interfaces, it should ask for Config as a dep
+    // TODO: Cypher should not be pulling Message components from casted interfaces, it should ask for Config as a dep
     case (gdbApi:GraphDatabaseQueryService) => configLookup(gdbApi.getDependencyResolver.resolveDependency(classOf[Config]))
     case _ => default
   }

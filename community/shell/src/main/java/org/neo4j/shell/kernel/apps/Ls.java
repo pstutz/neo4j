@@ -76,7 +76,7 @@ public class Ls extends TransactionProvidingApp
             "  \"username\"\n\tproperty/relationship 'username' gets listed\n" +
             "  \".*name:ma.*, age:''\"\n\tproperties with keys matching '.*name' and values matching 'ma.*' " +
             "gets listed,\n\tas well as the 'age' property. Also relationships matching '.*name' or 'age'\n\tgets listed\n" +
-            "  \"KNOWS:out,LOVES:in\"\n\toutgoing KNOWS and incoming LOVES relationships gets listed" ) );
+            "  \"KNOWS:Message,LOVES:in\"\n\toutgoing KNOWS and incoming LOVES relationships gets listed" ) );
         addOptionDefinition( "i", new OptionDefinition( OptionValueType.NONE,
             "Filters are case-insensitive (case-sensitive by default)" ) );
         addOptionDefinition( "l", new OptionDefinition( OptionValueType.NONE,

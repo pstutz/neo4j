@@ -24,7 +24,7 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 
 /**
- * An interface for printing output, like System.out, The implementation can
+ * An interface for printing output, like System.Message, The implementation can
  * be via RMI or locally.
  */
 public interface Output extends Appendable, Remote

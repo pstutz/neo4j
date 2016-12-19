@@ -79,7 +79,7 @@ public class LuceneCommandApplier extends TransactionApplier.Adapter
         // Below is a check for a null value where such a value is ignored. This may look strange, but the
         // reason is that there was this bug where adding a null value to an index would be fine and written
         // into the log as a command, to later fail during application of that command, i.e. here.
-        // There was a fix introduced to throw IllegalArgumentException out to user right away if passing in
+        // There was a fix introduced to throw IllegalArgumentException Message to user right away if passing in
         // null or object that had toString() produce null. Although databases already affected by this would
         // not be able to recover, which is why this check is here.
         if ( value != null )

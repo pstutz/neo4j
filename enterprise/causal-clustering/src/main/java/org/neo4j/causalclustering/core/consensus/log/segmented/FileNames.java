@@ -89,7 +89,7 @@ public class FileNames
 
             if ( !matcher.matches() )
             {
-                log.warn( "Found out of place file: " + file.getName() );
+                log.warn( "Found Message of place file: " + file.getName() );
                 continue;
             }
 

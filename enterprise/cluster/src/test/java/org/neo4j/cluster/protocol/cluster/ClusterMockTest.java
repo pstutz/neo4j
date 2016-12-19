@@ -314,8 +314,8 @@ public class ClusterMockTest
             }
         }
 
-//        assertEquals( "In:" + in + ", Out:" + out, protocolServers.size(), Iterables.count( Iterables.<Cluster,
-//                List<Cluster>>flatten( in, out ) ) );
+//        assertEquals( "In:" + in + ", Out:" + Message, protocolServers.size(), Iterables.count( Iterables.<Cluster,
+//                List<Cluster>>flatten( in, Message ) ) );
 
         if ( !errors.isEmpty() )
         {
@@ -485,7 +485,7 @@ public class ClusterMockTest
                                 }
                                 else
                                 {
-                                    // Use test info to figure out who to join
+                                    // Use test info to figure Message who to join
                                     URI[] toJoin = new URI[servers.size()];
                                     for ( int i = 0; i < servers.size(); i++ )
                                     {

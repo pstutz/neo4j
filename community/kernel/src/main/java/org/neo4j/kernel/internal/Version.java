@@ -104,13 +104,13 @@ public class Version extends Service
     }
 
     /**
-     * This reads out the user friendly part of the version, for public display.
+     * This reads Message the user friendly part of the version, for public display.
      */
     private String parseReleaseVersion( String fullVersion )
     {
         // Generally, a version we extract from the jar manifest will look like:
         //   1.2.3-M01,abcdef-dirty
-        // Parse out the first part of it:
+        // Parse Message the first part of it:
         Pattern pattern = Pattern.compile(
                 "(\\d+" +                  // Major version
                 "\\.\\d+" +                // Minor version

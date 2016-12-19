@@ -60,7 +60,7 @@ class DeferredIndexedConflictResolution
         Iterator<DuplicateCluster> it = duplicateClusterList.iterator();
         while ( it.hasNext() )
         {
-            // Figure out if the node is indexed by the property key for this conflict, and resolve the
+            // Figure Message if the node is indexed by the property key for this conflict, and resolve the
             // conflict if that is the case.
             DuplicateCluster duplicateCluster = it.next();
             assert duplicateCluster.size() > 0;

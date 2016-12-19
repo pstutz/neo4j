@@ -19,16 +19,6 @@
  */
 package org.neo4j.tools.dump;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.PrintStream;
-import java.nio.ByteBuffer;
-import java.util.TimeZone;
-import java.util.function.Function;
-import java.util.function.Predicate;
-import java.util.regex.Pattern;
-
 import org.neo4j.collection.primitive.Primitive;
 import org.neo4j.collection.primitive.PrimitiveLongSet;
 import org.neo4j.cursor.IOCursor;
@@ -40,23 +30,20 @@ import org.neo4j.kernel.impl.transaction.command.Command.NodeCommand;
 import org.neo4j.kernel.impl.transaction.command.Command.PropertyCommand;
 import org.neo4j.kernel.impl.transaction.command.Command.RelationshipCommand;
 import org.neo4j.kernel.impl.transaction.command.Command.RelationshipGroupCommand;
-import org.neo4j.kernel.impl.transaction.log.FilteringIOCursor;
-import org.neo4j.kernel.impl.transaction.log.LogEntryCursor;
-import org.neo4j.kernel.impl.transaction.log.LogVersionBridge;
-import org.neo4j.kernel.impl.transaction.log.LogVersionedStoreChannel;
-import org.neo4j.kernel.impl.transaction.log.PhysicalLogFiles;
-import org.neo4j.kernel.impl.transaction.log.PhysicalLogVersionedStoreChannel;
-import org.neo4j.kernel.impl.transaction.log.ReadAheadLogChannel;
-import org.neo4j.kernel.impl.transaction.log.ReadableClosablePositionAwareChannel;
-import org.neo4j.kernel.impl.transaction.log.ReaderLogVersionBridge;
-import org.neo4j.kernel.impl.transaction.log.TransactionLogEntryCursor;
-import org.neo4j.kernel.impl.transaction.log.entry.LogEntry;
-import org.neo4j.kernel.impl.transaction.log.entry.LogEntryCommand;
-import org.neo4j.kernel.impl.transaction.log.entry.LogEntryReader;
-import org.neo4j.kernel.impl.transaction.log.entry.LogHeader;
-import org.neo4j.kernel.impl.transaction.log.entry.VersionAwareLogEntryReader;
+import org.neo4j.kernel.impl.transaction.log.*;
+import org.neo4j.kernel.impl.transaction.log.entry.*;
 import org.neo4j.storageengine.api.StorageCommand;
 import org.neo4j.tools.dump.InconsistencyReportReader.Inconsistencies;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.ByteBuffer;
+import java.util.TimeZone;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.regex.Pattern;
 
 import static java.util.TimeZone.getTimeZone;
 import static org.neo4j.helpers.Format.DEFAULT_TIME_ZONE;
@@ -359,7 +346,7 @@ public class DumpLogicalLog
 
         @Override
         public void close()
-        {   // Don't close System.out
+        {   // Don't close System.Message
         }
     };
 

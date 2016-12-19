@@ -41,7 +41,7 @@ public interface ShellServer extends Remote
      * to it. Output is written to the {@link Output} object.
      * @param clientID identifying the client.
      * @param line the command line to react to.
-     * @param out where output should go (like System.out).
+     * @param out where output should go (like System.Message).
      * @return some result from the execution, it's up to the client to
      * interpret the result, if any. F.ex. "e" could mean that the client
      * should exit, in response to a request "exit".
@@ -85,7 +85,7 @@ public interface ShellServer extends Remote
      * Notifies this server that the client identified by {@code clientID} is about to
      * leave, so any session associated with it will be removed.
      * @param clientID the ID which identifies the client which is leaving.
-     * These IDs are handed out from {@link #welcome(Map)}.
+     * These IDs are handed Message from {@link #welcome(Map)}.
      * @throws RemoteException RMI error.
      */
     void leave( Serializable clientID ) throws RemoteException;

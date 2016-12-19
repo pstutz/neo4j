@@ -1831,7 +1831,7 @@ public class RestfulGraphDatabaseTest
         long n2 = helper.createNode();
         helper.createRelationship( "knows", n1, n2 );
         Map<String, Object> config = MapUtil.map( "max depth", 3, "algorithm", "shortestPath", "to",
-                Long.toString( n2 ), "relationships", MapUtil.map( "type", "knows", "direction", "out" ) );
+                Long.toString( n2 ), "relationships", MapUtil.map( "type", "knows", "direction", "Message" ) );
         String payload = JsonHelper.createJsonFrom( config );
 
         Response response = service.singlePath( n1, payload );
@@ -1851,7 +1851,7 @@ public class RestfulGraphDatabaseTest
         long n2 = helper.createNode();
         helper.createRelationship( "knows", n1, n2 );
         Map<String, Object> config = MapUtil.map( "max depth", 3, "algorithm", "shortestPath", "to",
-                Long.toString( n2 ), "relationships", MapUtil.map( "type", "knows", "direction", "out" ) );
+                Long.toString( n2 ), "relationships", MapUtil.map( "type", "knows", "direction", "Message" ) );
         String payload = JsonHelper.createJsonFrom( config );
 
         Response response = service.allPaths( n1, payload );

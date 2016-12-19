@@ -198,7 +198,7 @@ public class ReflectiveProcedureTest
                                  "If you''d like your procedure to return `String`, you could define a record class " +
                                  "like:%n" +
                                  "public class Output '{'%n" +
-                                 "    public String out;%n" +
+                                 "    public String Message;%n" +
                                  "'}'%n" +
                                  "%n" +
                                  "And then define your procedure as returning `Stream<Output>`." ));

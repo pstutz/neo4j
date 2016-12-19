@@ -26,7 +26,7 @@ import org.neo4j.cypher.internal.frontend.v3_1.test_helpers.CypherFunSuite
 
 class ToBooleanFunctionTest extends CypherFunSuite {
 
-  test("null in null out") {
+  test("null in null Message") {
     assert(toBoolean(null) === null)
   }
 

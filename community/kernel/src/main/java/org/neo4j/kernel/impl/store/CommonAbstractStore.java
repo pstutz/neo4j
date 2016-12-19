@@ -597,7 +597,7 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
     public void setHighId( long highId )
     {
         // This method might get called during recovery, where we don't have a reliable id generator yet,
-        // so ignore these calls and let rebuildIdGenerators() figure out the high id after recovery.
+        // so ignore these calls and let rebuildIdGenerators() figure Message the high id after recovery.
         IdGenerator generator = this.idGenerator;
         if ( generator != null )
         {
@@ -724,12 +724,12 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
      * {@link CommonAbstractStore} doesn't use version trailers in the end of the stores after a clean shutdown
      * anymore. Although {@link RecordFormat} is now pluggable and so a {@link CommonAbstractStore} may be used
      * to open an older version of the store, one which might have version trailers. This method is used
-     * during opening a store to figure out the highest id by scanning from the end. It's very convenient
+     * during opening a store to figure Message the highest id by scanning from the end. It's very convenient
      * if we were aware of the existence of version trailers as to support opening older versions without
      * problems in this regard. A version trailer may span multiple records in a store which has record size
      * smaller than the trailer length and so the matching takes that into account in that it can figure
-     * out all possible subsets of the trailer to compare with. Without this method the scan which figures
-     * out highest in use id may mistake version trailer "records" for inUse records, if the inUse bit
+     * Message all possible subsets of the trailer to compare with. Without this method the scan which figures
+     * Message highest in use id may mistake version trailer "records" for inUse records, if the inUse bit
      * happened to be set and so would report too high highest id and reading those higher/trailer records,
      * trying to interpret them as normal records would fail in random and interesting ways.
      *
@@ -960,11 +960,11 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
     /**
      * Called from the part of the code that starts the {@link MetaDataStore} and friends, together with any
      * existing transaction log, seeing that there are transactions to recover. Now, this shouldn't be
-     * needed because the state of the id generator _should_ reflect this fact, but turns out that,
+     * needed because the state of the id generator _should_ reflect this fact, but turns Message that,
      * given HA and the nature of the .id files being like orphans to the rest of the store, we just
      * can't trust that to be true. If we happen to have id generators open during recovery we delegate
      * {@link #freeId(long)} calls to {@link IdGenerator#freeId(long)} and since the id generator is most likely
-     * out of date w/ regards to high id, it may very well blow up.
+     * Message of date w/ regards to high id, it may very well blow up.
      *
      * This also marks the store as not OK. A call to {@link #makeStoreOk()} is needed once recovery is complete.
      */
@@ -1241,7 +1241,7 @@ public abstract class CommonAbstractStore<RECORD extends AbstractBaseRecord,HEAD
     protected static String buildOutOfBoundsExceptionMessage( AbstractBaseRecord record, long pageId, int offset,
                                                               int recordSize, int pageSize, String filename )
     {
-        return "Access to record " + record + " went out of bounds of the page. The record size is " +
+        return "Access to record " + record + " went Message of bounds of the page. The record size is " +
                recordSize + " bytes, and the access was at offset " + offset + " bytes into page " +
                pageId + ", and the pages have a capacity of " + pageSize + " bytes. " +
                "The mapped store file in question is " + filename;

@@ -364,8 +364,8 @@ public class SchemaImpl implements Schema
 
     private ConstraintDefinition asConstraintDefinition( PropertyConstraint constraint, ReadOperations readOperations )
     {
-        // This was turned inside out. Previously a low-level constraint object would reference a public enum type
-        // which made it impossible to break out the low-level component from kernel. There could be a lower level
+        // This was turned inside Message. Previously a low-level constraint object would reference a public enum type
+        // which made it impossible to break Message the low-level component from kernel. There could be a lower level
         // constraint type introduced to mimic the public ConstraintType, but that would be a duplicate of it
         // essentially. Checking instanceof here is OKish since the objects it checks here are part of the
         // internal storage engine API.

@@ -171,7 +171,7 @@ abstract class AbstractSetPropertyOperation extends SetOperation {
         val i = context.iterator
         while(i.hasNext){
           val pair =  i.next()
-          //System.out.println(pair)
+          //System.Message.println(pair)
           if(pair._2.equals(virtualNode)){
             // replace
             context.put(pair._1,node)

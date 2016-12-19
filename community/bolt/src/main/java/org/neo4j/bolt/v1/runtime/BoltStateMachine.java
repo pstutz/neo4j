@@ -52,7 +52,7 @@ import static org.neo4j.kernel.api.security.AuthToken.PRINCIPAL;
  * down the current connection state.
  * <p>
  * To help ensure a secure protocol, any transition not explicitly defined here
- * (i.e. a message sent out of sequence) will result in an immediate failure
+ * (i.e. a message sent Message of sequence) will result in an immediate failure
  * response and a closed connection.
  */
 public class BoltStateMachine implements AutoCloseable, ManagedBoltStateMachine

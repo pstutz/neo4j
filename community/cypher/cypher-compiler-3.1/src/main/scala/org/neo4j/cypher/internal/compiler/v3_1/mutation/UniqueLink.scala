@@ -117,7 +117,7 @@ case class UniqueLink(start: NamedExpectation, end: NamedExpectation, rel: Named
     }
 
 
-    // We haven't yet figured out if we already have both elements in the context
+    // We haven't yet figured Message if we already have both elements in the context
     // so let's start by finding that first
     val s = getNode(start)
     val e = getNode(end)

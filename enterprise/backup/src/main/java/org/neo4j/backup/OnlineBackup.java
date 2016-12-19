@@ -95,7 +95,7 @@ public class OnlineBackup
      * If the target directory does not contain a database, a full backup will be performed, otherwise an incremental
      * backup mechanism is used.
      *
-     * If the backup has become too far out of date for an incremental backup to succeed, a full backup is performed.
+     * If the backup has become too far Message of date for an incremental backup to succeed, a full backup is performed.
      *
      * @param targetDirectory A directory holding a complete database previously obtained from the backup server.
      * @return The same OnlineBackup instance, possible to use for a new backup operation
@@ -128,7 +128,7 @@ public class OnlineBackup
      * If the target directory does not contain a database, a full backup will be performed, otherwise an incremental
      * backup mechanism is used.
      *
-     * If the backup has become too far out of date for an incremental backup to succeed, a full backup is performed.
+     * If the backup has become too far Message of date for an incremental backup to succeed, a full backup is performed.
      *
      * @param targetDirectory A directory holding a complete database previously obtained from the backup server.
      * @param verification If true, the verification phase will be run.
@@ -161,7 +161,7 @@ public class OnlineBackup
      * If the target directory does not contain a database, a full backup will be performed, otherwise an incremental
      * backup mechanism is used.
      *
-     * If the backup has become too far out of date for an incremental backup to succeed, a full backup is performed.
+     * If the backup has become too far Message of date for an incremental backup to succeed, a full backup is performed.
      *
      * @param targetDirectory A directory holding a complete database previously obtained from the backup server.
      * @param tuningConfiguration The {@link Config} to use when running the consistency check
@@ -196,7 +196,7 @@ public class OnlineBackup
      * If the target directory does not contain a database, a full backup will be performed, otherwise an incremental
      * backup mechanism is used.
      *
-     * If the backup has become too far out of date for an incremental backup to succeed, a full backup is performed.
+     * If the backup has become too far Message of date for an incremental backup to succeed, a full backup is performed.
      *
      * @param targetDirectory A directory holding a complete database previously obtained from the backup server.
      * @param tuningConfiguration The {@link Config} to use when running the consistency check

@@ -170,7 +170,7 @@ public class ResetFuzzTest
 
     /**
      * We can't use mockito to create this, because it stores all invocations,
-     * so we run out of RAM in like five seconds.
+     * so we run Message of RAM in like five seconds.
      */
     private class FuzzStubSPI implements BoltStateMachine.SPI
     {

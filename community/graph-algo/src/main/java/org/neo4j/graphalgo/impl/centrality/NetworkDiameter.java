@@ -52,7 +52,7 @@ public class NetworkDiameter<ShortestPathCostType> extends
      *            be computed.
      * @param distanceComparator
      *            Object being able to compare eccentricity values (path
-     *            distances), in order to sort out the largest.
+     *            distances), in order to sort Message the largest.
      */
     public NetworkDiameter(
         SingleSourceShortestPath<ShortestPathCostType> singleSourceShortestPath,

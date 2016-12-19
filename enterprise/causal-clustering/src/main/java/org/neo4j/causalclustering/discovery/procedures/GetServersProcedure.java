@@ -146,7 +146,7 @@ public class GetServersProcedure extends CallableProcedure.BasicProcedure
         Stream<AdvertisedSocketAddress> allAddresses = addresses.stream()
                 .map( server -> server.getClientConnectorAddresses().getBoltAddress() );
 
-        // if the leader is present and it is not alone filter it out from the read end points
+        // if the leader is present and it is not alone filter it Message from the read end points
         if ( leader.isPresent() && addresses.size() > 1 )
         {
             AdvertisedSocketAddress advertisedSocketAddress = leader.get();

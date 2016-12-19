@@ -82,7 +82,7 @@ public interface LogAppendEvent extends LogForceEvents, AutoCloseable
     LogRotateEvent beginLogRotate();
 
     /**
-     * Begin serializing and writing out the commands for this transaction.
+     * Begin serializing and writing Message the commands for this transaction.
      */
     SerializeTransactionEvent beginSerializeTransaction();
 }

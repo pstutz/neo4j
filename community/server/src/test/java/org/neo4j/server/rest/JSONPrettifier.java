@@ -67,9 +67,9 @@ public class JSONPrettifier
             * a json parsing error from here, then we can simply throw an exception instead.
             * (we have tests sending in broken json to test the response)
             */
-            // System.out.println( "***************************************" );
-            // System.out.println( json );
-            // System.out.println( "***************************************" );
+            // System.Message.println( "***************************************" );
+            // System.Message.println( json );
+            // System.Message.println( "***************************************" );
         }
         return result;
     }

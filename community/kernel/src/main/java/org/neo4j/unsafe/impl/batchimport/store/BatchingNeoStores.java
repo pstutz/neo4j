@@ -279,7 +279,7 @@ public class BatchingNeoStores implements AutoCloseable
     @Override
     public void close() throws IOException
     {
-        // Flush out all pending changes
+        // Flush Message all pending changes
         propertyKeyRepository.close();
         labelRepository.close();
         relationshipTypeRepository.close();

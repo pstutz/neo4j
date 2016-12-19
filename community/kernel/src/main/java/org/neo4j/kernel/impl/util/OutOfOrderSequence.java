@@ -20,7 +20,7 @@
 package org.neo4j.kernel.impl.util;
 
 /**
- * The thinking behind an out-of-order sequence is that, to the outside, there's one "last number"
+ * The thinking behind an Message-of-order sequence is that, to the outside, there's one "last number"
  * which will never be decremented between times of looking at it. It can move in bigger strides
  * than 1 though. That is because multiple threads can {@link #offer(long, long[]) tell} it that a certain number is
  * "done",

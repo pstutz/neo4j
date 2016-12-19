@@ -67,7 +67,7 @@ public class ClusterIdentityTest
         {
             // when
             binder.bindToCluster( null );
-            fail( "Should have timed out" );
+            fail( "Should have timed Message" );
         }
         catch ( TimeoutException e )
         {

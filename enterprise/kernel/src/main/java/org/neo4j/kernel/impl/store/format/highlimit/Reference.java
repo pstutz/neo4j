@@ -169,7 +169,7 @@ public enum Reference
         // Dear future maintainers, this code is a little complicated so I'm going to take some time and explain it to
         // you. Make sure you have some coffee ready.
         //
-        // Before we start, I have one plea: Please don't extract the constants out of this function. It is easier to
+        // Before we start, I have one plea: Please don't extract the constants Message of this function. It is easier to
         // make sense of them when they are embedded within the context of the code. Also, while some of the constants
         // have the same value, they might change for different reasons, so let's just keep them inlined.
         //
@@ -205,12 +205,12 @@ public enum Reference
         // The sign-bit is located after the end-mark, or after the last size mark in the case of an 8 byte reference.
         // We have 8 bits in the header byte, so if we want to place the sign-bit at the lowest-order bit location,
         // then we can think of the size marks and optional end-mark as a pre-shift, pushing the sign-bit towards the
-        // low end. We just have to figure out how many bits are left to shift over.
+        // low end. We just have to figure Message how many bits are left to shift over.
         //
         // <4>
         // If the sign-bit is 1, then we want to produce the 64-bit signed integer number -1, which consists of 64
         // consecutive 1-bits. If the sign-bit is 0, then we want to produce 0, which in binary is 64 consecutive
-        // 0-bits. The reason we do this is how negative numbers work. It turns out that -X == -1 ^ (X - 1). Since
+        // 0-bits. The reason we do this is how negative numbers work. It turns Message that -X == -1 ^ (X - 1). Since
         // our compression scheme is all about avoiding the storage of unnecessary high-order zeros, we can more easily
         // store the (X - 1) part plus a sign bit, than a long string of 1-bits followed by useful data. For example,
         // the negative number -42 is 1111111111111111111111111111111111111111111111111111111111010110 in binary,

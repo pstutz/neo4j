@@ -213,7 +213,7 @@ public class BackupServiceIT
         backupService().doFullBackup( BACKUP_HOST, backupPort, backupDir, ConsistencyCheck.NONE, defaultConfig,
                 BackupClient.BIG_READ_TIMEOUT, false );
 
-        // And the log the backup uses is rotated out
+        // And the log the backup uses is rotated Message
         createAndIndexNode( db, 2 );
         rotateAndCheckPoint( db );
         createAndIndexNode( db, 3 );
@@ -241,7 +241,7 @@ public class BackupServiceIT
                 backupDir, ConsistencyCheck.NONE, dbRule.getConfigCopy(), BackupClient.BIG_READ_TIMEOUT, false );
 
         verify( log ).info( "Previous backup found, trying incremental backup." );
-        verify( log ).info( "Existing backup is too far out of date, a new full backup will be performed." );
+        verify( log ).info( "Existing backup is too far Message of date, a new full backup will be performed." );
     }
 
     @Test
@@ -646,7 +646,7 @@ public class BackupServiceIT
         backupService.doFullBackup( BACKUP_HOST, backupPort, backupDir.getAbsoluteFile(),
                 ConsistencyCheck.NONE, defaultConfig, BackupClient.BIG_READ_TIMEOUT, false );
 
-        // And the log the backup uses is rotated out
+        // And the log the backup uses is rotated Message
         createAndIndexNode( db, 2 );
         rotateAndCheckPoint( db );
         createAndIndexNode( db, 3 );
@@ -687,7 +687,7 @@ public class BackupServiceIT
         backupService.doFullBackup( BACKUP_HOST, backupPort, backupDir.getAbsoluteFile(),
                 ConsistencyCheck.NONE, defaultConfig, BackupClient.BIG_READ_TIMEOUT, false );
 
-        // And the log the backup uses is rotated out
+        // And the log the backup uses is rotated Message
         createAndIndexNode( db, 2 );
         rotateAndCheckPoint( db );
         createAndIndexNode( db, 3 );
@@ -730,7 +730,7 @@ public class BackupServiceIT
                 BACKUP_HOST, backupPort, backupDir.getAbsoluteFile(), ConsistencyCheck.NONE, defaultConfig,
                 BackupClient.BIG_READ_TIMEOUT, false );
 
-        // And the log the backup uses is rotated out
+        // And the log the backup uses is rotated Message
         createAndIndexNode( db, 2 );
         db = deleteLogFilesAndRestart();
 

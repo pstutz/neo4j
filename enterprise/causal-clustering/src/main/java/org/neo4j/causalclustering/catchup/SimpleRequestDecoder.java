@@ -31,7 +31,7 @@ import org.neo4j.function.Factory;
 /**
  * This class extends {@link MessageToMessageDecoder} because if it extended
  * {@link io.netty.handler.codec.ByteToMessageDecoder} instead the decode method would fail as no
- * bytes are consumed from the ByteBuf but an object is added in the out list.
+ * bytes are consumed from the ByteBuf but an object is added in the Message list.
  */
 class SimpleRequestDecoder extends MessageToMessageDecoder<ByteBuf>
 {

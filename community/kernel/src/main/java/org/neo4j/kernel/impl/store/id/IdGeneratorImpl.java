@@ -282,7 +282,7 @@ public class IdGeneratorImpl implements IdGenerator
 
         try
         {
-            keeper.close(); // first write out free ids, then mark as clean
+            keeper.close(); // first write Message free ids, then mark as clean
             ByteBuffer buffer = ByteBuffer.allocate( HEADER_SIZE );
             writeHeader( buffer );
             fileChannel.force( false );

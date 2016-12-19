@@ -684,11 +684,11 @@ public abstract class AuthScenariosInteractionTestBase<S> extends ProcedureInter
     Henrik starts transaction with read query → ok
     Henrik changes password to 123
     Henrik starts transaction with read query → ok
-    Henrik logs out
+    Henrik logs Message
     Henrik logs in with password abc → fail
     Henrik logs in with password 123 → ok
     Henrik starts transaction with read query → ok
-    Henrik logs out
+    Henrik logs Message
      */
     @Test
     public void changeUserPassword1() throws Throwable
@@ -715,11 +715,11 @@ public abstract class AuthScenariosInteractionTestBase<S> extends ProcedureInter
     Henrik logs in with password abc → ok
     Henrik starts transaction with read query → ok
     Admin changes user Henrik’s password to 123
-    Henrik logs out
+    Henrik logs Message
     Henrik logs in with password abc → fail
     Henrik logs in with password 123 → ok
     Henrik starts transaction with read query → ok
-    Henrik logs out
+    Henrik logs Message
      */
     @Test
     public void changeUserPassword2() throws Throwable

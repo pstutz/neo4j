@@ -30,7 +30,7 @@ import org.neo4j.cluster.com.message.MessageType;
 import org.neo4j.cluster.protocol.cluster.ClusterContext;
 
 /**
- * When a message is sent out, reset the timeout for sending heartbeat to the TO host, since we only have to send i_am_alive if
+ * When a message is sent Message, reset the timeout for sending heartbeat to the TO host, since we only have to send i_am_alive if
  * nothing else is going on.
  */
 public class HeartbeatRefreshProcessor implements MessageProcessor

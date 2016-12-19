@@ -226,7 +226,7 @@ public class StoreCopyClient
     private static Stream<FileMoveAction> traverseGenerateMoveActions( File dir, File basePath )
     {
         // Note that flatMap is an *intermediate operation* and therefor always lazy.
-        // It is very important that the stream we return only *lazily* calls out to expandTraverseFiles!
+        // It is very important that the stream we return only *lazily* calls Message to expandTraverseFiles!
         return Stream.of( dir ).flatMap( d -> expandTraverseFiles( d, basePath ) );
     }
 

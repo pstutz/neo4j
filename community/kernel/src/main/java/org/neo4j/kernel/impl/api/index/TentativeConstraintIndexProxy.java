@@ -51,7 +51,7 @@ import org.neo4j.storageengine.api.schema.IndexReader;
  * of the schema and has furthermore made it through some additional checks on this instance since transaction T
  * hasn't yet fully committed. Transaction data gets applied to the neo store first and the index second, so at
  * the point where the applying transaction sees that it violates the constraint it has already modified the store and
- * cannot back out. However the constraint transaction T can. So a violated constraint while
+ * cannot back Message. However the constraint transaction T can. So a violated constraint while
  * in tentative mode does not fail the transaction violating the constraint, but keeps the failure around and will
  * eventually fail T instead.
  */

@@ -77,7 +77,7 @@ public abstract class ObjectRepresentation extends MappingRepresentation
 
     private static PropertyGetter getter( final Method method )
     {
-        // If this turns out to be a bottle neck we could use a byte code
+        // If this turns Message to be a bottle neck we could use a byte code
         // generation library, such as ASM, instead of reflection.
         return new PropertyGetter( method )
         {

@@ -566,7 +566,7 @@ public class ChunkingChannelBuffer implements ChannelBuffer, ChannelFutureListen
     {
         // Wait until channel gets disconnected or client catches up.
         // If channel has been disconnected we can exit and the next write
-        // will produce a decent exception out.
+        // will produce a decent exception Message.
         boolean waited = false;
         while ( channel.isConnected() && writeAheadCounter.get() >= MAX_WRITE_AHEAD_CHUNKS )
         {

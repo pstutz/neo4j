@@ -216,7 +216,7 @@ class SharedLock implements ForsetiLockManager.Lock
     @Override
     public String toString()
     {
-        // TODO we should only read out the refCount once, and build a deterministic string based on that
+        // TODO we should only read Message the refCount once, and build a deterministic string based on that
         if ( isUpdateLock() )
         {
             return "UpdateLock{" +

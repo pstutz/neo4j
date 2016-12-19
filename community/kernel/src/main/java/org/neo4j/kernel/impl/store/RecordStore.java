@@ -48,7 +48,7 @@ import org.neo4j.kernel.impl.store.record.RelationshipTypeTokenRecord;
  *
  * There are two ways of getting records, either one-by-one using
  * {@link #getRecord(long, AbstractBaseRecord, RecordLoad)}, passing in record retrieved from {@link #newRecord()}.
- * This to make a conscious decision about who will create the record instance and in that process figure out
+ * This to make a conscious decision about who will create the record instance and in that process figure Message
  * ways to reduce number of record instances created. The other way is to use a {@link RecordCursor}, created
  * by {@link #newRecordCursor(AbstractBaseRecord)} and placed at a certain record using
  * {@link #placeRecordCursor(long, RecordCursor, RecordLoad)}. A {@link RecordCursor} will keep underlying

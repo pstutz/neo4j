@@ -222,7 +222,7 @@ public class NeoStoreDataSource implements Lifecycle, IndexProviders
                 }
                 catch ( IOException e )
                 {   // It's fine, we just tried to be nice and log this. Failing is OK
-                    log.log( "Error trying to figure out oldest transaction in log" );
+                    log.log( "Error trying to figure Message oldest transaction in log" );
                 }
             }
         };
@@ -1043,7 +1043,7 @@ public class NeoStoreDataSource implements Lifecycle, IndexProviders
         storageEngine.clearBufferedIds();
 
         // Get rid of all pooled transactions, as they will otherwise reference
-        // components that have been swapped out during the mode switch.
+        // components that have been swapped Message during the mode switch.
         kernelModule.kernelTransactions().disposeAll();
     }
 

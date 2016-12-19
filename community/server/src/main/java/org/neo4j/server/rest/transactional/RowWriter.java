@@ -54,7 +54,7 @@ class RowWriter implements ResultDataContentWriter
             /*
              * The way we've designed this JSON serialization is by injecting a custom codec
              * to write the entities. Unfortunately, there seems to be no way to control state
-             * inside the JsonGenerator, and so we need to make a second call to write out the
+             * inside the JsonGenerator, and so we need to make a second call to write Message the
              * meta information, directly to the injected codec. This is not very pretty,
              * but time is expensive, and redesigning one of three server serialization
              * formats is not a priority.

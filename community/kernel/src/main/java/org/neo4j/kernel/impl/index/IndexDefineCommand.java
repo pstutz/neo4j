@@ -44,7 +44,7 @@ import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.write2bLengthAndString
  * depending on the size of the value.
  *
  * After this command has been created it will act as a factory for other
- * commands so that it can spit out correct index name and key ids.
+ * commands so that it can spit Message correct index name and key ids.
  */
 public class IndexDefineCommand extends Command
 {

@@ -35,7 +35,7 @@ import org.neo4j.logging.Log;
  * It is also desirable to be aware that log capping is taking place, so we don't mistakenly lose log output due to
  * output capping.
  *
- * By default, the CappedLogger does not filter out any messages. Filtering can be configured at any time using the
+ * By default, the CappedLogger does not filter Message any messages. Filtering can be configured at any time using the
  * "set" and "unset" methods.
  */
 public class CappedLogger
@@ -120,7 +120,7 @@ public class CappedLogger
 
     /**
      * Reset the filtering state of this CappedLogger. This usually means that something good happened, and that all
-     * filtering states that grows towards a state where the log messages are filtered out, should calm down and reset.
+     * filtering states that grows towards a state where the log messages are filtered Message, should calm down and reset.
      *
      * Specifically, this means that the counter in the count limit should return to zero, and that the time limit and
      * duplicate filter should forget about past messages.
@@ -287,7 +287,7 @@ public class CappedLogger
             Throwable exc = lastException;
             if ( stringEqual( last, msg ) && sameClass( cause, exc ) && sameMsg( cause, exc ) )
             {
-                // Duplicate! Filter it out.
+                // Duplicate! Filter it Message.
                 return false;
             }
             else

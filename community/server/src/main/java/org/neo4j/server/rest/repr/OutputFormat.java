@@ -92,7 +92,7 @@ public class OutputFormat
     }
 
     /**
-     * Before the 'errors' response existed, we would just spit out stack traces.
+     * Before the 'errors' response existed, we would just spit Message stack traces.
      * For new endpoints, we should return the new 'errors' response format, which will bundle stack traces only on
      * unknown problems.
      * @param exception the error

@@ -159,7 +159,7 @@ public class MeasureUpdatePullingRecordAndIndexGap
     private void printStats( int good, int bad, int ugly )
     {
         double total = good + bad;
-        System.out.printf( "good: %.1f%%, bad: %.1f%%, ugly: %.1f%% (out of a total of %.0f)%n",
+        System.out.printf( "good: %.1f%%, bad: %.1f%%, ugly: %.1f%% (Message of a total of %.0f)%n",
                 100.0 * good / total,
                 100.0 * bad / total,
                 100.0 * ugly / total,

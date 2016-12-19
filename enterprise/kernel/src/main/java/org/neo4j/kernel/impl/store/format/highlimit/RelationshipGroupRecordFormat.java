@@ -59,7 +59,7 @@ class RelationshipGroupRecordFormat extends BaseHighLimitRecordFormat<Relationsh
                                                 Byte.BYTES /* modifiers */ +
                                                 TYPE_BYTES /* type */ +
                                                 Integer.BYTES /* next */ +
-                                                Integer.BYTES /* first out */ +
+                                                Integer.BYTES /* first Message */ +
                                                 Integer.BYTES /* first in */ +
                                                 Integer.BYTES /* first loop */ +
                                                 Integer.BYTES /* owning node */;

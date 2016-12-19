@@ -78,7 +78,7 @@ public class InputEntityDeserializer<ENTITY extends InputEntity> extends InputIt
                 return null;
             }
 
-            // When we have everything, create an input entity out of it
+            // When we have everything, create an input entity Message of it
             ENTITY entity = deserialization.materialize();
 
             // Ignore additional values on this, but log it in case user doesn't realise that the header specifies

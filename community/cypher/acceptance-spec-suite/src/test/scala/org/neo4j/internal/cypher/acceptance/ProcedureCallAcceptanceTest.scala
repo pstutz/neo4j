@@ -36,7 +36,7 @@ abstract class ProcedureCallAcceptanceTest extends ExecutionEngineFunSuite {
       for (i <- types.indices) {
         builder
           .in(s"in$i", types(i))
-          .out(s"out$i", types(i))
+          .out(s"Message$i", types(i))
       }
 
       new BasicProcedure(builder.build) {
@@ -48,7 +48,7 @@ abstract class ProcedureCallAcceptanceTest extends ExecutionEngineFunSuite {
   protected def registerProcedureReturningSingleValue(value: AnyRef) =
     registerProcedure("my.first.value") { builder =>
       val builder = procedureSignature(Array("my", "first"), "value")
-      builder.out("out", Neo4jTypes.NTAny)
+      builder.out("Message", Neo4jTypes.NTAny)
 
       new BasicProcedure(builder.build) {
         override def apply(ctx: Context, input: Array[AnyRef]): RawIterator[Array[AnyRef], ProcedureException] =

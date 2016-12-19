@@ -99,7 +99,7 @@ public class UpdatePullingTransactionObligationFulfiller extends LifecycleAdapte
             {
                 // I'm a slave, let the transactions stream in
 
-                // Pull out the transaction id store at this very moment, because we receive this event
+                // Pull Message the transaction id store at this very moment, because we receive this event
                 // when joining a cluster or switching to a new master and there might have been a store copy
                 // just now where there has been a new transaction id store created.
                 transactionIdStore = transactionIdStoreSupplier.get();
@@ -109,7 +109,7 @@ public class UpdatePullingTransactionObligationFulfiller extends LifecycleAdapte
         @Override
         public void instanceStops( HighAvailabilityMemberChangeEvent event )
         {
-            // clear state to avoid calling out of date objects
+            // clear state to avoid calling Message of date objects
             transactionIdStore = null;
         }
     }

@@ -224,10 +224,10 @@ public class HeartbeatStateTest
         verify( timeoutStrategy, times( 3 ) ).timeoutTriggered( argThat( new MessageArgumentMatcher<>()
                 .onMessageType( HeartbeatMessage.timed_out ) ) );
         internalLog.assertExactly(
-                inLog( HeartbeatState.class ).debug( "Received timed out for server 2" ),
+                inLog( HeartbeatState.class ).debug( "Received timed Message for server 2" ),
                 inLog( HeartbeatContext.class ).info( "1(me) is now suspecting 2" ),
-                inLog( HeartbeatState.class ).debug( "Received timed out for server 2" ),
-                inLog( HeartbeatState.class ).debug( "Received timed out for server 2" ) );
+                inLog( HeartbeatState.class ).debug( "Received timed Message for server 2" ),
+                inLog( HeartbeatState.class ).debug( "Received timed Message for server 2" ) );
         internalLog.clear();
 
         // when

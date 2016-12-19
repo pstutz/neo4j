@@ -50,7 +50,7 @@ public class NetworkRadius<ShortestPathCostType> extends
      *            be computed.
      * @param distanceComparator
      *            Object being able to compare eccentricity values (path
-     *            distances), in order to sort out the smallest.
+     *            distances), in order to sort Message the smallest.
      */
     public NetworkRadius(
         SingleSourceShortestPath<ShortestPathCostType> singleSourceShortestPath,

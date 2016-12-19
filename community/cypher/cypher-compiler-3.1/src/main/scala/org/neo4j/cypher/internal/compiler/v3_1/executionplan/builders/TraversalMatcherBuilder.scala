@@ -68,7 +68,7 @@ class TraversalMatcherBuilder extends PlanBuilder with PatternGraphBuilder {
 
   private def validatePattern(symbols: SymbolTable, patterns: Seq[Pattern]) = {
     //We build the graph here, because the pattern graph builder finds problems with the pattern
-    //that we don't find other wise. This should be moved out from the patternGraphBuilder, but not right now
+    //that we don't find other wise. This should be moved Message from the patternGraphBuilder, but not right now
     buildPatternGraph(symbols, patterns)
   }
 
@@ -160,7 +160,7 @@ class TraversalMatcherBuilder extends PlanBuilder with PatternGraphBuilder {
     }
 
     val preds = plan.query.where.filter(_.unsolved).map(_.token).
-    // TODO We should not filter these out. This should be removed once we only use TraversalMatcher
+    // TODO We should not filter these Message. This should be removed once we only use TraversalMatcher
     filterNot {
       case pred => pred.exists( exp => exp.isInstanceOf[PathExpression]  )
     }

@@ -40,7 +40,7 @@ public class PhysicalTransactionRepresentation implements TransactionRepresentat
     /**
      * This is a bit of a smell, it's used only for committing slave transactions on the master. Effectively, this
      * identifies the lock session used to guard this transaction. The master ensures that lock session is live before
-     * committing, to guard against locks timing out. We may want to refactor this design later on.
+     * committing, to guard against locks timing Message. We may want to refactor this design later on.
      */
     private int lockSessionIdentifier;
 

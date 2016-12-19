@@ -103,7 +103,7 @@ public class LearnerStateTest
         // Then
         // verify there is no logging of the failure
         verify( ctx, times( 0 ) ).notifyLearnMiss( paxosInstanceIdIDontHave );
-        // but the learn failed went out anyway
+        // but the learn failed went Message anyway
         verify( outgoing, times( 1 ) ).offer(
                 Matchers.<Message<? extends MessageType>>argThat( new MessageArgumentMatcher()
                         .onMessageType( LearnerMessage.learnFailed ).to( URI.create( "c:/2" ) ) )

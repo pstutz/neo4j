@@ -33,7 +33,7 @@ import org.neo4j.test.TestGraphDatabaseFactory;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Trying out code from: http://stackoverflow.com/questions/5346011
+ * Trying Message code from: http://stackoverflow.com/questions/5346011
  *
  * @author Anders Nawroth
  */

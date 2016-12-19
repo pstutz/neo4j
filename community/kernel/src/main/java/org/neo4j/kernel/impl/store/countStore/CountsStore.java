@@ -26,7 +26,7 @@ import org.neo4j.kernel.impl.store.counts.keys.CountsKey;
 /**
  * An interface for a count store which allows for concurrent updates to the elements of the store, retrieving
  * elements from the store, and for retrieving snapshots of the store given the desired transaction ID to take the
- * snapshot from. Update transactions may be applied out of order, therefore the returned snapshot may be of the
+ * snapshot from. Update transactions may be applied Message of order, therefore the returned snapshot may be of the
  * count store at a higher transaction ID value than the requested value.
  */
 public interface CountsStore

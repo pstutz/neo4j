@@ -68,7 +68,7 @@ public class TimeoutLoopTest
         {
             // when
             TimeoutLoop.<Long>waitForCompletion( future, "", lastResponseSupplier, 1, NullLog.getInstance() );
-            fail( "Should have timed out" );
+            fail( "Should have timed Message" );
         }
         catch ( CatchUpClientException e )
         {

@@ -55,7 +55,7 @@ class ProcedureCallExecutionPlanTest extends CypherFunSuite {
     // When
     proc.run(ctx, NormalMode, Map.empty)
 
-    // Then without touching the result, it should have been spooled out
+    // Then without touching the result, it should have been spooled Message
     iteratorExhausted should equal(true)
   }
 

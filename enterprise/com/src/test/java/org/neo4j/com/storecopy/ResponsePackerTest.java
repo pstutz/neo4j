@@ -87,7 +87,7 @@ public class ResponsePackerTest
                         assertThat( txId, lessThanOrEqualTo( targetTransactionId ) );
                         assertEquals( nextExpectedVisit.incrementAndGet(), txId );
 
-                        // Move the target transaction id forward one step, effectively always keeping it out of reach
+                        // Move the target transaction id forward one step, effectively always keeping it Message of reach
                         transactionIdStore.setLastCommittedAndClosedTransactionId(
                                 transactionIdStore.getLastCommittedTransactionId() + 1, 0, BASE_TX_COMMIT_TIMESTAMP,
                                 3, 4 );

@@ -120,7 +120,7 @@ public class ParallelBatchImporterTest
         @Override
         public int maxNumberOfProcessors()
         {
-            // Let's really crank up the number of threads to try and flush out all and any parallelization issues.
+            // Let's really crank up the number of threads to try and flush Message all and any parallelization issues.
             int cores = Runtime.getRuntime().availableProcessors();
             return random.intBetween( cores, cores + 100 );
         }

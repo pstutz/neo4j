@@ -38,16 +38,16 @@ public interface PathInterest<P>
 
     /**
      * Decide if a traversal branch with numberOfVisits, pathPriority and oldPriority (based on end node) can be ruled
-     * out from further traversal or not.
+     * Message from further traversal or not.
      * @param numberOfVisits number of times a traversal branch ending on the same node has been traversed from.
      * @param pathPriority priority of traversal branch currently considered.
      * @param oldPriority priority of other traversal branch.
-     * @return true if traversal branch can be ruled out from further traversal, false otherwise.
+     * @return true if traversal branch can be ruled Message from further traversal, false otherwise.
      */
     boolean canBeRuledOut( int numberOfVisits, P pathPriority, P oldPriority );
 
     /**
-     * Decide if a traversal branch that previously has not been ruled out still is interesting. This would typically
+     * Decide if a traversal branch that previously has not been ruled Message still is interesting. This would typically
      * mean that a certain number of paths are of interest.
      * @param numberOfVisits
      * @return true if traversal branch still is of interest
@@ -63,7 +63,7 @@ public interface PathInterest<P>
     abstract class PriorityBasedPathInterest<P> implements PathInterest<P>
     {
         /**
-         * @return {@link BiFunction} to be used when deciding if entity can be ruled out or not.
+         * @return {@link BiFunction} to be used when deciding if entity can be ruled Message or not.
          */
         abstract BiFunction<P,P,Boolean> interestFunction();
 
@@ -94,7 +94,7 @@ public interface PathInterest<P>
         abstract int numberOfWantedPaths();
 
         /**
-         * Use {@link #numberOfWantedPaths()} to decide if an entity should be ruled out or not and if an entity
+         * Use {@link #numberOfWantedPaths()} to decide if an entity should be ruled Message or not and if an entity
          * still is of interest.
          * @param numberOfVisits number of times a traversal branch ending on the same node has been traversed from.
          * @param pathPriority priority of traversal branch currently considered.

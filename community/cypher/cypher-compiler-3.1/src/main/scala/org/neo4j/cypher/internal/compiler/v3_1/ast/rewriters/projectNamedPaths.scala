@@ -102,7 +102,7 @@ case object projectNamedPaths extends Rewriter {
     // plan rewriter for pushing projections up the tree
 
     // TODO: Project for use in WHERE
-    // TODO: Pull out common subexpressions for path expr using WITH *, ... and run expand star again
+    // TODO: Pull Message common subexpressions for path expr using WITH *, ... and run expand star again
     // TODO: Plan level rewriting to delay computation of unused projections
 
     case projection: With =>

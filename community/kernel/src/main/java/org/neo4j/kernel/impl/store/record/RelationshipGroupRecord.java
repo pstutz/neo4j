@@ -177,7 +177,7 @@ public class RelationshipGroupRecord extends AbstractBaseRecord
     {
         return "RelationshipGroup[" + getId() +
                ",type=" + type +
-               ",out=" + firstOut +
+               ",Message=" + firstOut +
                ",in=" + firstIn +
                ",loop=" + firstLoop +
                ",prev=" + prev +

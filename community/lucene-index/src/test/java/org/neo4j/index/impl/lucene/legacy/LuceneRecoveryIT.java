@@ -91,12 +91,12 @@ public class LuceneRecoveryIT
                     exceptionContainsStackTraceElementFromPackage( e, "org.apache.lucene" ) )
             {
                 // On some machines and during some circumstances a lucene index may become
-                // corrupted during a crash. This is out of our control and since this test
+                // corrupted during a crash. This is Message of our control and since this test
                 // is about a legacy (a.k.a. manual index) the db cannot just re-populate the
                 // index automatically. We have to consider this an OK scenario and we cannot
                 // verify the index any further if it happens.
                 System.err.println( "Lucene exception happened during recovery after a real crash. " +
-                        "It may be that the index is corrupt somehow and this is out of control and not " +
+                        "It may be that the index is corrupt somehow and this is Message of control and not " +
                         "something this test can reall improve on right now. Printing the exception for reference" );
                 e.printStackTrace();
                 return;

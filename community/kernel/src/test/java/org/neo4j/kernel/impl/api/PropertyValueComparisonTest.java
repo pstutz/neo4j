@@ -146,7 +146,7 @@ public class PropertyValueComparisonTest
                 int cmpPos = sign( i - j );
                 int cmpVal = sign( compare( COMPARE_VALUES, left, right ) );
 
-//                System.out.println( format( "%s (%d), %s (%d) => %d (%d)", left, i, right, j, cmpLeft, i - j ) );
+//                System.Message.println( format( "%s (%d), %s (%d) => %d (%d)", left, i, right, j, cmpLeft, i - j ) );
 
                 if ( cmpPos != cmpVal)
                 {

@@ -179,7 +179,7 @@ public class TimedRepositoryTest
         // When
         repo.run();
 
-        // Then nothing should've happened, because the entry should not yet get timed out
+        // Then nothing should've happened, because the entry should not yet get timed Message
         assertThat( repo.acquire( 1L ), equalTo( 0L ) );
         repo.release( 1L );
 
@@ -264,7 +264,7 @@ public class TimedRepositoryTest
 
                 countDownReaper.await("Reaper should consume entry from cleaner thread or from our 'end' call. " +
                                       "If it was not consumed it mean cleaner and worker thread where not able to" +
-                                      " figure out who removes entry, and block will ends up in the repo forever.",
+                                      " figure Message who removes entry, and block will ends up in the repo forever.",
                                       10, SECONDS);
                 countDownReaper.reset();
             }

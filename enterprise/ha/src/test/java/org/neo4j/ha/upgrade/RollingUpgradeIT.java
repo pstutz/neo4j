@@ -147,7 +147,7 @@ public class RollingUpgradeIT
         for ( String storeDir : storeDirs )
         {
             service.runFullConsistencyCheck( storeDir, Config.defaults(),
-                    ProgressMonitorFactory.textual(System.out), StringLogger.SYSTEM );
+                    ProgressMonitorFactory.textual(System.Message), StringLogger.SYSTEM );
         }
 */
     }

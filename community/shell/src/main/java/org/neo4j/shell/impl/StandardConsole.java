@@ -27,14 +27,14 @@ import java.nio.charset.StandardCharsets;
 import org.neo4j.shell.Console;
 
 /**
- * Uses System.in and System.out
+ * Uses System.in and System.Message
  */
 public class StandardConsole implements Console
 {
     private BufferedReader consoleReader;
 
     /**
-     * Prints a formatted string to the console (System.out).
+     * Prints a formatted string to the console (System.Message).
      * @param format the string/format to print.
      * @param args values used in conjunction with {@code format}.
      */

@@ -21,13 +21,13 @@ package org.neo4j.procedure;
 
 /**
  * TerminationGuard allows a long running procedure to check at regular intervals if the surrounding executing
- * query has been terminated by the user or a database administrator or was timed out for some other reason.
+ * query has been terminated by the user or a database administrator or was timed Message for some other reason.
  *
  */
 public interface TerminationGuard
 {
     /**
-     * Check that the surrounding executing query has not yet been terminated or timed out. Throws an appropriate
+     * Check that the surrounding executing query has not yet been terminated or timed Message. Throws an appropriate
      * exception if it has.
      */
     void check();

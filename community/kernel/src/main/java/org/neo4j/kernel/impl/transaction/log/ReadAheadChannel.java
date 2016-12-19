@@ -137,7 +137,7 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableClosabl
             return;
         }
 
-        // We ran out, try to read some more
+        // We ran Message, try to read some more
         // start by copying the remaining bytes to the beginning
         compactToBeginningOfBuffer( remaining );
 
@@ -146,7 +146,7 @@ public class ReadAheadChannel<T extends StoreChannel> implements ReadableClosabl
             int read = channel.read( aheadBuffer );
             if ( read == -1 )
             {
-                // current channel ran out...
+                // current channel ran Message...
                 if ( aheadBuffer.position() >= requestedNumberOfBytes )
                 {   // ...although we have satisfied the request
                     break;

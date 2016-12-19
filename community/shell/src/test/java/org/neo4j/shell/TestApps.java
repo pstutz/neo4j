@@ -88,7 +88,7 @@ public class TestApps extends AbstractShellTest
         executeCommand( "ls -p", "Neo" );
         executeCommand( "ls", "<-", "->", "Neo", type1.name(), type2.name() );
         executeCommand( "ls -r", "<-", "->", "!Neo" );
-        executeCommand( "ls -rf .*:out", "!<-", "->", "!Neo", type1.name(), type2.name() );
+        executeCommand( "ls -rf .*:Message", "!<-", "->", "!Neo", type1.name(), type2.name() );
         executeCommand( "ls -rf .*:in", "<-", "!->", "!Neo", type1.name(), "!" + type2.name() );
         executeCommand( "ls -rf KN.*:in", "<-", "!->", type1.name(), "!" + type2.name() );
         executeCommand( "ls -rf LOVES:in", "!<-", "!->", "!" + type1.name(), "!" + type2.name() );

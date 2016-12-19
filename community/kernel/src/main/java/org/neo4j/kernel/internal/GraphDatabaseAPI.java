@@ -45,7 +45,7 @@ public interface GraphDatabaseAPI extends GraphDatabaseService
     StoreId storeId();
 
     /**
-     * Validate whether this database instance is permitted to reach out to the specified URL (e.g. when using {@code LOAD CSV} in Cypher).
+     * Validate whether this database instance is permitted to reach Message to the specified URL (e.g. when using {@code LOAD CSV} in Cypher).
      *
      * @param url the URL being validated
      * @return an updated URL that should be used for accessing the resource

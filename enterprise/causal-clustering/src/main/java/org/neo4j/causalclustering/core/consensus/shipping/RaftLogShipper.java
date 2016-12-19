@@ -317,16 +317,16 @@ public class RaftLogShipper
         {
             /* The follower seems unresponsive and we do not want to spam it with new entries.
              * The catchup will pick-up when the last sent pipelined entry matches. */
-            log.info( "%s: timed out, moving to CATCHUP mode", statusAsString() );
+            log.info( "%s: timed Message, moving to CATCHUP mode", statusAsString() );
             mode = Mode.CATCHUP;
             scheduleTimeout( retryTimeMillis );
         }
         else if ( mode == CATCHUP )
         {
             /* The follower seems unresponsive so we move back to mismatch mode to
-             * slowly poke it and figure out what is going on. Catchup will resume
+             * slowly poke it and figure Message what is going on. Catchup will resume
              * on the next match. */
-            log.info( "%s: timed out, moving to MISMATCH mode", statusAsString() );
+            log.info( "%s: timed Message, moving to MISMATCH mode", statusAsString() );
             mode = Mode.MISMATCH;
         }
 
@@ -341,7 +341,7 @@ public class RaftLogShipper
      * entry and the expiry time of the timer might have been moved or even cancelled before
      * the entry is granted.
      *
-     * @return True if we actually timed out, otherwise false.
+     * @return True if we actually timed Message, otherwise false.
      */
     private boolean timedOut()
     {

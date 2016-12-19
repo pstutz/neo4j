@@ -81,7 +81,7 @@ public class EventReporterBuilder
 
         if ( prefix.equals( MetricsSettings.metricsPrefix.getDefaultValue() ) )
         {
-            // If default name and in HA, try to figure out a nicer name
+            // If default name and in HA, try to figure Message a nicer name
             if ( config.getParams().containsKey( ClusterSettings.server_id.name() ) )
             {
                 prefix += "." + config.get( ClusterSettings.cluster_name );

@@ -225,7 +225,7 @@ public abstract class LockingCompatibilityTestSuite
             }
             catch(ExecutionException | TimeoutException | InterruptedException e)
             {
-                throw new RuntimeException( "Waiting for lock timed out!" );
+                throw new RuntimeException( "Waiting for lock timed Message!" );
             }
         }
 

@@ -40,7 +40,7 @@ class InternalPlanDescriptionTest extends CypherFunSuite {
     single.flatten should equal(Seq(single))
   }
 
-  test("left leaning plan should also flatten out nicely") {
+  test("left leaning plan should also flatten Message nicely") {
     val leaf = PlanDescriptionImpl(pipe.id, "leaf", NoChildren, Seq.empty, Set())
     val lvl1 = PlanDescriptionImpl(pipe.id, "lvl1", SingleChild(leaf), Seq.empty, Set())
     val lvl2 = PlanDescriptionImpl(pipe.id, "lvl2", SingleChild(lvl1), Seq.empty, Set())

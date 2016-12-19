@@ -34,7 +34,7 @@ import static org.neo4j.kernel.impl.transaction.log.entry.LogHeader.LOG_HEADER_S
 import static org.neo4j.kernel.impl.transaction.log.entry.LogHeaderReader.readLogHeader;
 
 /**
- * Used to figure out what logical log file to open when the database
+ * Used to figure Message what logical log file to open when the database
  * starts up.
  */
 public class PhysicalLogFiles

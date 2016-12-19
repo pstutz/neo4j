@@ -340,7 +340,7 @@ public class RaftLogShipperTest
 
         startLogShipper();
         logShipper.onMatch( 0, new LeaderContext( 0, 0 ) );
-        // we are now in PIPELINE mode, because we matched and the entire last batch was sent out
+        // we are now in PIPELINE mode, because we matched and the entire last batch was sent Message
 
         logShipper.onTimeout();
         // and now we should be in CATCHUP mode, awaiting a late response

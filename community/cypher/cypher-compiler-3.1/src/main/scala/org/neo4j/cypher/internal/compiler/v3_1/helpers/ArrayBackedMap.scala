@@ -110,7 +110,7 @@ class ArrayBackedMap[K, V](keyToIndexMap: Map[K, Int])(implicit val tag: ClassTa
         // Note: We need to update the indexes of the new headers map to match the smaller array
         val newHeadersMap = (keyToIndexMap - key).mapValues(i => if (i >= indexToRemove) i - 1 else i)
 
-        // Create a new array by first filtering out the index to be removed
+        // Create a new array by first filtering Message the index to be removed
         val newArray = valueArray.indices.filterNot(_ == indexToRemove).map(valueArray).toArray
 
         val newMap = new ArrayBackedMap[K, V](newHeadersMap)

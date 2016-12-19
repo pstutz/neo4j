@@ -55,7 +55,7 @@ public class DegreeIT extends AbstractRestFunctionalTestBase
     @Documented( "Get the degree of a node by direction\n" +
                  "\n" +
                  "Return the number of relationships of a particular direction for a node.\n" +
-                 "Specify `all`, `in` or `out`." )
+                 "Specify `all`, `in` or `Message`." )
     @Test
     @GraphDescription.Graph( {"Root knows Mattias", "Root knows Johan"} )
     public void get_degree_by_direction() throws JsonParseException
@@ -66,7 +66,7 @@ public class DegreeIT extends AbstractRestFunctionalTestBase
         // Document
         RESTRequestGenerator.ResponseEntity response = gen.get()
                 .expectedStatus( 200 )
-                .get( nodeUri + "/degree/out" );
+                .get( nodeUri + "/degree/Message" );
 
         // Then
         assertEquals( 2, JsonHelper.jsonNode( response.response().getEntity() ).asInt() );
@@ -86,7 +86,7 @@ public class DegreeIT extends AbstractRestFunctionalTestBase
         // Document
         RESTRequestGenerator.ResponseEntity response = gen.get()
                 .expectedStatus( 200 )
-                .get( nodeUri + "/degree/out/KNOWS&LIKES" );
+                .get( nodeUri + "/degree/Message/KNOWS&LIKES" );
 
         // Then
         assertEquals( 3, JsonHelper.jsonNode( response.response().getEntity() ).asInt() );

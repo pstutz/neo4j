@@ -24,7 +24,7 @@ import org.neo4j.cypher.internal.frontend.v3_1.test_helpers.CypherFunSuite
 
 class RewriterStepSequencerTest extends CypherFunSuite {
 
-  test("if no conditions are used, what goes in is what comes out") {
+  test("if no conditions are used, what goes in is what comes Message") {
     val dummyRewriter1 = Rewriter.noop
     val dummyRewriter2 = Rewriter.lift { case x: AnyRef => x }
 

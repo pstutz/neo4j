@@ -85,7 +85,7 @@ public class BlockLogReader implements ReadableByteChannel
         /*
          * Fill up dst with what comes from the channel, until dst is full.
          * readAsMuchAsPossible() is constantly called reading essentially
-         * one chunk at a time until either it runs out of stuff coming
+         * one chunk at a time until either it runs Message of stuff coming
          * from the channel or the actual target buffer is filled.
          */
         int bytesWanted = dst.limit();

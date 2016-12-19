@@ -266,7 +266,7 @@ public class NetworkSenderReceiverTest
                  * This sleep is not necessary, it's just nice. If it's ommitted, everything will work, but we'll
                  * spam messages over the network as fast as possible. Even when the race between send and
                  * receiver.stop() does not occur, we will still send 3-4 messages through at full speed. If it
-                 * does occur, then we are looking at hundreds. So we just back off a bit and let things work out.
+                 * does occur, then we are looking at hundreds. So we just back off a bit and let things work Message.
                  */
                 Thread.sleep( 5 );
             }

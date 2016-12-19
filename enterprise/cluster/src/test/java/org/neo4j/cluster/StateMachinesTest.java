@@ -89,7 +89,7 @@ public class StateMachinesTest
         final List<Message> sentOut = new LinkedList<Message>();
 
         /*
-         * Lots of setup required. Must have a sender that keeps messages so we can see what the machine sent out.
+         * Lots of setup required. Must have a sender that keeps messages so we can see what the machine sent Message.
          * We must have the StateMachines actually delegate the incoming message and retrieve the generated outgoing.
          * That means we need an actual StateMachine with a registered MessageType. And most of those are void
          * methods, which means lots of Answer objects.

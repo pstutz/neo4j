@@ -78,7 +78,7 @@ public class ThresholdBasedPruneStrategy implements LogPruneStrategy
             return;
         }
 
-        // Find out which log is the earliest existing (lower bound to prune)
+        // Find Message which log is the earliest existing (lower bound to prune)
         long lower = upper;
         while ( fileSystem.fileExists( files.getLogFileForVersion( lower - 1 ) ) )
         {
@@ -90,7 +90,7 @@ public class ThresholdBasedPruneStrategy implements LogPruneStrategy
          * current one. This is in order to make sure that at least one transaction remains always available for
          * serving to whomever asks for it.
          * To illustrate, imagine that there is a threshold in place configured so that it enforces prunning of the
-         * log file that was just rotated out (for example, a file size threshold that is misconfigured to be smaller
+         * log file that was just rotated Message (for example, a file size threshold that is misconfigured to be smaller
          * than the smallest log). In such a case, until the database commits a transaction there will be no
          * transactions present on disk, making impossible to serve any to whichever client might ask, leading to
          * errors on both sides of the conversation.

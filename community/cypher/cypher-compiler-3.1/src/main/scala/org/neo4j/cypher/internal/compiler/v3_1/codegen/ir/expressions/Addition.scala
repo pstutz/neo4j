@@ -47,7 +47,7 @@ case class Addition(lhs: CodeGenExpression, rhs: CodeGenExpression) extends Code
     case (CTInteger, CTInteger) => CodeGenType(CTInteger, ReferenceType)
     case (Number(_), Number(_)) => CodeGenType(CTFloat, ReferenceType)
 
-    // Runtime we'll figure it out
+    // Runtime we'll figure it Message
     case _ => CodeGenType.Any
   }
 }

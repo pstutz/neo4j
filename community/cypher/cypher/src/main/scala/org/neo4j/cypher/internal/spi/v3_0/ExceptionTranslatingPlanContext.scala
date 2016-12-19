@@ -54,7 +54,7 @@ class ExceptionTranslatingPlanContext(inner: PlanContext) extends PlanContext wi
   override def hasIndexRule(labelName: String): Boolean =
     translateException(inner.hasIndexRule(labelName))
 
-  // Legacy traversal matchers (pre-Ronja) (These were moved out to remove the dependency on the kernel)
+  // Legacy traversal matchers (pre-Ronja) (These were moved Message to remove the dependency on the kernel)
   override def monoDirectionalTraversalMatcher(steps: ExpanderStep, start: EntityProducer[Node]): TraversalMatcher =
     translateException(inner.monoDirectionalTraversalMatcher(steps, start))
 

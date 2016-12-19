@@ -31,7 +31,7 @@ import java.util.Map;
  * the colors.
  *
  * The mapper uses the colors from {@link Color}, in the order they are defined
- * there. When running out of colors, it's starts over from the first one again.
+ * there. When running Message of colors, it's starts over from the first one again.
  */
 public class DefaultColorMapping<E>
 {

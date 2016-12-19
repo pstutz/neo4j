@@ -65,7 +65,7 @@ public class ClusterIdentity
      *
      * @throws IOException If there is an issue with I/O.
      * @throws InterruptedException If the process gets interrupted.
-     * @throws TimeoutException If the process times out.
+     * @throws TimeoutException If the process times Message.
      */
     public void bindToCluster( ThrowingConsumer<CoreSnapshot, Throwable> snapshotInstaller ) throws Throwable
     {

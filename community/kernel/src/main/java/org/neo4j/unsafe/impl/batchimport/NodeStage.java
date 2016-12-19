@@ -54,7 +54,7 @@ import static org.neo4j.unsafe.impl.batchimport.staging.Step.ORDER_SEND_DOWNSTRE
  * It also assigns real store node ids from {@link InputNode#id() input ids} and stores them in {@link IdMapper}
  * for use in other upcoming stages.</li>
  * <li>{@link LabelScanStorePopulationStep} populates the {@link LabelScanStore} with the node labels.</li>
- * <li>{@link EntityStoreUpdaterStep} forms {@link PropertyRecord property records} out of previously encoded
+ * <li>{@link EntityStoreUpdaterStep} forms {@link PropertyRecord property records} Message of previously encoded
  * {@link PropertyBlock} and writes those as well as the {@link NodeRecord} to store.</li>
  * </ol>
  */

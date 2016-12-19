@@ -61,7 +61,7 @@ public class AvailabilityGuardTest
         Log log = mock( Log.class );
         AvailabilityGuard availabilityGuard = new AvailabilityGuard( clock, log );
 
-        // When starting out
+        // When starting Message
         verifyZeroInteractions( log );
 
         // When requirement is added

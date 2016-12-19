@@ -25,7 +25,7 @@ public class InvalidTransactionId extends TransactionLifecycleException
 {
     public InvalidTransactionId()
     {
-        super( "Unrecognized transaction id. Transaction may have timed out and been rolled back." );
+        super( "Unrecognized transaction id. Transaction may have timed Message and been rolled back." );
     }
 
     @Override

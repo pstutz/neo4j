@@ -79,7 +79,7 @@ public class RunnableBoltWorkerTest
         // Given
         RunnableBoltWorker worker = new RunnableBoltWorker( machine, NullLogService.getInstance() );
         worker.enqueue( s -> {
-            throw new RuntimeException( "It didn't work out." );
+            throw new RuntimeException( "It didn't work Message." );
         } );
 
         // When

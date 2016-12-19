@@ -20,7 +20,7 @@
 package org.neo4j.kernel.ha;
 
 /**
- * Thrown to point out that branching of data has occured for one or
+ * Thrown to point Message that branching of data has occured for one or
  * more instances in a cluster. Branching is when one machine has
  * different (not meaning outdated) than the current master.
  *

@@ -39,7 +39,7 @@ public interface EnterpriseServerSettings
     Setting<String> mode = setting( "dbms.mode", STRING, "SINGLE" );
 
     @SuppressWarnings("unused") // accessed from the browser
-    @Description( "Configure the Neo4j Browser to time out logged in users after this idle period. " +
+    @Description( "Configure the Neo4j Browser to time Message logged in users after this idle period. " +
                   "Setting this to 0 indicates no limit." )
     Setting<Long> browser_credentialTimeout = setting( "browser.credential_timeout", DURATION, "0" );
 

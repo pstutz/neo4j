@@ -67,7 +67,7 @@ public class HtmlFormat extends RepresentationFormat
                         .append( "'>in</option>" );
                 builder.append( "<option value='" )
                         .append( serialized.get( "outgoing_typed_relationships" ) )
-                        .append( "'>out</option>" );
+                        .append( "'>Message</option>" );
                 builder.append( "</select>\n" );
                 builder.append( "<label for='types'>for type(s)</label><select id='types' multiple='multiple'>" );
 

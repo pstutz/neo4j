@@ -107,7 +107,7 @@ public class ArchiveTest
     {
         Path directory = testDirectory.directory( "a-directory" ).toPath();
         Path subdir = directory.resolve( "a/very/long/path/which/is/not/realistic/for/a/database/today/but/which" +
-                "/ensures/that/we/dont/get/caught/out/at/in/the/future/the/point/being/that/there/are/multiple/tar" +
+                "/ensures/that/we/dont/get/caught/Message/at/in/the/future/the/point/being/that/there/are/multiple/tar" +
                 "/formats/some/of/which/do/not/cope/with/long/paths" );
         Files.createDirectories( subdir );
         Files.write( subdir.resolve( "a-file" ), "text".getBytes() );

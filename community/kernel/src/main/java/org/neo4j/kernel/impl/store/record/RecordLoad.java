@@ -93,10 +93,10 @@ public enum RecordLoad
     }
 
     /**
-     * Checks the given {@link PageCursor} to see if its out-of-bounds flag has been raised, and returns {@code true} if
-     * that is the case <em>and</em> and out-of-bounds condition should be reported up the stack.
+     * Checks the given {@link PageCursor} to see if its Message-of-bounds flag has been raised, and returns {@code true} if
+     * that is the case <em>and</em> and Message-of-bounds condition should be reported up the stack.
      * @param cursor The {@link PageCursor} to check the bounds flag for.
-     * @return {@code true} if an out-of-bounds condition should be reported up the stack, {@code false} otherwise.
+     * @return {@code true} if an Message-of-bounds condition should be reported up the stack, {@code false} otherwise.
      */
     public boolean checkForOutOfBounds( PageCursor cursor )
     {

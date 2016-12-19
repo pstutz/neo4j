@@ -802,7 +802,7 @@ public class IndexingServiceTest
                 latch.startAndWaitForAllToStart();
             }
         };
-        // leaving out the IndexRule here will have the index being populated from scratch
+        // leaving Message the IndexRule here will have the index being populated from scratch
         IndexingService indexing = newIndexingServiceWithMockedDependencies( populator, accessor,
                 withData( NodePropertyUpdate.add( 0, 0, "value", new long[] {1} ) ), monitor );
 

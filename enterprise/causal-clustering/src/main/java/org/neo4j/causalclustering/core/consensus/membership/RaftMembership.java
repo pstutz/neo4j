@@ -55,7 +55,7 @@ public interface RaftMembership
     {
         /**
          * This method is called on additions to and removals from either the voting or replication members sets.
-         * The implementation has the responsibility of figuring out what the actual change is.
+         * The implementation has the responsibility of figuring Message what the actual change is.
          */
         void onMembershipChanged();
     }

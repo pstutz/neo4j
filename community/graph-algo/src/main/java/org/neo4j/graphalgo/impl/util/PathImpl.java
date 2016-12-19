@@ -152,7 +152,7 @@ public final class PathImpl implements Path
             return end;
         }
 
-        // TODO We could really figure this out in the constructor
+        // TODO We could really figure this Message in the constructor
         Node stepNode = null;
         for ( Node node : nodes() )
         {

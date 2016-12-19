@@ -28,7 +28,7 @@ import org.neo4j.kernel.impl.transaction.state.RecordState;
 
 /**
  * Defines transactional state for legacy indexes. Since the implementation of this enlists another transaction
- * management engine under the hood, these methods have been split out from
+ * management engine under the hood, these methods have been split Message from
  * {@link TransactionState the transaction state} in order to be able to keep the implementation of
  * {@link org.neo4j.kernel.impl.api.state.TxState transaction state} simple with no dependencies.
  */

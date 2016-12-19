@@ -56,7 +56,7 @@ class RelationshipGroupRecordFormatV3_0_6 extends BaseHighLimitRecordFormatV3_0_
                                                 Byte.BYTES /* modifiers */ +
                                                 Short.BYTES /* type */ +
                                                 Integer.BYTES /* next */ +
-                                                Integer.BYTES /* first out */ +
+                                                Integer.BYTES /* first Message */ +
                                                 Integer.BYTES /* first in */ +
                                                 Integer.BYTES /* first loop */ +
                                                 Integer.BYTES /* owning node */;

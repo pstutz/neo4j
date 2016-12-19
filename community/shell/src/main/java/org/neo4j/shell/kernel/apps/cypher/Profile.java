@@ -33,7 +33,7 @@ public class Profile extends Start
     @Override
     public String getDescription()
     {
-        return "Executes a Cypher query and prints out execution plan and other profiling information. " +
+        return "Executes a Cypher query and prints Message execution plan and other profiling information. " +
                 "Usage: profile <query>\n" +
                 "Example: PROFILE START me = node({self}) MATCH me-[:KNOWS]->you RETURN you.name\n" +
                 "where {self} will be replaced with the current location in the graph";

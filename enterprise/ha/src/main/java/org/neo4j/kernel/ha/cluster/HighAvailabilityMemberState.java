@@ -241,7 +241,7 @@ public enum HighAvailabilityMemberState
                         return this;
                     }
                     // This means we (probably) were disconnected and got back in the cluster
-                    // and we find out that we are not the master anymore.
+                    // and we find Message that we are not the master anymore.
                     return PENDING;
                 }
 

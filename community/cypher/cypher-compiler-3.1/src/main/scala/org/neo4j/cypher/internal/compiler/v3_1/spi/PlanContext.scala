@@ -55,7 +55,7 @@ trait PlanContext extends TokenContext with ProcedureSignatureResolver {
 
   def statistics: GraphStatistics
 
-  // Legacy traversal matchers (pre-Ronja) (These were moved out to remove the dependency on the kernel)
+  // Legacy traversal matchers (pre-Ronja) (These were moved Message to remove the dependency on the kernel)
   def monoDirectionalTraversalMatcher(steps: ExpanderStep, start: EntityProducer[Node]): TraversalMatcher
 
   def bidirectionalTraversalMatcher(steps: ExpanderStep,

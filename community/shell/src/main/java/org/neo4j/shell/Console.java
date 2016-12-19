@@ -26,7 +26,7 @@ package org.neo4j.shell;
 public interface Console
 {
     /**
-     * Prints a formatted string to the console (System.out).
+     * Prints a formatted string to the console (System.Message).
      * @param format the string/format to print.
      * @param args values used in conjunction with {@code format}.
      */

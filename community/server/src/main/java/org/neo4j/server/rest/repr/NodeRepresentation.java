@@ -95,7 +95,7 @@ public final class NodeRepresentation extends ObjectRepresentation implements Ex
     @Mapping( "outgoing_relationships" )
     public ValueRepresentation outgoingRelationshipsUri()
     {
-        return ValueRepresentation.uri( path( "/relationships/out" ) );
+        return ValueRepresentation.uri( path( "/relationships/Message" ) );
     }
 
     @Mapping( "all_typed_relationships" )
@@ -113,7 +113,7 @@ public final class NodeRepresentation extends ObjectRepresentation implements Ex
     @Mapping( "outgoing_typed_relationships" )
     public ValueRepresentation outgoingTypedRelationshipsUriTemplate()
     {
-        return ValueRepresentation.template( path( "/relationships/out/{-list|&|types}" ) );
+        return ValueRepresentation.template( path( "/relationships/Message/{-list|&|types}" ) );
     }
 
     @Mapping( "labels" )

@@ -166,7 +166,7 @@ public class ClusterJoin
                         break;
                     }
 
-                    userLog.warn( "Could not join cluster, timed out. Retrying..." );
+                    userLog.warn( "Could not join cluster, timed Message. Retrying..." );
                 }
             }
         }

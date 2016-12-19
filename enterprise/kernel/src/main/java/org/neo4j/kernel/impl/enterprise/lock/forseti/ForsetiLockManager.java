@@ -76,7 +76,7 @@ import org.neo4j.storageengine.api.lock.WaitStrategy;
  * <p/>
  * A.waitlist = [A] U [B] => [A,B]
  * <p/>
- * It will do this in a loop, continiously figuring out the union of wait lists for all clients it waits for. The magic
+ * It will do this in a loop, continiously figuring Message the union of wait lists for all clients it waits for. The magic
  * then happens whenever one of those clients become blocked on client A. Assuming client B now has to wait for A,
  * it will also perform a union of A's wait list (which is [A,B] at this point):
  * <p/>

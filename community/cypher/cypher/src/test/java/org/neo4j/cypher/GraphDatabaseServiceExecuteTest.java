@@ -33,17 +33,14 @@ import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import saschapeukert.CONST;
+import saschapeukert.ViewDefinition;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.neo4j.helpers.collection.MapUtil.map;
 
 public class GraphDatabaseServiceExecuteTest
@@ -70,6 +67,7 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("The created node should return if matched","{n.bar=baz, COUNT(n)=1}",
                     r.next().toString());
             after = Iterables.count( graphDb.getAllNodes() );
+
             tx.success();
         }
 
@@ -80,6 +78,39 @@ public class GraphDatabaseServiceExecuteTest
             tx.success();
         }
         assertEquals( before + 1, after );
+    }
+
+    @Test
+    public void viewIdQueryShouldWorkProperly() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        // when
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            ViewDefinition result = new ViewDefinition();
+            result.name = "Test";
+            result.query = "MATCH (n:Foo),(m:Foo)";
+            ArrayList<String> arr = new ArrayList<>();
+            arr.add("n");
+            arr.add("m");
+            result.savedNodes = arr;
+            result.savedRelationships = new ArrayList<>();
+
+            Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"}) RETURN n.bar, id(n)" );
+            assertEquals("{id(n)=0, n.bar=baz}",r.next().toString());
+
+            Result test = graphDb.execute(result.getIdQuery());
+            Map<String,Object> map =test.next();
+
+            assertEquals("{nodeIds=[0, 0]}",map.toString());
+            Object o = map.values().iterator().next();
+            List<Long> list = (List<Long>) o;
+            Set<Long> set = new HashSet<>(list);
+
+            assertEquals("[0]",set.toString());
+            tx.success();
+        }
     }
 
     @Test
@@ -278,7 +309,7 @@ public class GraphDatabaseServiceExecuteTest
                 graphDb.execute("MATCH (n) DETACH DELETE n");
 
                 //Result q = graphDb.execute("MATCH (n) RETURN n");
-                //System.out.println(q.resultAsString());
+                //System.Message.println(q.resultAsString());
 
             }
             try {

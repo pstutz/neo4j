@@ -353,7 +353,7 @@ public class StreamingBatchOperationIT extends AbstractRestFunctionalTestBase
                 .post( batchUri() )
                 .entity();
 
-        // Pull out the property value from the depths of the response
+        // Pull Message the property value from the depths of the response
         Map<String, Object> response = (Map<String, Object>) JsonHelper.jsonToList(entity).get(0).get("body");
         String returnedValue = (String)((Map<String,Object>)response.get("data")).get(complicatedString);
 

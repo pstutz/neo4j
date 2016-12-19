@@ -34,7 +34,7 @@ public enum ProposerMessage
 {
     join, leave,
     phase1Timeout,
-    propose, // If no accept message is sent out, it means not enough promises have come in
+    propose, // If no accept message is sent Message, it means not enough promises have come in
     promise, rejectPrepare, rejectPropose2, // phase 1b
     phase2Timeout,
     accepted, rejectAccept; // phase 2b

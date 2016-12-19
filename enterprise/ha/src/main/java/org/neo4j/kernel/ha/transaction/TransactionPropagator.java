@@ -226,7 +226,7 @@ public class TransactionPropagator implements Lifecycle
             }
 
             // Wait for them and perhaps spawn new ones for failing committers until we're done
-            // or until we have no more slaves to try out.
+            // or until we have no more slaves to try Message.
             Collection<ReplicationContext> toAdd = new ArrayList<>();
             Collection<ReplicationContext> toRemove = new ArrayList<>();
             while ( !committers.isEmpty() && successfulReplications < replicationFactor )

@@ -127,7 +127,7 @@ public class ProcedureJarLoaderTest
                                  "If you''d like your procedure to return `boolean`, you could define a record class " +
                                  "like:%n" +
                                  "public class Output '{'%n" +
-                                 "    public boolean out;%n" +
+                                 "    public boolean Message;%n" +
                                  "'}'%n" +
                                  "%n" +
                                  "And then define your procedure as returning `Stream<Output>`." ));

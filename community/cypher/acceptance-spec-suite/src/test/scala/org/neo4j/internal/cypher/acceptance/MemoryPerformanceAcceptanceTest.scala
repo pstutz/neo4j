@@ -34,7 +34,7 @@ class MemoryPerformanceAcceptanceTest extends ExecutionEngineFunSuite with NewPl
     result shouldBe empty
   }
 
-  test("should be able to handle a large DNF predicate without running out of memory") {
+  test("should be able to handle a large DNF predicate without running Message of memory") {
     // given
     val query = """MATCH (a)-[r]->(b) WHERE
                   |(ID(a)= 12466 AND ID(b)= 12449 AND type(r)= 'class1') OR
@@ -65,7 +65,7 @@ class MemoryPerformanceAcceptanceTest extends ExecutionEngineFunSuite with NewPl
 
     // when
     executeWithAllPlannersAndCompatibilityMode(query)
-    // then it should not fail or run out of memory
+    // then it should not fail or run Message of memory
   }
 
   test("should unwind a long range without going OOM") {

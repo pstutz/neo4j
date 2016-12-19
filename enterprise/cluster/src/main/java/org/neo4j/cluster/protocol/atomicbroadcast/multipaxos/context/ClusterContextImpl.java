@@ -218,7 +218,7 @@ class ClusterContextImpl
         }
         // else:
         //   This typically happens in situations when several nodes join at once, and the ordering
-        //   of join messages is a little out of whack.
+        //   of join messages is a little Message of whack.
 
         currentlyJoiningInstances.remove( instanceId );
         invalidateElectorIfNecessary( instanceId );

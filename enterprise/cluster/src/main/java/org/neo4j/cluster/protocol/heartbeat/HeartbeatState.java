@@ -157,7 +157,7 @@ public enum HeartbeatState
                         {
                             InstanceId server = message.getPayload();
                             context.getLog( HeartbeatState.class )
-                                    .debug( "Received timed out for server " + server );
+                                    .debug( "Received timed Message for server " + server );
                             // Check if this node is no longer a part of the cluster
                             if ( context.getMembers().containsKey( server ) )
                             {

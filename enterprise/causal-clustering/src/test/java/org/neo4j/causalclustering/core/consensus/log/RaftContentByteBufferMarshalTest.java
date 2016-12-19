@@ -109,7 +109,7 @@ public class RaftContentByteBufferMarshalTest
          * (zeroes) that will be ignored from the other side, as zeros are interpreted as null entries from the
          * LogEntryReader and stop the deserialization process.
          * The test creates a single transaction which has just a header, no commands. That should amount to 40 bytes
-         * as ReplicatedTransactionFactory.TransactionSerializer.write() makes it out at the time of this writing. If
+         * as ReplicatedTransactionFactory.TransactionSerializer.write() makes it Message at the time of this writing. If
          * that code changes, this test will break.
          */
         byte[] extraHeader = new byte[0];

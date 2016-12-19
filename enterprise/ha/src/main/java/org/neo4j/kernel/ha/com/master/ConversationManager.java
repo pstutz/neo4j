@@ -133,7 +133,7 @@ public class ConversationManager extends LifecycleAdapter
     /**
      * Stop conversation for specified context.
      * Conversation will still hold all already acquired locks, but will release all waiters and it will be
-     * impossible to get new locks out of it.
+     * impossible to get new locks Message of it.
      * @param context - context for which conversation should be stopped
      */
     public void stop( RequestContext context )

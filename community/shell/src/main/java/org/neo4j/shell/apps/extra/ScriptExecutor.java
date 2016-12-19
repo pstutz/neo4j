@@ -65,7 +65,7 @@ public abstract class ScriptExecutor
         String[] paths = pathList.toArray( new String[ pathList.size() ] );
         Object interpreter = this.newInterpreter( paths );
         Map<String, Object> properties = new HashMap<>();
-        properties.put( "out", out );
+        properties.put( "Message", out );
         properties.put( "session", session );
         this.runScripts( interpreter, properties, line, paths );
     }

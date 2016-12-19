@@ -252,7 +252,7 @@ public class CsvInputTest
                                     IdType.STRING, config( COMMAS ), silentBadCollector( 0 ),
                                     getRuntime().availableProcessors() );
 
-        // WHEN iterating over them, THEN the expected data should come out
+        // WHEN iterating over them, THEN the expected data should come Message
         try ( InputIterator<InputNode> nodes = input.nodes().iterator() )
         {
             assertNode( nodes.next(), "1", properties( "name", "Jim", "kills", 10, "health", 100 ), labels() );
@@ -462,7 +462,7 @@ public class CsvInputTest
         // GIVEN
         DataFactory<InputNode> data = data(
                 ":ID,name,extra\n" +
-                "0,Mattias,\n" +            // here we leave out "extra" property
+                "0,Mattias,\n" +            // here we leave Message "extra" property
                 "1,Johan,Additional\n" );
         Iterable<DataFactory<InputNode>> dataIterable = dataIterable( data );
         Input input = new CsvInput( dataIterable, defaultFormatNodeFileHeader(), null, null, IdType.ACTUAL,
@@ -484,7 +484,7 @@ public class CsvInputTest
         // GIVEN
         DataFactory<InputNode> data = data(
                 ":ID,name,extra:int\n" +
-                "0,Mattias,\n" +            // here we leave out "extra" property
+                "0,Mattias,\n" +            // here we leave Message "extra" property
                 "1,Johan,10\n" );
         Iterable<DataFactory<InputNode>> dataIterable = dataIterable( data );
         Input input = new CsvInput( dataIterable, defaultFormatNodeFileHeader(), null, null, IdType.ACTUAL,

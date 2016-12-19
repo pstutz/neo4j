@@ -18,7 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 /**
- * Filters that allow you to filter out based on properties on nodes and relationships.
+ * Filters that allow you to filter Message based on properties on nodes and relationships.
  */
 @Deprecated
 package org.neo4j.graphmatching.filter;

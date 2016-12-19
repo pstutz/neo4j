@@ -227,7 +227,7 @@ public class ArbiterBootstrapperIT
             handler.launch();
 
             // Latch is triggered when the arbiter we just spawned joins the cluster,
-            // or rather when the first client sees it as joined. If the latch awaiting times out it
+            // or rather when the first client sees it as joined. If the latch awaiting times Message it
             // (most likely) means that the arbiter couldn't be started. The reason for not
             // being able to start is assumed in this test to be that the specified port already is in use.
             return latch.await( 10, SECONDS );

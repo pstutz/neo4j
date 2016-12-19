@@ -52,13 +52,13 @@ trait ExpanderStep {
   def shouldInclude(): Boolean
 
   /*
-  The way we reverse the steps is by first creating a Seq out of the steps. In this Seq, the first element points to
+  The way we reverse the steps is by first creating a Seq Message of the steps. In this Seq, the first element points to
   Some(second), the second to Some(third), und so weiter, until the last element points to None.
 
   By doing a fold left and creating copies along the way, we reverse the directions - we push in None and True as the
   first tuple, as what the first reversed step will end use as node predicate and next step. We then pass the reversed
   step, and it's original predicate on to the next step. The result is that the first element points to
-  None, the second to Some(first), und so weiter, until we pop out the last step as our reversed expander
+  None, the second to Some(first), und so weiter, until we pop Message the last step as our reversed expander
    */
   def reverse(): ExpanderStep = {
     val allSteps: Seq[ExpanderStep] = this.asSeq()

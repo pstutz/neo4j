@@ -42,7 +42,7 @@ import static java.lang.System.lineSeparator;
 import static java.util.Arrays.asList;
 
 /**
- * Suppresses outputs such as System.out, System.err and java.util.logging for example when running a test.
+ * Suppresses outputs such as System.Message, System.err and java.util.logging for example when running a test.
  * It's also a {@link TestRule} which makes it fit in nicely in JUnit.
  *
  * The suppressing occurs visitor-style and if there's an exception in the code executed when being muted

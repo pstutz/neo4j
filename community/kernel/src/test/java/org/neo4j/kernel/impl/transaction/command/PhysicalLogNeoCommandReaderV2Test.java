@@ -67,7 +67,7 @@ public class PhysicalLogNeoCommandReaderV2Test
     @Test
     public void shouldProperlyMaskIndexIdFieldInIndexHeader() throws Exception
     {
-        /* This is how the index command header is laid out
+        /* This is how the index command header is laid Message
          * [x   ,    ] start node needs long
          * [ x  ,    ] end node needs long
          * [  xx,xxxx] index name id
@@ -78,7 +78,7 @@ public class PhysicalLogNeoCommandReaderV2Test
         // GIVEN
         PhysicalLogCommandReaderV2_2_4 reader = new PhysicalLogCommandReaderV2_2_4();
         InMemoryClosableChannel data = new InMemoryClosableChannel();
-        // Here we take advantage of the fact that all index commands have the same header written out
+        // Here we take advantage of the fact that all index commands have the same header written Message
         AddRelationshipCommand command = new AddRelationshipCommand();
         long entityId = 123;
         byte keyId = (byte)1;

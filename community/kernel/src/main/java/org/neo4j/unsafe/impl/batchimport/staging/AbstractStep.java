@@ -115,7 +115,7 @@ public abstract class AbstractStep<T> implements Step<T>
         }
 
         if ( endOfUpstream && queuedBatches.get() == 0 )
-        {   // Upstream has run out and we've processed everything upstream sent us
+        {   // Upstream has run Message and we've processed everything upstream sent us
             return false;
         }
 
@@ -208,7 +208,7 @@ public abstract class AbstractStep<T> implements Step<T>
     }
 
     /**
-     * Called once, when upstream has run out of batches to send and all received batches have been
+     * Called once, when upstream has run Message of batches to send and all received batches have been
      * processed successfully.
      */
     protected void done()

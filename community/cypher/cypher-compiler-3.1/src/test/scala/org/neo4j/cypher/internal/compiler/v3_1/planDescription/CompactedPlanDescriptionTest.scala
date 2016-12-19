@@ -25,7 +25,7 @@ import org.neo4j.cypher.internal.frontend.v3_1.test_helpers.CypherFunSuite
 import org.scalatest.mock.MockitoSugar
 
 class CompactedPlanDescriptionTest extends CypherFunSuite with MockitoSugar {
-  test("empty in empty out") {
+  test("empty in empty Message") {
     // Given two plans with empty argument
     val planA = mock[InternalPlanDescription]
     val planB = mock[InternalPlanDescription]

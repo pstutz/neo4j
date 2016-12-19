@@ -84,7 +84,7 @@ public class VersionAwareLogEntryReader<SOURCE extends ReadableClosablePositionA
                     entryReader = version.entryParser( typeCode );
                 }
                 catch ( ReadPastEndException e )
-                {   // Make these exceptions slip by straight out to the outer handler
+                {   // Make these exceptions slip by straight Message to the outer handler
                     throw e;
                 }
                 catch ( Exception e )

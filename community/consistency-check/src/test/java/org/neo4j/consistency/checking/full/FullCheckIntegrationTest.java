@@ -1559,7 +1559,7 @@ public class FullCheckIntegrationTest
                  *
                  *    nodeA --> groupA -[next]-> groupB
                  *      ^          |
-                 *       \       [out]
+                 *       \       [Message]
                  *        \        v
                  *       [start]- rel -[end]-> nodeB
                  */

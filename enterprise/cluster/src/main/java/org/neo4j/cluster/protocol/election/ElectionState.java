@@ -313,7 +313,7 @@ public enum ElectionState
                             // Election failed - try again
                             ElectionTimeoutData electionTimeoutData = message.getPayload();
                             log.warn( String.format(
-                                    "Election timed out for '%s'- trying again", electionTimeoutData.getRole() ) );
+                                    "Election timed Message for '%s'- trying again", electionTimeoutData.getRole() ) );
                             context.forgetElection( electionTimeoutData.getRole() );
                             outgoing.offer( electionTimeoutData.getMessage() );
                             break;

@@ -232,7 +232,7 @@ public class OutputMappers
                 "that you define, with public non-final fields defining the fields in the record.%n" +
                 "If you''d like your procedure to return `%s`, you could define a record class like:%n" +
                 "public class Output '{'%n" +
-                "    public %s out;%n" +
+                "    public %s Message;%n" +
                 "'}'%n" +
                 "%n" +
                 "And then define your procedure as returning `Stream<Output>`.",

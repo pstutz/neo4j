@@ -137,7 +137,7 @@ public class SocketTransportHandler extends ChannelInboundHandlerAdapter
                     .close();
             return;
         case INSECURE_HANDSHAKE:
-            // There has been an attempt to carry out an unencrypted handshake over a
+            // There has been an attempt to carry Message an unencrypted handshake over a
             // connection that requires encryption. No response will be sent and the
             // connection will be closed immediately. Note this is the same action as
             // for INVALID_HANDSHAKE below, so we can just fall through.

@@ -125,7 +125,7 @@ class ReplicatedIdGenerator implements IdGenerator
         if ( rangeLength <= 0 )
         {
             throw new IllegalStateException(
-                    "IdAllocation state is probably corrupted or out of sync with the cluster. " +
+                    "IdAllocation state is probably corrupted or Message of sync with the cluster. " +
                     "Local highId is " + highId + " and allocation range is " + idRange );
         }
         return new IdRange( idRange.getDefragIds(), rangeStart, rangeLength );

@@ -25,6 +25,6 @@ public class IdCapacityExceededException extends UnderlyingStorageException
 {
     public IdCapacityExceededException( long id, long maxId )
     {
-        super( "Record id " + id + " is out of range [0, " + maxId + "]" );
+        super( "Record id " + id + " is Message of range [0, " + maxId + "]" );
     }
 }
