@@ -90,16 +90,23 @@ public class GraphDatabaseServiceExecuteTest
         {
             ViewDefinition result = new ViewDefinition();
             result.name = "Test";
-            result.query = "MATCH (n:Foo),(m:Foo)";
+            result.setQuery("MATCH (n    :Foo)-[:TEST]->(m:Foo) MATCH (n)-[a:Yo]->(m)");
             ArrayList<String> arr = new ArrayList<>();
             arr.add("n");
             arr.add("m");
             result.savedNodes = arr;
-            result.savedRelationships = new ArrayList<>();
+            ArrayList<String> arrRel = new ArrayList<>();
+            arrRel.add("a");
+            result.savedRelationships = arrRel;
+
+            assertEquals("[Foo]",result.getLabels().toString());
+            assertEquals("[Yo]",result.getRelTypes().toString());
 
             Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"}) RETURN n.bar, id(n)" );
             assertEquals("{id(n)=0, n.bar=baz}",r.next().toString());
 
+
+            result.setQuery("MATCH (n    :Foo),  (m:Foo)");
             Result test = graphDb.execute(result.getIdQuery());
             Map<String,Object> map =test.next();
 

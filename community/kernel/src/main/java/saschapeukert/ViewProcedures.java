@@ -1,6 +1,7 @@
 package saschapeukert;
 
 import org.neo4j.graphdb.DependencyResolver;
+import org.neo4j.graphdb.Result;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.impl.api.VirtualOperationsFacade;
@@ -11,6 +12,7 @@ import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -55,7 +57,13 @@ public class ViewProcedures {
 
         ViewDefinition def = ViewController.getInstance().getView(index);
 
-        //graphDatabaseAPI.execute()
+        Result r = graphDatabaseAPI.execute(def.getIdQuery());
+        List<Long> list = (List<Long>) r.next().values().iterator().next();
+        Set<Long> set = new HashSet<Long>(list);
+
+        a = new Output();
+        a.Message = set.toString();
+        ar.add(a);
 
         return ar.stream();
     }
@@ -72,7 +80,7 @@ public class ViewProcedures {
 
         ViewDefinition result = new ViewDefinition();
         result.name = name;
-        result.query = query;
+        result.setQuery( query);
         result.savedNodes = nodeBindings;
         result.savedRelationships = relBindings;
 
