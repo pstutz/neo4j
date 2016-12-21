@@ -49,7 +49,11 @@ public class ViewDefinition {
     public Set<String> getLabels(){
         Set<String> list = new HashSet<>();
 
-        //TODO: Sascha:  WITH Rewriting
+        //TODO: Sascha: Path Rewriting
+        // MATCH path = (:Label)-->(x:Label)
+        // RETURN path
+
+        //TODO: Sascha:  WITH Rewriting (inkl. Path?)
         // MATCH (z:LABEL)
         // WITH z as x      x -> z
         // WITH x AS y      y -> x
@@ -129,6 +133,10 @@ public class ViewDefinition {
 
     public Set<String> getRelTypes(){
         Set<String> list = new HashSet<>();
+
+        //TODO: Sascha: Path Rewriting
+        // MATCH path = (:Label)-->(x:Label)
+        // RETURN path
 
         //TODO: Sascha:  WITH Rewriting
         // MATCH (z:LABEL)

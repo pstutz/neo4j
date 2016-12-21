@@ -11,10 +11,7 @@ import org.neo4j.procedure.Description;
 import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Stream;
 
 import static org.neo4j.procedure.Mode.READ;
@@ -43,13 +40,10 @@ public class ViewProcedures {
     {
         ArrayList<Output> ar = new ArrayList<>();
         Output a = new Output();
-        a.Message = "OK";
-        ar.add(a);
-        a = new Output();
         a.Message = index;
         ar.add(a);
 
-        VirtualOperationsFacade v = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+        VirtualOperationsFacade v = (VirtualOperationsFacade) tx.acquireStatement().readOperations(); // not that elegant...
 
         a = new Output();
         a.Message = String.valueOf(v.nodeExists(0l));
@@ -62,7 +56,23 @@ public class ViewProcedures {
         Set<Long> set = new HashSet<Long>(list);
 
         a = new Output();
-        a.Message = set.toString();
+        a.Message = "Result of query: " + set.toString();
+        ar.add(a);
+
+        Set<String> labelFilter = def.getLabels();
+        Iterator<String> it =labelFilter.iterator();
+
+        ArrayList<Integer> labelIds = new ArrayList<>();
+
+        while(it.hasNext()){
+            String label = it.next();
+            int labelId = v.labelGetForName(label);  // == -1 if No such label (could be virtual!!!) //TODO
+            labelIds.add(labelId);
+        }
+
+        //TODO: Test this
+        a = new Output();
+        a.Message = labelIds.toString();
         ar.add(a);
 
         return ar.stream();
@@ -99,13 +109,6 @@ public class ViewProcedures {
 
         ArrayList<Output> returnList = new ArrayList<>();
         returnList.add(o);
-        //VirtualOperationsFacade f =
-        //(graphDatabaseAPI).getDependencyResolver()
-        //        .resolveDependency(VirtualOperationsFacade.class);
-        // just testing this
-
-        //System.Message.println(f.nodeExists(0l));
-
 
         return returnList.stream();
     }
