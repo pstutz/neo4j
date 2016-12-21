@@ -53,6 +53,11 @@ public class ViewDefinition {
         // MATCH path = (:Label)-->(x:Label)
         // RETURN path
 
+
+        //TODO: Sascha: undefined Nodes -> ALL!
+        // MATCH (n)
+        // RETURN n
+
         //TODO: Sascha:  WITH Rewriting (inkl. Path?)
         // MATCH (z:LABEL)
         // WITH z as x      x -> z
@@ -137,6 +142,10 @@ public class ViewDefinition {
         //TODO: Sascha: Path Rewriting
         // MATCH path = (:Label)-->(x:Label)
         // RETURN path
+
+        //TODO: Sascha: undefined types -> ALL!
+        // MATCH (n)-[r]->(m)
+        // RETURN n,r,m
 
         //TODO: Sascha:  WITH Rewriting
         // MATCH (z:LABEL)

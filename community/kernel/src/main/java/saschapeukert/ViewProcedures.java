@@ -4,6 +4,8 @@ import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.Result;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
+import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
+import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
 import org.neo4j.kernel.impl.api.VirtualOperationsFacade;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.procedure.Context;
@@ -60,19 +62,43 @@ public class ViewProcedures {
         ar.add(a);
 
         Set<String> labelFilter = def.getLabels();
-        Iterator<String> it =labelFilter.iterator();
+        Set<String> relFilter = def.getRelTypes();
+        Iterator<String> labelIt =labelFilter.iterator();
+        Iterator<String> relIt = relFilter.iterator();
 
         ArrayList<Integer> labelIds = new ArrayList<>();
+        ArrayList<Integer> typeIds = new ArrayList<>();
 
-        while(it.hasNext()){
-            String label = it.next();
+        while(labelIt.hasNext()){
+            String label = labelIt.next();
             int labelId = v.labelGetForName(label);  // == -1 if No such label (could be virtual!!!) //TODO
+            try {
+                v.labelGetOrCreateForName(label); // Alternative method!
+                v.virtualLabelGetOrCreateForName(label);
+            } catch (IllegalTokenNameException e) {
+                e.printStackTrace();
+            } catch (TooManyLabelsException e) {
+                e.printStackTrace();
+            } catch (NoSuchMethodException e) {
+                e.printStackTrace();
+            }
             labelIds.add(labelId);
         }
 
         //TODO: Test this
         a = new Output();
-        a.Message = labelIds.toString();
+        a.Message = "LabelIds: "+ labelIds.toString();
+        ar.add(a);
+
+        while(relIt.hasNext()){
+            String relType = relIt.next();
+            int relId = v.relationshipTypeGetForName(relType); // == -1 if No such label (could be virtual!!!) //TODO, alternatives like above
+
+            typeIds.add(relId);
+        }
+
+        a = new Output();
+        a.Message = "RelTypeIds: " + typeIds.toString();
         ar.add(a);
 
         return ar.stream();
