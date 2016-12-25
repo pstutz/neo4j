@@ -20,6 +20,7 @@
 package org.neo4j.kernel.impl.api;
 
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
+import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.Direction;
@@ -87,6 +88,76 @@ public class VirtualOperationsFacade extends OperationsFacade
         }
     }
 
+
+    class IdFilter{
+
+        private Set<Long> ids;
+        private boolean empty;
+
+        public IdFilter(){
+            ids = new HashSet<>();
+            empty = true;
+        }
+
+        public void addAll(Collection<Long> set){
+            ids.addAll(set);
+            if(empty){
+                if(set.size()>0){
+                    empty=false;
+                }
+            }
+        }
+
+        public void clear(){
+            ids.clear();
+            empty = true;
+        }
+
+        public boolean isUnused(){
+            return empty;
+        }
+
+        public boolean idIsInFilter(long id){
+            return ids.contains(id);
+        }
+    }
+
+    class MyFilteredPrimitiveLongIterator implements PrimitiveLongIterator{
+
+        private IdFilter filter;
+        private PrimitiveLongIterator iterator;
+
+        public MyFilteredPrimitiveLongIterator(IdFilter f, PrimitiveLongIterator originalIterator){
+            super();
+            filter = f;
+
+            if(filter.isUnused()){
+                iterator = originalIterator;
+            } else {
+                // Apply filter!
+                Set<Long> resultSet = new HashSet<>();
+                while(originalIterator.hasNext()){
+                    long id = originalIterator.next();
+                    if(filter.idIsInFilter(id)){
+                        resultSet.add(id);
+                    }
+                }
+
+                iterator = PrimitiveLongCollections.toPrimitiveIterator(resultSet.iterator());
+            }
+        }
+
+        @Override
+        public boolean hasNext() {
+            return iterator.hasNext();
+        }
+
+        @Override
+        public long next() {
+            return iterator.next();
+        }
+    }
+
     private Map<Integer,TreeMap<Long,Integer>> virtualRelationshipIdToTypeId; // actualData and ref to types
     private Map<Integer,SortedSet<Long>> virtualNodeIds;  // "actual data"
     private Map<Integer,TreeMap<Integer,String>> virtualPropertyKeyIdsToName;  // "actual data"
@@ -108,6 +179,9 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private SortedSet<Integer> knowntransactionIds;
 
+    public IdFilter nodeIdFilter; //TODO change to private...
+    public IdFilter relIdFilter;  //TODO: Change to private
+
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             Procedures procedures )
     {
@@ -115,6 +189,8 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         //initialize(operations);
 
+        nodeIdFilter = new IdFilter();
+        relIdFilter = new IdFilter();
 
         virtualRelationshipIdToTypeId = new HashMap<>();
         virtualNodeIds = new HashMap<>();
@@ -142,6 +218,8 @@ public class VirtualOperationsFacade extends OperationsFacade
         super.initialize( operationParts);
     }
 
+    //TODO: Sascha: Apply filter to every LongIterator :-/
+
     // <DataRead>
 
     @Override
@@ -150,7 +228,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         PrimitiveLongIterator allRealNodes = super.nodesGetAll();
         MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,
                 virtualNodeIds.get(authenticate()));
-        return bothNodeIds;
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter,bothNodeIds);
     }
 
     @Override
@@ -159,7 +237,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         PrimitiveLongIterator allRealRels = super.relationshipsGetAll();
         MergingPrimitiveLongIterator bothRelIds =
                 new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipIds());
-        return bothRelIds;
+        return new MyFilteredPrimitiveLongIterator(relIdFilter,bothRelIds);
     }
 
     @Override
@@ -177,7 +255,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 resultList.add(nodeId);
             }
         }
-        return new MergingPrimitiveLongIterator(originalIT,resultList);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, new MergingPrimitiveLongIterator(originalIT,resultList));
     }
 
     @Override
@@ -185,7 +263,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexSeek(index,value);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexSeek(index,value));
     }
 
     @Override
@@ -197,7 +275,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper));
     }
 
     @Override
@@ -209,7 +287,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper));
     }
 
     @Override
@@ -217,7 +295,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexRangeSeekByPrefix(index,prefix);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByPrefix(index,prefix));
     }
 
     @Override
@@ -225,7 +303,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexScan(index);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexScan(index));
     }
 
     @Override
@@ -233,7 +311,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexContainsScan(index,term);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexContainsScan(index,term));
     }
 
     @Override
@@ -241,14 +319,14 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        return super.nodesGetFromIndexEndsWithScan(index,suffix);
+        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexEndsWithScan(index,suffix));
     }
 
     @Override
     public long nodeGetFromUniqueIndexSeek(IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
-        // TODO !
+        // TODO !  FILTER NOT APPLIED HERE
         return super.nodeGetFromUniqueIndexSeek(index,value);
     }
 

@@ -35,7 +35,7 @@ public class LongDiffSetsTest
 {
 
     // TODO empty diffset EMPTY
-    // TODO null/isEmpty elements
+    // TODO null/isUnused elements
 
     @Test
     public void shouldContainSourceForEmptyDiffSets() throws Exception

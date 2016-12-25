@@ -23,6 +23,8 @@ public class MergingPrimitiveLongIterator implements PrimitiveLongIterator {
 
         this.virtualIdCollectionIterator = values.iterator();
         this.originalIterator = it;
+
+
     }
 
     @Override

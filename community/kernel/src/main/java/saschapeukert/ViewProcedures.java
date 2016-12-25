@@ -58,7 +58,7 @@ public class ViewProcedures {
         Set<Long> set = new HashSet<Long>(list);
 
         a = new Output();
-        a.Message = "Result of query: " + set.toString();
+        a.Message = "Result of IdQuery: " + set.toString();
         ar.add(a);
 
         Set<String> labelFilter = def.getLabels();

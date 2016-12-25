@@ -294,6 +294,7 @@ public class GraphDatabaseFacade implements GraphDatabaseAPI
             throw new NotFoundException( format( "Node %d not found", id ),
                     new EntityNotFoundException( EntityType.NODE, id ) );
         }*/
+
         try ( Statement statement = spi.currentStatement() )
         {
             if ( !statement.readOperations().nodeExists( id ) )

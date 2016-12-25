@@ -211,7 +211,7 @@ public class IdGeneratorRebuildFailureEmulationTest
         void disposeAndAssertNoOpenFiles() throws Exception
         {
             //Collection<String> open = openFiles();
-            //assertTrue( "Open files: " + open, open.isEmpty() );
+            //assertTrue( "Open files: " + open, open.isUnused() );
             assertNoOpenFiles();
             super.shutdown();
         }
