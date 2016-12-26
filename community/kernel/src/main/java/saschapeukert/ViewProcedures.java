@@ -129,7 +129,7 @@ public class ViewProcedures {
             o.Message = "Replaced old view definition for '" + old.name + "': (query: '" + old.query + "' , savedNodes: " +
                     old.savedNodes.toString() + ", savedRelationships: " + old.savedRelationships.toString() + " )";
         } else {
-            o.Message = "Created view " + result.name;
+            o.Message = "Created view '" + result.name + "'";
         }
 
 
