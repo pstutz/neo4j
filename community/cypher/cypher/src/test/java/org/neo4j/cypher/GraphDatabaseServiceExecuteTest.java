@@ -103,6 +103,33 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
+    public void callGetAllViewDefinitionsShouldWork() throws Exception{
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        // when
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            // Create
+            Result r = graphDb.execute( "CALL db.getAllViewDefinitions()");
+
+            assertFalse(r.hasNext());
+
+            // Replace
+            r = graphDb.execute( "CALL db.createView('Test','MATCH (n:Person)',['n'],[])");
+            r = graphDb.execute( "CALL db.createView('Test2','MATCH (m:Person)',['m'],[])");
+            r = graphDb.execute( "CALL db.getAllViewDefinitions()");
+
+            assertEquals("{name=Test, savedRelationships=[], savedNodes=[n], query=MATCH (n:Person)}",r.next().toString());
+            assertEquals("{name=Test2, savedRelationships=[], savedNodes=[m], query=MATCH (m:Person)}",r.next().toString());
+            assertFalse(r.hasNext());
+
+            tx.success();
+        }
+    }
+
+
+
+    @Test
     public void viewIdQueryShouldWorkProperly() throws Exception
     {
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
