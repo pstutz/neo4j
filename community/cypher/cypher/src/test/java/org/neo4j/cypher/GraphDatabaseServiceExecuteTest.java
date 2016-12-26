@@ -115,8 +115,8 @@ public class GraphDatabaseServiceExecuteTest
             assertFalse(r.hasNext());
 
             // Replace
-            r = graphDb.execute( "CALL db.createView('Test','MATCH (n:Person)',['n'],[])");
-            r = graphDb.execute( "CALL db.createView('Test2','MATCH (m:Person)',['m'],[])");
+            graphDb.execute( "CALL db.createView('Test','MATCH (n:Person)',['n'],[])");
+            graphDb.execute( "CALL db.createView('Test2','MATCH (m:Person)',['m'],[])");
             r = graphDb.execute( "CALL db.getAllViewDefinitions()");
 
             assertEquals("{name=Test, savedRelationships=[], savedNodes=[n], query=MATCH (n:Person)}",r.next().toString());
@@ -127,7 +127,34 @@ public class GraphDatabaseServiceExecuteTest
         }
     }
 
+    @Test
+    public void callRemoveViewShouldWork() throws Exception{
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
 
+        // when
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            // Create
+            Result r = graphDb.execute( "CALL db.getAllViewDefinitions()");
+            assertFalse(r.hasNext());
+
+            r = graphDb.execute( "CALL db.removeView('Test')");
+            assertEquals("{Message=No views with name 'Test' registered.}",r.next().toString());
+            assertFalse(r.hasNext());
+
+            // Replace
+            graphDb.execute( "CALL db.createView('Test','MATCH (n:Person)',['n'],[])");
+            r = graphDb.execute( "CALL db.removeView('Test')");
+            assertEquals("{Message=Removed view defintion for 'Test': (query: 'MATCH (n:Person)' , savedNodes: " +
+                    "[n], savedRelationships: [] ).}",r.next().toString());
+            assertFalse(r.hasNext());
+
+            r = graphDb.execute( "CALL db.getAllViewDefinitions()");
+            assertFalse(r.hasNext());
+
+            tx.success();
+        }
+    }
 
     @Test
     public void viewIdQueryShouldWorkProperly() throws Exception
