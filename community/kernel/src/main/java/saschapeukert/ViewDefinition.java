@@ -43,6 +43,22 @@ public class ViewDefinition {
 
         }
         result = result+ " AS nodeIds";
+        if(savedRelationships.size()>0){
+            result = result+ " , collect(id(";
+            first = true;
+            for(String var:savedRelationships){
+                if(first){
+                    first = false;
+                    result = result + var +"))";
+                } else{
+                    result = result + "+ collect(id("+ var +"))";
+                }
+
+            }
+            result = result+ " AS relIds";
+
+        }
+
         return result;
     }
 

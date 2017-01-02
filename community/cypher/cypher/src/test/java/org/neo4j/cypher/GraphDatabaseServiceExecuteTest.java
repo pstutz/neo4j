@@ -182,7 +182,12 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("{id(n)=0, n.bar=baz}",r.next().toString());
 
 
+            assertEquals("MATCH (n :Foo)-[:TEST]->(m:Foo) MATCH (n)-[a:Yo]->(m) " +
+                    "RETURN collect(id(n))+ collect(id(m)) AS nodeIds , collect(id(a)) AS relIds",
+                    result.getIdQuery());
+
             result.setQuery("MATCH (n    :Foo),  (m:Foo)");
+            arrRel.clear(); // Need to do this!
             Result test = graphDb.execute(result.getIdQuery());
             Map<String,Object> map =test.next();
 
