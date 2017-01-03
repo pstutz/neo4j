@@ -27,6 +27,8 @@ import org.neo4j.graphdb.spatial.Coordinate;
 import org.neo4j.graphdb.spatial.Geometry;
 import org.neo4j.graphdb.spatial.Point;
 import org.neo4j.helpers.collection.Iterables;
+import org.neo4j.kernel.impl.core.NodeProxy;
+import org.neo4j.kernel.impl.core.RelationshipProxy;
 import org.neo4j.kernel.impl.proc.Procedures;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.procedure.Name;
@@ -34,6 +36,7 @@ import org.neo4j.procedure.Procedure;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import saschapeukert.CONST;
 import saschapeukert.ViewDefinition;
+import scala.collection.convert.Wrappers;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -197,6 +200,52 @@ public class GraphDatabaseServiceExecuteTest
             Set<Long> set = new HashSet<>(list);
 
             assertEquals("[0]",set.toString());
+            tx.success();
+        }
+    }
+
+    @Test
+    public void runOnViewShouldWorkProperly() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        // when
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
+            graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
+
+            Result r = graphDb.execute("CALL db.runOnView('Test','MATCH (n) RETURN n',null)");
+            Wrappers.MapWrapper o = (Wrappers.MapWrapper)r.next().get("value");
+            NodeProxy n = (NodeProxy)o.values().iterator().next();
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
+
+            tx.success();
+        }
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute("CALL db.createView('Test','MATCH (m:Bar)',['m'],[])");
+
+            Result r = graphDb.execute("CALL db.runOnView('Test','MATCH (n) RETURN n',null)");
+            Wrappers.MapWrapper o = (Wrappers.MapWrapper)r.next().get("value");
+            NodeProxy n = (NodeProxy)o.values().iterator().next();
+            assertEquals(1,n.getId());
+            assertEquals("welt",(String)n.getProperty("text"));
+
+            tx.success();
+        }
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)-[r]->(m:Bar)',['n','m'],['r'])");
+
+            Result r = graphDb.execute("CALL db.runOnView('Test','MATCH ()-[r]->() RETURN r',null)");
+            Wrappers.MapWrapper o = (Wrappers.MapWrapper)r.next().get("value");
+            RelationshipProxy n = (RelationshipProxy)o.values().iterator().next();
+            assertEquals(0,n.getId());
+            assertEquals(0,n.getAllProperties().size());
+
             tx.success();
         }
     }

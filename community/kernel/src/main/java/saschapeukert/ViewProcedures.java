@@ -18,6 +18,10 @@ import java.util.stream.Stream;
 
 import static org.neo4j.procedure.Mode.READ;
 import static org.neo4j.procedure.Mode.WRITE;
+import static java.lang.String.format;
+import static java.lang.String.join;
+import static java.util.stream.Collectors.toList;
+
 
 /**
  * Created by Sascha Peukert on 18.12.2016.
@@ -104,6 +108,47 @@ public class ViewProcedures {
         return ar.stream();
     }
 
+    @Procedure( name = "db.runOnView", mode = WRITE )
+    @Description("THIS NEEDS SOME DESCRIPTION LATER")
+    public Stream<MapResult> runOnView(@Name("view") String view,@Name("cypher") String statement, @Name("params") Map<String, Object> params) {
+        // check if view exists
+        ViewDefinition v = ViewController.getInstance().getView(view);
+        if(v==null){
+            // no view with this name found
+            HashMap<String,Object> error = new HashMap<>();
+            error.put("Error","No View with the name '" + view + "' found. Execution aborted");
+            List<MapResult> result = new ArrayList<>();
+            result.add(new MapResult(error));
+            return result.stream();
+        }
+
+        // Filter!
+
+        VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+        String idqueryString = v.getIdQuery();
+
+        Result resultIdQuery = graphDatabaseAPI.execute(idqueryString);
+
+        Map<String,Object> idQueryMap = resultIdQuery.next();
+
+        Set<Long> nodeIdSet = new HashSet<>();
+        nodeIdSet.addAll((Collection<Long>)idQueryMap.get("nodeIds"));
+        Set<Long> relIdSet = new HashSet<>();
+
+        Collection<Long> colRel = (Collection<Long>)idQueryMap.get("relIds");
+        if(colRel!=null) {
+            relIdSet.addAll(colRel);
+        }
+        facade.nodeIdFilter.addAll(nodeIdSet);
+        facade.relIdFilter.addAll(relIdSet);
+
+        // execute query
+
+        if (params == null) params = Collections.emptyMap();
+        return graphDatabaseAPI.execute(withParamMapping(statement, params.keySet()), params).stream().map(MapResult::new);
+    }
+
+
     @Description( "THIS NEEDS SOME DESCRIPTION LATER" )
     @Procedure( name = "db.createView", mode = WRITE )
     public Stream<Output> createView(@Name( "name" ) String name,
@@ -176,6 +221,12 @@ public class ViewProcedures {
         return returnList.stream();
     }
 
+    // Borrowed from apoc repo
+    public static String withParamMapping(String fragment, Collection<String> keys) {
+        if (keys.isEmpty()) return fragment;
+        String declaration = " WITH " + join(", ", keys.stream().map(s -> format(" {`%s`} as `%s` ", s, s)).collect(toList()));
+        return declaration + fragment;
+    }
 
     /*@Description( "Wait for an index to come online (for example: CALL db.awaitIndex(\":Person(name)\"))." )
     @Procedure( name = "db.awaitIndex", mode = READ )

@@ -235,6 +235,8 @@ public class KernelStatement implements TxStateHolder, Statement
         // closing is done by KTI
         storeStatement.release();
         executingQueryList = ExecutingQueryList.EMPTY;
+        facade.nodeIdFilter.clear();
+        facade.relIdFilter.clear();
     }
 
     public KernelTransactionImplementation getTransaction()

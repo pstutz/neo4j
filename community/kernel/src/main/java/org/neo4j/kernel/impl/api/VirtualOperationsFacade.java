@@ -89,7 +89,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
 
-    class IdFilter{
+    public class IdFilter{
 
         private Set<Long> ids;
         private boolean empty;
