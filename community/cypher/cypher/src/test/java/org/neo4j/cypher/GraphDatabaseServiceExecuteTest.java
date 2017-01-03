@@ -35,6 +35,7 @@ import org.neo4j.procedure.Name;
 import org.neo4j.procedure.Procedure;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import saschapeukert.CONST;
+import saschapeukert.ViewController;
 import saschapeukert.ViewDefinition;
 import scala.collection.convert.Wrappers;
 
@@ -101,6 +102,9 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("{Message=Replaced old view definition for 'Test': (query: 'MATCH (n:Person)' , savedNodes: [n], savedRelationships: [] )}",r.next().toString());
             assertFalse(r.hasNext());
 
+            // cleanup
+            ViewController.getInstance().clearViews();
+
             tx.success();
         }
     }
@@ -125,6 +129,9 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("{name=Test, savedRelationships=[], savedNodes=[n], query=MATCH (n:Person)}",r.next().toString());
             assertEquals("{name=Test2, savedRelationships=[], savedNodes=[m], query=MATCH (m:Person)}",r.next().toString());
             assertFalse(r.hasNext());
+
+            // cleanup
+            ViewController.getInstance().clearViews();
 
             tx.success();
         }
@@ -155,6 +162,8 @@ public class GraphDatabaseServiceExecuteTest
             r = graphDb.execute( "CALL db.getAllViewDefinitions()");
             assertFalse(r.hasNext());
 
+            // cleanup
+            ViewController.getInstance().clearViews();
             tx.success();
         }
     }
@@ -245,6 +254,9 @@ public class GraphDatabaseServiceExecuteTest
             RelationshipProxy n = (RelationshipProxy)o.values().iterator().next();
             assertEquals(0,n.getId());
             assertEquals(0,n.getAllProperties().size());
+
+            // cleanup
+            ViewController.getInstance().clearViews();
 
             tx.success();
         }

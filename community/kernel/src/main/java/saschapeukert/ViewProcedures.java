@@ -145,7 +145,12 @@ public class ViewProcedures {
         // execute query
 
         if (params == null) params = Collections.emptyMap();
-        return graphDatabaseAPI.execute(withParamMapping(statement, params.keySet()), params).stream().map(MapResult::new);
+        Stream<MapResult> result = graphDatabaseAPI.execute(withParamMapping(statement, params.keySet()), params).stream().map(MapResult::new);
+
+        // TODO: Test this behaviour in combination with nesting
+        facade.nodeIdFilter.clear();
+        facade.nodeIdFilter.clear();
+        return result;
     }
 
 
