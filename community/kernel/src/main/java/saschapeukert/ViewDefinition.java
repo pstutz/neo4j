@@ -31,6 +31,11 @@ public class ViewDefinition {
         //TODO: This query might include duplicate ids
         String result= query;
 
+        if(query.toLowerCase().startsWith("call db.runonview(")){
+            return result;
+        }
+
+
         result = result + " RETURN collect(id("; //+
         boolean first = true;
         for(String var:savedNodes){

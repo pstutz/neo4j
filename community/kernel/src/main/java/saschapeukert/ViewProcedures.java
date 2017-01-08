@@ -16,11 +16,11 @@ import org.neo4j.procedure.Procedure;
 import java.util.*;
 import java.util.stream.Stream;
 
-import static org.neo4j.procedure.Mode.READ;
-import static org.neo4j.procedure.Mode.WRITE;
 import static java.lang.String.format;
 import static java.lang.String.join;
 import static java.util.stream.Collectors.toList;
+import static org.neo4j.procedure.Mode.READ;
+import static org.neo4j.procedure.Mode.WRITE;
 
 
 /**
@@ -38,20 +38,23 @@ public class ViewProcedures {
     @Context
     public GraphDatabaseAPI graphDatabaseAPI;
 
+    //@Context
+    //public UserManager userManager;
+
 
     @Description( "THIS NEEDS SOME DESCRIPTION LATER" )
     @Procedure( name = "db.viewTest", mode = READ )
-    public Stream<Output> viewTest( @Name( "index" ) String index)
+    public Stream<OutputStringResult> viewTest(@Name( "index" ) String index)
             throws ProcedureException
     {
-        ArrayList<Output> ar = new ArrayList<>();
-        Output a = new Output();
+        ArrayList<OutputStringResult> ar = new ArrayList<>();
+        OutputStringResult a = new OutputStringResult();
         a.Message = index;
         ar.add(a);
 
         VirtualOperationsFacade v = (VirtualOperationsFacade) tx.acquireStatement().readOperations(); // not that elegant...
 
-        a = new Output();
+        a = new OutputStringResult();
         a.Message = String.valueOf(v.nodeExists(0l));
         ar.add(a);
 
@@ -61,7 +64,7 @@ public class ViewProcedures {
         List<Long> list = (List<Long>) r.next().values().iterator().next();
         Set<Long> set = new HashSet<Long>(list);
 
-        a = new Output();
+        a = new OutputStringResult();
         a.Message = "Result of IdQuery: " + set.toString();
         ar.add(a);
 
@@ -90,7 +93,7 @@ public class ViewProcedures {
         }
 
         //TODO: Test this
-        a = new Output();
+        a = new OutputStringResult();
         a.Message = "LabelIds: "+ labelIds.toString();
         ar.add(a);
 
@@ -101,12 +104,74 @@ public class ViewProcedures {
             typeIds.add(relId);
         }
 
-        a = new Output();
+        a = new OutputStringResult();
         a.Message = "RelTypeIds: " + typeIds.toString();
         ar.add(a);
 
+
+        Result userResult = graphDatabaseAPI.execute("CALL dbms.security.showCurrentUser()");
+        String name = (String)userResult.next().get("username");
+
+        a = new OutputStringResult();
+        a.Message = "Username: " +name;
+        ar.add(a);
+
+
+
         return ar.stream();
     }
+
+    @Procedure( name = "db.useView", mode = WRITE )
+    @Description("THIS NEEDS SOME DESCRIPTION LATER")
+    public void useView(@Name("views") List<String> views) {
+        // check if all views exist
+
+        List<ViewDefinition> viewDefs = new ArrayList<>();
+        String error = "";
+
+        for(String view :views){
+
+            ViewDefinition v = ViewController.getInstance().getView(view);
+            if(v==null){
+                // no view with this name found
+                error += "\n No View with the name '" + view + "' found. ";
+            } else{
+                viewDefs.add(v);
+            }
+        }
+        if(error.length()>0){
+            //  Error!
+            error += "\n\nExecution aborted.";
+            throw new NoSuchElementException(error);
+            //return result.stream();
+        }
+
+        // Filter!
+
+        VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+
+        Set<Long> nodeIdSet = new HashSet<>();
+        Set<Long> relIdSet = new HashSet<>();
+
+        for(ViewDefinition v:viewDefs){
+            String idqueryString = v.getIdQuery();
+            Result resultIdQuery = graphDatabaseAPI.execute(idqueryString);
+
+            Map<String, Object> idQueryMap = resultIdQuery.next();
+            nodeIdSet.addAll((Collection<Long>) idQueryMap.get("nodeIds"));
+
+            Collection<Long> colRel = (Collection<Long>) idQueryMap.get("relIds");
+            if (colRel != null) {
+                relIdSet.addAll(colRel);
+            }
+
+        }
+
+        facade.nodeIdFilter.addAll(nodeIdSet);
+        facade.relIdFilter.addAll(relIdSet);
+
+    }
+
 
     @Procedure( name = "db.runOnView", mode = WRITE )
     @Description("THIS NEEDS SOME DESCRIPTION LATER")
@@ -129,18 +194,29 @@ public class ViewProcedures {
 
         Result resultIdQuery = graphDatabaseAPI.execute(idqueryString);
 
-        Map<String,Object> idQueryMap = resultIdQuery.next();
+        /*
+        if(idqueryString.toLowerCase().startsWith("call db.runonview(")){
 
-        Set<Long> nodeIdSet = new HashSet<>();
-        nodeIdSet.addAll((Collection<Long>)idQueryMap.get("nodeIds"));
-        Set<Long> relIdSet = new HashSet<>();
+            while(resultIdQuery.hasNext()){
+                Map<String, Object> idQueryMap = resultIdQuery.next();
+            }
 
-        Collection<Long> colRel = (Collection<Long>)idQueryMap.get("relIds");
-        if(colRel!=null) {
-            relIdSet.addAll(colRel);
-        }
-        facade.nodeIdFilter.addAll(nodeIdSet);
-        facade.relIdFilter.addAll(relIdSet);
+        } else {
+        */
+            Map<String, Object> idQueryMap = resultIdQuery.next();
+
+            Set<Long> nodeIdSet = new HashSet<>();
+            nodeIdSet.addAll((Collection<Long>) idQueryMap.get("nodeIds"));
+            // TODO: Problem: "CALL db.runOnView('First','MATCH (n) RETURN n',null)" returns value
+            Set<Long> relIdSet = new HashSet<>();
+
+            Collection<Long> colRel = (Collection<Long>) idQueryMap.get("relIds");
+            if (colRel != null) {
+                relIdSet.addAll(colRel);
+            }
+            facade.nodeIdFilter.addAll(nodeIdSet);
+            facade.relIdFilter.addAll(relIdSet);
+        //}
 
         // execute query
 
@@ -156,10 +232,10 @@ public class ViewProcedures {
 
     @Description( "THIS NEEDS SOME DESCRIPTION LATER" )
     @Procedure( name = "db.createView", mode = WRITE )
-    public Stream<Output> createView(@Name( "name" ) String name,
-                                             @Name( "query" ) String query,
-                                             @Name("savedNodes") List<String> nodeBindings,
-                                             @Name("savedRelationships") List<String> relBindings
+    public Stream<OutputStringResult> createView(@Name( "name" ) String name,
+                                                 @Name( "query" ) String query,
+                                                 @Name("savedNodes") List<String> nodeBindings,
+                                                 @Name("savedRelationships") List<String> relBindings
                                     )
             throws ProcedureException
     {
@@ -173,7 +249,7 @@ public class ViewProcedures {
         // TODO: input validation
 
         ViewDefinition old = ViewController.getInstance().addView(result);
-        Output o = new Output();
+        OutputStringResult o = new OutputStringResult();
         if(old!=null){
             // overwrite
             o.Message = "Replaced old view definition for '" + old.name + "': (query: '" + old.query + "' , savedNodes: " +
@@ -183,7 +259,7 @@ public class ViewProcedures {
         }
 
 
-        ArrayList<Output> returnList = new ArrayList<>();
+        ArrayList<OutputStringResult> returnList = new ArrayList<>();
         returnList.add(o);
 
         return returnList.stream();
@@ -207,11 +283,11 @@ public class ViewProcedures {
 
     @Description( "THIS NEEDS SOME DESCRIPTION LATER" )
     @Procedure( name = "db.removeView", mode = WRITE )
-    public Stream<Output> removeView(@Name( "name" ) String name)
+    public Stream<OutputStringResult> removeView(@Name( "name" ) String name)
             throws ProcedureException
     {
         ViewDefinition old = ViewController.getInstance().removeView(name);
-        Output o = new Output();
+        OutputStringResult o = new OutputStringResult();
         if(old!=null){
             // overwrite
             o.Message = "Removed view defintion for '" + old.name + "': (query: '" + old.query + "' , savedNodes: " +
@@ -220,7 +296,7 @@ public class ViewProcedures {
             o.Message = "No views with name '"+ name + "' registered.";
         }
 
-        ArrayList<Output> returnList = new ArrayList<>();
+        ArrayList<OutputStringResult> returnList = new ArrayList<>();
         returnList.add(o);
 
         return returnList.stream();
@@ -291,7 +367,7 @@ public class ViewProcedures {
 
     */
 
-    public class Output {
+    public class OutputStringResult {
         public String Message;
     }
 }

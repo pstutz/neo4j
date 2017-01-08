@@ -263,6 +263,29 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
+    public void runOnViewWithNestingShouldWorkProperly() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        // when
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
+            graphDb.execute("CALL db.createView('First','MATCH (n:Foo)-->(m:Bar)',['n','m'],[])");
+            graphDb.execute("CALL db.createView(\'Second\',\"CALL db.runOnView(\'First\',\'MATCH (n) RETURN collect(id(n)) as nodeIds\',null)\",[\'n\'],[] )");
+
+
+            Result r = graphDb.execute("CALL db.runOnView('Second','MATCH (n) RETURN n',null)");
+
+
+            ViewController.getInstance().clearViews();
+
+            tx.success();
+        }
+    }
+
+
+    @Test
     public void shouldExecuteCypherWithOnlyVirtualNode() throws Exception
     {
         // given
