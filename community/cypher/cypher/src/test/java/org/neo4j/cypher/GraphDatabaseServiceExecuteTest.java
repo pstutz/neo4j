@@ -37,7 +37,6 @@ import org.neo4j.test.TestGraphDatabaseFactory;
 import saschapeukert.CONST;
 import saschapeukert.ViewController;
 import saschapeukert.ViewDefinition;
-import scala.collection.convert.Wrappers;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -214,7 +213,7 @@ public class GraphDatabaseServiceExecuteTest
     }
 
     @Test
-    public void runOnViewShouldWorkProperly() throws Exception
+    public void useViewShouldWorkProperly() throws Exception
     {
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
 
@@ -224,9 +223,8 @@ public class GraphDatabaseServiceExecuteTest
             graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
             graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
 
-            Result r = graphDb.execute("CALL db.runOnView('Test','MATCH (n) RETURN n',null)");
-            Wrappers.MapWrapper o = (Wrappers.MapWrapper)r.next().get("value");
-            NodeProxy n = (NodeProxy)o.values().iterator().next();
+            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
+            NodeProxy n = (NodeProxy)r.next().get("n");
             assertEquals(0,n.getId());
             assertEquals("hallo",(String)n.getProperty("text"));
 
@@ -236,9 +234,8 @@ public class GraphDatabaseServiceExecuteTest
         {
             graphDb.execute("CALL db.createView('Test','MATCH (m:Bar)',['m'],[])");
 
-            Result r = graphDb.execute("CALL db.runOnView('Test','MATCH (n) RETURN n',null)");
-            Wrappers.MapWrapper o = (Wrappers.MapWrapper)r.next().get("value");
-            NodeProxy n = (NodeProxy)o.values().iterator().next();
+            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
+            NodeProxy n = (NodeProxy)r.next().get("n");
             assertEquals(1,n.getId());
             assertEquals("welt",(String)n.getProperty("text"));
 
@@ -249,9 +246,8 @@ public class GraphDatabaseServiceExecuteTest
         {
             graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)-[r]->(m:Bar)',['n','m'],['r'])");
 
-            Result r = graphDb.execute("CALL db.runOnView('Test','MATCH ()-[r]->() RETURN r',null)");
-            Wrappers.MapWrapper o = (Wrappers.MapWrapper)r.next().get("value");
-            RelationshipProxy n = (RelationshipProxy)o.values().iterator().next();
+            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH ()-[r]->() RETURN r");
+            RelationshipProxy n = (RelationshipProxy)r.next().get("r");
             assertEquals(0,n.getId());
             assertEquals(0,n.getAllProperties().size());
 
@@ -270,14 +266,18 @@ public class GraphDatabaseServiceExecuteTest
         // when
         try ( Transaction tx = graphDb.beginTx() )
         {
-            graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
+            graphDb.execute("CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
             graphDb.execute("CALL db.createView('First','MATCH (n:Foo)-->(m:Bar)',['n','m'],[])");
-            graphDb.execute("CALL db.createView(\'Second\',\"CALL db.runOnView(\'First\',\'MATCH (n) RETURN collect(id(n)) as nodeIds\',null)\",[\'n\'],[] )");
+            graphDb.execute("CALL db.createView('Second',\"CALL db.useView(['First']) MATCH (n:Foo) \",[\'n\'],[] )");
 
 
-            Result r = graphDb.execute("CALL db.runOnView('Second','MATCH (n) RETURN n',null)");
+            Result r = graphDb.execute("CALL db.useView(['Second']) MATCH (n) RETURN n");
 
+            NodeProxy n = (NodeProxy)r.next().get("n");
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
 
+            // clean up
             ViewController.getInstance().clearViews();
 
             tx.success();

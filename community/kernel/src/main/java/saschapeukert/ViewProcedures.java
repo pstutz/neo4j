@@ -167,12 +167,25 @@ public class ViewProcedures {
 
         }
 
+        facade.nodeIdFilter.clear();
+        facade.nodeIdFilter.clear();
+
         facade.nodeIdFilter.addAll(nodeIdSet);
         facade.relIdFilter.addAll(relIdSet);
 
     }
 
+    @Procedure( name = "db.clearViews", mode = READ )
+    @Description("THIS NEEDS SOME DESCRIPTION LATER")
+    public void clearViews() {
 
+        VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+        facade.nodeIdFilter.clear();
+        facade.nodeIdFilter.clear();
+
+    }
+
+    /*
     @Procedure( name = "db.runOnView", mode = WRITE )
     @Description("THIS NEEDS SOME DESCRIPTION LATER")
     public Stream<MapResult> runOnView(@Name("view") String view,@Name("cypher") String statement, @Name("params") Map<String, Object> params) {
@@ -202,7 +215,7 @@ public class ViewProcedures {
             }
 
         } else {
-        */
+        */ /*
             Map<String, Object> idQueryMap = resultIdQuery.next();
 
             Set<Long> nodeIdSet = new HashSet<>();
@@ -228,7 +241,7 @@ public class ViewProcedures {
         facade.nodeIdFilter.clear();
         return result;
     }
-
+    */
 
     @Description( "THIS NEEDS SOME DESCRIPTION LATER" )
     @Procedure( name = "db.createView", mode = WRITE )
