@@ -2020,19 +2020,21 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public long countsForNode( int labelId )
     {
-
+        // TODO: Sascha: Apply id filter on real nodes
         return countVirtualNodes(labelId) + super.countsForNode(labelId);
     }
 
     @Override
     public long countsForNodeWithoutTxState( int labelId )
     {
+        // TODO: Sascha: Apply id filter on real nodes
         return countVirtualNodes(labelId)+ super.countsForNodeWithoutTxState(labelId);
     }
 
     @Override
     public long countsForRelationship( int startLabelId, int typeId, int endLabelId )
     {
+        // TODO: Sascha: Apply id filter on real rels
         return countVirtualRelationships(startLabelId,typeId,endLabelId) +
                 super.countsForRelationship(startLabelId,typeId,endLabelId);
     }
@@ -2040,6 +2042,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public long countsForRelationshipWithoutTxState( int startLabelId, int typeId, int endLabelId )
     {
+        // TODO: Sascha: Apply id filter on real rels
         return countVirtualRelationships(startLabelId,typeId,endLabelId) +
                 super.countsForRelationshipWithoutTxState(startLabelId,typeId,endLabelId);
     }
@@ -2107,9 +2110,18 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private int countVirtualNodes(int labelId){
         int count = 0;
-        Iterator<Set<Integer>> it = virtualNodeIdToLabelIds.get(authenticate()).values().iterator();
+        Iterator<Map.Entry<Long, Set<Integer>>> it = virtualNodeIdToLabelIds.get(authenticate()).entrySet().iterator();
         while(it.hasNext()){
-            Set<Integer> set = it.next();
+            Map.Entry<Long,Set<Integer>> entry = it.next();
+            Long key = entry.getKey();
+            // Filter!
+            if(!nodeIdFilter.isUnused()){
+                if(!nodeIdFilter.idIsInFilter(key)){
+                    continue;
+                }
+            }
+
+            Set<Integer> set = entry.getValue();
             if(set.contains(labelId)){
                 count++;
             }
@@ -2149,6 +2161,13 @@ public class VirtualOperationsFacade extends OperationsFacade
         Iterator<Long> relIdIterator = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet().iterator();
         while(relIdIterator.hasNext()){
             Long relId = relIdIterator.next();
+            // filter!
+            if(!relIdFilter.isUnused()){
+                if(!relIdFilter.idIsInFilter(relId)){
+                    continue;
+                }
+            }
+
             Long[] nodes = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId);
             if((possibleStartNodes.contains(nodes[0]))&&
                     (possibleEndNodes.contains(nodes[1]))){
@@ -2172,6 +2191,13 @@ public class VirtualOperationsFacade extends OperationsFacade
         Iterator<Long> nodeIdIterator = virtualNodeIdToLabelIds.get(authenticate()).keySet().iterator();
         while(nodeIdIterator.hasNext()){
             Long id = nodeIdIterator.next();
+            // filter
+            if(!nodeIdFilter.isUnused()){
+                if(!nodeIdFilter.idIsInFilter(id)){
+                    continue;
+                }
+            }
+
             if(virtualNodeIdToLabelIds.get(authenticate()).get(id).contains(labelId)){
                 returnSet.add(id);
             }
