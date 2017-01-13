@@ -25,6 +25,7 @@ import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.StatementConstants;
 import org.neo4j.kernel.api.exceptions.*;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.legacyindex.AutoIndexingKernelException;
@@ -326,13 +327,30 @@ public class VirtualOperationsFacade extends OperationsFacade
     public long nodeGetFromUniqueIndexSeek(IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
-        // TODO !  FILTER NOT APPLIED HERE
-        return super.nodeGetFromUniqueIndexSeek(index,value);
+        long candidateId = super.nodeGetFromUniqueIndexSeek(index,value);
+        //if(candidateId!=StatementConstants.NO_SUCH_NODE){
+            if(!nodeIdFilter.isUnused()) {
+                // -> is used
+                if (!nodeIdFilter.idIsInFilter(candidateId)) {
+                    candidateId = StatementConstants.NO_SUCH_NODE;
+                }
+            }
+        //}
+
+        return candidateId;
     }
 
     @Override
     public boolean nodeExists( long nodeId )
     {
+        if(!nodeIdFilter.isUnused()){
+            // -> is used
+            if(!nodeIdFilter.idIsInFilter(nodeId)){
+                // but not in filter, so it dont exists
+                return false;
+            }
+        }
+
         if(isVirtual(nodeId)){
             return virtualNodeIds.get(authenticate()).contains(nodeId);
         } else {
@@ -343,6 +361,14 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean relationshipExists( long relId )
     {
+        if(!relIdFilter.isUnused()){
+            // -> is used
+            if(!relIdFilter.idIsInFilter(relId)){
+                // but not in filter, so it dont exists
+                return false;
+            }
+        }
+
         if(isVirtual(relId)){
             return virtualRelationshipIds().contains(relId);
         } else {
@@ -433,9 +459,16 @@ public class VirtualOperationsFacade extends OperationsFacade
         if(!isVirtual(nodeId)) {
             realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
 
-
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
+
+                if(!relIdFilter.isUnused()){
+                    // -> is used
+                    if(!relIdFilter.idIsInFilter(rId)){
+                        // but not in filter, so it 'dont exists' in this scope
+                        continue;
+                    }
+                }
                 //if(nodeId==1) {
                 //    //System.Message.println(relationshipCursor(rId).get().id());
                 //    System.Message.println(super.relationshipCursor(rId).get().id());
@@ -455,9 +488,17 @@ public class VirtualOperationsFacade extends OperationsFacade
             }
         }
 
-        // no actual rel there, thats okay!
+        // no actual rel there, thats okay! on to the virtual stuff
         Set<Long> relIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet();
         for (Long relId : relIds) {
+            if(!relIdFilter.isUnused()){
+                // -> is used
+                if(!relIdFilter.idIsInFilter(relId)){
+                    // but not in filter, so it 'dont exists' in this scope
+                    continue;
+                }
+            }
+
             for(int type:relTypes){
                 // check if type matches for this relId
                 if(type==virtualRelationshipIdToTypeId.get(authenticate()).get(relId)){
@@ -507,6 +548,15 @@ public class VirtualOperationsFacade extends OperationsFacade
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
+
+                if(!relIdFilter.isUnused()){
+                    // -> is used
+                    if(!relIdFilter.idIsInFilter(rId)){
+                        // but not in filter, so it 'dont exists' in this scope
+                        continue;
+                    }
+                }
+
                 Cursor<RelationshipItem> c = super.relationshipCursor(rId);
                 RelationshipItem item;
                 while(c.next()){
@@ -537,7 +587,16 @@ public class VirtualOperationsFacade extends OperationsFacade
         Set<Long> relIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).keySet();
 
         for (Long relId : relIds) {
-             Long[] nodeIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId);
+
+            if(!relIdFilter.isUnused()){
+                // -> is used
+                if(!relIdFilter.idIsInFilter(relId)){
+                    // but not in filter, so it 'dont exists' in this scope
+                    continue;
+                }
+            }
+
+            Long[] nodeIds = virtualRelationshipIdToVirtualNodeIds.get(authenticate()).get(relId);
             switch (direction) {
                 case INCOMING:
                     if (nodeIds[1].equals(nodeId)) {
@@ -806,6 +865,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Cursor<NodeItem> nodeCursorGetAll()
     {
         // TODO: Test this
+        // TODO: @Sascha: does this work without filter?
         statement.assertOpen(); // from super
         Cursor<NodeItem> realCursor = super.nodeCursorGetAll();
         ArrayList<NodeItem> itemList = new ArrayList<>();
@@ -828,6 +888,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     public Cursor<RelationshipItem> relationshipCursorGetAll()
     {
         // TODO: Test this
+        // TODO: @Sascha: does this work without filter?
         statement.assertOpen(); // from super
         Cursor<RelationshipItem> realCursor = super.relationshipCursorGetAll();
         ArrayList<RelationshipItem> itemList = new ArrayList<>();
@@ -854,6 +915,12 @@ public class VirtualOperationsFacade extends OperationsFacade
         ArrayList<NodeItem> itemList = new ArrayList<>();
         while(realCursor.next()){
             NodeItem item = realCursor.get();
+            // filter real ids
+            if(!nodeIdFilter.isUnused()){
+                if(!nodeIdFilter.idIsInFilter(item.id())){
+                    continue;
+                }
+            }
             itemList.add(item);
         }
 
@@ -861,6 +928,13 @@ public class VirtualOperationsFacade extends OperationsFacade
         Set<Long> virtualNodes = virtualNodeIds.get(authenticate());
         Map<Long,Set<Integer>> idToLabel = virtualNodeIdToLabelIds.get(authenticate());
         for(Long l:virtualNodes){
+            // filter virtual ids
+            if(!nodeIdFilter.isUnused()){
+                if(!nodeIdFilter.idIsInFilter(l)){
+                    continue;
+                }
+            }
+            //  --
             if(idToLabel.get(l).contains(labelId)) {
                 itemList.add(nodeCursor(l).get());
             }
