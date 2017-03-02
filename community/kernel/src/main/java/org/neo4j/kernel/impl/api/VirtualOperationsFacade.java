@@ -93,29 +93,31 @@ public class VirtualOperationsFacade extends OperationsFacade
     public class IdFilter{
 
         private Set<Long> ids;
-        private boolean empty;
+        private boolean unused; // previously: empty
 
         public IdFilter(){
             ids = new HashSet<>();
-            empty = true;
+            unused = true;
         }
 
         public void addAll(Collection<Long> set){
             ids.addAll(set);
-            if(empty){
-                if(set.size()>0){
-                    empty=false;
-                }
-            }
+            unused = false;
+            //if(unused){
+            //   if(set.size()>0){
+            //       unused=false;
+            //   }
+            //}
         }
 
+        //TODO: Write test that checks view with no actual elements does not have access to anything!
         public void clear(){
             ids.clear();
-            empty = true;
+            unused = true;
         }
 
         public boolean isUnused(){
-            return empty;
+            return unused;
         }
 
         public boolean idIsInFilter(long id){
