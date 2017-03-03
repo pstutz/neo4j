@@ -185,6 +185,8 @@ public class VirtualOperationsFacade extends OperationsFacade
     public IdFilter nodeIdFilter; //TODO change to private...
     public IdFilter relIdFilter;  //TODO: Change to private
 
+    public Map<String,List<Collection<Long>>> cachedIdSets;
+
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             Procedures procedures )
     {
@@ -211,6 +213,8 @@ public class VirtualOperationsFacade extends OperationsFacade
         virtualPropertyIdToValueForRels = new HashMap<>();
 
         knowntransactionIds = new TreeSet<>();
+
+        cachedIdSets = new HashMap<>();
 
         //virtualPropertiyKeyIdsToObjectForNodes = new HashMap<>();
         //virtualPropertiyKeyIdsToObjectForRels = new HashMap<>();

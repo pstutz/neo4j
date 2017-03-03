@@ -237,6 +237,7 @@ public class KernelStatement implements TxStateHolder, Statement
         executingQueryList = ExecutingQueryList.EMPTY;
         facade.nodeIdFilter.clear();
         facade.relIdFilter.clear();
+        facade.cachedIdSets.clear();
     }
 
     public KernelTransactionImplementation getTransaction()

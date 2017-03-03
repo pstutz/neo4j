@@ -154,16 +154,40 @@ public class ViewProcedures {
         Set<Long> relIdSet = new HashSet<>();
 
         for(ViewDefinition v:viewDefs){
-            String idqueryString = v.getIdQuery();
-            Result resultIdQuery = graphDatabaseAPI.execute(idqueryString);
 
-            Map<String, Object> idQueryMap = resultIdQuery.next();
-            nodeIdSet.addAll((Collection<Long>) idQueryMap.get("nodeIds"));
+            Collection<Long> n_set;
+            Collection<Long> colRel;
 
-            Collection<Long> colRel = (Collection<Long>) idQueryMap.get("relIds");
+            // is this view cached?
+            List<Collection<Long>> list = facade.cachedIdSets.get(v.name);
+            if(list==null){
+                // is not cached yet -> execute IdQuery
+                String idqueryString = v.getIdQuery();
+                Result resultIdQuery = graphDatabaseAPI.execute(idqueryString);
+
+                Map<String, Object> idQueryMap = resultIdQuery.next();
+
+                n_set = (Collection<Long>) idQueryMap.get("nodeIds");
+                colRel = (Collection<Long>) idQueryMap.get("relIds");
+
+                // saving this
+                list = new ArrayList<>();
+                list.add(n_set);
+                list.add(colRel);
+                facade.cachedIdSets.put(v.name,list);
+
+            } else{
+                // is cached!
+                n_set = list.get(0);
+                colRel = list.get(1);
+            }
+
+            // adding to the filter
+            nodeIdSet.addAll(n_set);
             if (colRel != null) {
                 relIdSet.addAll(colRel);
             }
+
 
         }
 
