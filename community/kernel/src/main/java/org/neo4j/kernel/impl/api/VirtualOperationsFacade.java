@@ -184,7 +184,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         PrimitiveLongIterator allRealNodes = super.nodesGetAll();
         MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,
                 virtualNodeIds.get(authenticate()));
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter,bothNodeIds);
     }
 
@@ -194,7 +194,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         PrimitiveLongIterator allRealRels = super.relationshipsGetAll();
         MergingPrimitiveLongIterator bothRelIds =
                 new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipIds());
-        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
+        IdFilter relIdFilter = txState().getRelationshipIdFilter();
         return new MyFilteredPrimitiveLongIterator(relIdFilter,bothRelIds);
     }
 
@@ -213,7 +213,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 resultList.add(nodeId);
             }
         }
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, new MergingPrimitiveLongIterator(originalIT,resultList));
     }
 
@@ -222,7 +222,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexSeek(index,value));
     }
 
@@ -235,7 +235,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper));
     }
 
@@ -248,7 +248,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper));
     }
 
@@ -257,7 +257,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByPrefix(index,prefix));
     }
 
@@ -266,7 +266,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexScan(index));
     }
 
@@ -275,7 +275,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexContainsScan(index,term));
     }
 
@@ -284,7 +284,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexEndsWithScan(index,suffix));
     }
 
@@ -293,7 +293,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
         long candidateId = super.nodeGetFromUniqueIndexSeek(index,value);
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         //if(candidateId!=StatementConstants.NO_SUCH_NODE){
             if(!nodeIdFilter.isUnused()) {
                 // -> is used
@@ -309,7 +309,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeExists( long nodeId )
     {
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         if(!nodeIdFilter.isUnused()){
             // -> is used
             if(!nodeIdFilter.idIsInFilter(nodeId)){
@@ -328,7 +328,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean relationshipExists( long relId )
     {
-        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
+        IdFilter relIdFilter = txState().getRelationshipIdFilter();
         if(!relIdFilter.isUnused()){
             // -> is used
             if(!relIdFilter.idIsInFilter(relId)){
@@ -423,7 +423,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // TODO SASCHA
         Set<RelationshipItem> foundItems = new HashSet<>();
         RelationshipIterator realIt = null;
-        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
+        IdFilter relIdFilter = txState().getRelationshipIdFilter();
         // get the real ones
         if(!isVirtual(nodeId)) {
             realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
@@ -511,7 +511,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // build up a collection of rel ids that match
 
         Set<RelationshipItem> foundItems = new HashSet<>();
-        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
+        IdFilter relIdFilter = txState().getRelationshipIdFilter();
         // get the real ones
         if(!isVirtual(nodeId)) {
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
@@ -882,7 +882,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // getting the real ones
         Cursor<NodeItem> realCursor = super.nodeCursorGetForLabel(labelId);
         ArrayList<NodeItem> itemList = new ArrayList<>();
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         while(realCursor.next()){
             NodeItem item = realCursor.get();
             // filter real ids
@@ -1788,203 +1788,6 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
     */
 
-    // </SchemaWrite>
-
-    // There is no need for locking here
-
-    // <Legacy index>
-
-    // Not needed in proof of concept
-    /*
-    @Override
-    public LegacyIndexHits nodeLegacyIndexGet( String indexName, String key, Object value )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.nodeLegacyIndexGet(indexName,key,value);
-    }
-
-    @Override
-    public LegacyIndexHits nodeLegacyIndexQuery( String indexName, String key, Object queryOrQueryObject )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.nodeLegacyIndexQuery(indexName,key,queryOrQueryObject);
-    }
-
-    @Override
-    public LegacyIndexHits nodeLegacyIndexQuery( String indexName, Object queryOrQueryObject )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.nodeLegacyIndexQuery(indexName,queryOrQueryObject);
-    }
-
-    @Override
-    public LegacyIndexHits relationshipLegacyIndexGet( String indexName, String key, Object value,
-            long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
-    {
-        return super.relationshipLegacyIndexGet(indexName,key,value,startNode,endNode);
-    }
-
-    @Override
-    public LegacyIndexHits relationshipLegacyIndexQuery( String indexName, String key, Object queryOrQueryObject,
-            long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
-    {
-        return super.relationshipLegacyIndexQuery(indexName,key,queryOrQueryObject,startNode,endNode);
-    }
-
-    @Override
-    public LegacyIndexHits relationshipLegacyIndexQuery( String indexName, Object queryOrQueryObject,
-            long startNode, long endNode ) throws LegacyIndexNotFoundKernelException
-    {
-        return super.relationshipLegacyIndexQuery(indexName,queryOrQueryObject,startNode,endNode);
-    }
-
-    @Override
-    public void nodeLegacyIndexCreateLazily( String indexName, Map<String,String> customConfig )
-    {
-        super.nodeLegacyIndexCreateLazily(indexName,customConfig);
-    }
-
-    @Override
-    public void nodeLegacyIndexCreate( String indexName, Map<String,String> customConfig )
-    {
-        super.nodeLegacyIndexCreate(indexName,customConfig);
-    }
-
-    @Override
-    public void relationshipLegacyIndexCreateLazily( String indexName, Map<String,String> customConfig )
-    {
-        super.relationshipLegacyIndexCreateLazily(indexName,customConfig);
-    }
-
-    @Override
-    public void relationshipLegacyIndexCreate( String indexName, Map<String,String> customConfig )
-
-        super.relationshipLegacyIndexCreate(indexName,customConfig);
-    }
-
-    @Override
-    public void nodeAddToLegacyIndex( String indexName, long node, String key, Object value )
-            throws EntityNotFoundException, LegacyIndexNotFoundKernelException
-    {
-        super.nodeAddToLegacyIndex(indexName,node,key,value);
-    }
-
-    @Override
-    public void nodeRemoveFromLegacyIndex( String indexName, long node, String key, Object value )
-            throws LegacyIndexNotFoundKernelException
-    {
-        super.nodeRemoveFromLegacyIndex(indexName,node,key,value);
-    }
-
-    @Override
-    public void nodeRemoveFromLegacyIndex( String indexName, long node, String key )
-            throws LegacyIndexNotFoundKernelException
-    {
-        super.nodeRemoveFromLegacyIndex(indexName,node,key);
-    }
-
-    @Override
-    public void nodeRemoveFromLegacyIndex( String indexName, long node ) throws LegacyIndexNotFoundKernelException
-    {
-        super.nodeRemoveFromLegacyIndex(indexName,node);
-    }
-
-    @Override
-    public void relationshipAddToLegacyIndex( String indexName, long relationship, String key, Object value )
-            throws EntityNotFoundException, LegacyIndexNotFoundKernelException
-    {
-        super.relationshipAddToLegacyIndex(indexName,relationship,key,value);
-    }
-
-    @Override
-    public void relationshipRemoveFromLegacyIndex( String indexName, long relationship, String key, Object value )
-            throws EntityNotFoundException, LegacyIndexNotFoundKernelException
-    {
-        super.relationshipRemoveFromLegacyIndex(indexName,relationship,key,value);
-    }
-
-    @Override
-    public void relationshipRemoveFromLegacyIndex( String indexName, long relationship, String key )
-            throws LegacyIndexNotFoundKernelException, EntityNotFoundException
-    {
-        super.relationshipRemoveFromLegacyIndex(indexName,relationship,key);
-    }
-
-    @Override
-    public void relationshipRemoveFromLegacyIndex( String indexName, long relationship )
-            throws LegacyIndexNotFoundKernelException, EntityNotFoundException
-    {
-        super.relationshipRemoveFromLegacyIndex(indexName,relationship);
-    }
-
-    @Override
-    public void nodeLegacyIndexDrop( String indexName ) throws LegacyIndexNotFoundKernelException
-    {
-        super.nodeLegacyIndexDrop(indexName);
-    }
-
-    @Override
-    public void relationshipLegacyIndexDrop( String indexName ) throws LegacyIndexNotFoundKernelException
-    {
-        super.relationshipLegacyIndexDrop(indexName);
-    }
-
-    @Override
-    public Map<String,String> nodeLegacyIndexGetConfiguration( String indexName )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.nodeLegacyIndexGetConfiguration(indexName);
-    }
-
-    @Override
-    public Map<String,String> relationshipLegacyIndexGetConfiguration( String indexName )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.relationshipLegacyIndexGetConfiguration(indexName);
-    }
-
-    @Override
-    public String nodeLegacyIndexSetConfiguration( String indexName, String key, String value )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.nodeLegacyIndexSetConfiguration(indexName,key,value);
-    }
-
-    @Override
-    public String relationshipLegacyIndexSetConfiguration( String indexName, String key, String value )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.relationshipLegacyIndexSetConfiguration(indexName,key,value);
-    }
-
-    @Override
-    public String nodeLegacyIndexRemoveConfiguration( String indexName, String key )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.nodeLegacyIndexRemoveConfiguration(indexName,key);
-    }
-
-    @Override
-    public String relationshipLegacyIndexRemoveConfiguration( String indexName, String key )
-            throws LegacyIndexNotFoundKernelException
-    {
-        return super.relationshipLegacyIndexRemoveConfiguration(indexName,key);
-    }
-
-    @Override
-    public String[] nodeLegacyIndexesGetAll()
-    {
-        return super.nodeLegacyIndexesGetAll();
-    }
-
-    @Override
-    public String[] relationshipLegacyIndexesGetAll()
-    {
-        return super.relationshipLegacyIndexesGetAll();
-    }
-    */
-    // </Legacy index>
-
     // <Counts>
 
     @Override
@@ -2080,7 +1883,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private int countVirtualNodes(int labelId){
         int count = 0;
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         Iterator<Map.Entry<Long, Set<Integer>>> it = virtualNodeIdToLabelIds.get(authenticate()).entrySet().iterator();
         while(it.hasNext()){
             Map.Entry<Long,Set<Integer>> entry = it.next();
@@ -2104,7 +1907,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         int count = 0;
         int ANY_LABEL = -1;
         int ANY_REL = -1;
-        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
+        IdFilter relIdFilter = txState().getRelationshipIdFilter();
 
         Set<Long> possibleStartNodes;
         Set<Long> possibleEndNodes;
@@ -2161,7 +1964,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     private Set<Long> getVirtualNodesForLabel(int labelId){
         Set<Long> returnSet = new TreeSet<>();
         Iterator<Long> nodeIdIterator = virtualNodeIdToLabelIds.get(authenticate()).keySet().iterator();
-        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
         while(nodeIdIterator.hasNext()){
             Long id = nodeIdIterator.next();
             // filter
@@ -2270,22 +2073,26 @@ public class VirtualOperationsFacade extends OperationsFacade
     }
 
     public void cacheView(String name, List<Collection<Long>> sets){
-        ((KernelTransactionImplementation) tx) .addViewToCache(name,sets);
+        txState().addViewToCache(name,sets);
     }
 
     public List<Collection<Long>> getCachedView(String name){
-        return ((KernelTransactionImplementation) tx).getCachedView(name);
+        return txState().getCachedView(name);
     }
 
     public void enableViews(String[] cachedViewnames){
-        ((KernelTransactionImplementation) tx).enableViews(cachedViewnames);
+        txState().enableViews(cachedViewnames);
     }
 
     public void clearNodeIdFilter(){
-        ((KernelTransactionImplementation) tx).clearNodeIdFilter();
+        txState().clearNodeIdFilter();
     }
 
     public void clearRelationshipIdFilter(){
-        ((KernelTransactionImplementation) tx).clearRelationshipIdFilter();
+        txState().clearRelationshipIdFilter();
+    }
+
+    private KernelTransactionImplementation txState(){
+        return ((KernelTransactionImplementation) tx);
     }
 }

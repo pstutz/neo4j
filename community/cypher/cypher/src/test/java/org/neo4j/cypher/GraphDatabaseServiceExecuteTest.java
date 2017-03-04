@@ -19,6 +19,7 @@
  */
 package org.neo4j.cypher;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.hamcrest.Matchers;
 import org.junit.Test;
 import org.neo4j.graphdb.*;
@@ -256,6 +257,49 @@ public class GraphDatabaseServiceExecuteTest
 
             tx.success();
         }
+    }
+
+    @Test
+    public void testCachedViews() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        // when
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
+            graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
+
+
+            // not the best test ever...
+            StopWatch watch = new StopWatch();
+            watch.reset();
+            watch.start();
+            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
+            NodeProxy n = (NodeProxy)r.next().get("n");
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
+            watch.stop();
+
+            long first = watch.getTime();
+
+            watch.reset();
+            watch.start();
+            r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
+            n = (NodeProxy)r.next().get("n");
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
+            watch.stop();
+
+            long second = watch.getTime();
+
+            System.out.println(first + " ms");
+            System.out.println(second + " ms");
+            assertTrue(first>second);
+
+            tx.success();
+        }
+
     }
 
     @Test
