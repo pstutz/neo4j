@@ -45,6 +45,7 @@ import org.neo4j.storageengine.api.EntityType;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.Token;
+import saschapeukert.IdFilter;
 
 import java.util.*;
 
@@ -86,42 +87,6 @@ public class VirtualOperationsFacade extends OperationsFacade
             } else{
                 return false;
             }
-        }
-    }
-
-
-    public class IdFilter{
-
-        private Set<Long> ids;
-        private boolean unused; // previously: empty
-
-        public IdFilter(){
-            ids = new HashSet<>();
-            unused = true;
-        }
-
-        public void addAll(Collection<Long> set){
-            ids.addAll(set);
-            unused = false;
-            //if(unused){
-            //   if(set.size()>0){
-            //       unused=false;
-            //   }
-            //}
-        }
-
-        //TODO: Write test that checks view with no actual elements does not have access to anything!
-        public void clear(){
-            ids.clear();
-            unused = true;
-        }
-
-        public boolean isUnused(){
-            return unused;
-        }
-
-        public boolean idIsInFilter(long id){
-            return ids.contains(id);
         }
     }
 
@@ -182,20 +147,10 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private SortedSet<Integer> knowntransactionIds;
 
-    public IdFilter nodeIdFilter; //TODO change to private...
-    public IdFilter relIdFilter;  //TODO: Change to private
-
-    public Map<String,List<Collection<Long>>> cachedIdSets;
-
     VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
                             Procedures procedures )
     {
         super(tx,statement,procedures);
-
-        //initialize(operations);
-
-        nodeIdFilter = new IdFilter();
-        relIdFilter = new IdFilter();
 
         virtualRelationshipIdToTypeId = new HashMap<>();
         virtualNodeIds = new HashMap<>();
@@ -214,18 +169,12 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         knowntransactionIds = new TreeSet<>();
 
-        cachedIdSets = new HashMap<>();
-
-        //virtualPropertiyKeyIdsToObjectForNodes = new HashMap<>();
-        //virtualPropertiyKeyIdsToObjectForRels = new HashMap<>();
     }
 
     public void initialize( StatementOperationParts operationParts )
     {
         super.initialize( operationParts);
     }
-
-    //TODO: Sascha: Apply filter to every LongIterator :-/
 
     // <DataRead>
 
@@ -235,6 +184,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         PrimitiveLongIterator allRealNodes = super.nodesGetAll();
         MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,
                 virtualNodeIds.get(authenticate()));
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter,bothNodeIds);
     }
 
@@ -244,6 +194,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         PrimitiveLongIterator allRealRels = super.relationshipsGetAll();
         MergingPrimitiveLongIterator bothRelIds =
                 new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipIds());
+        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
         return new MyFilteredPrimitiveLongIterator(relIdFilter,bothRelIds);
     }
 
@@ -262,6 +213,7 @@ public class VirtualOperationsFacade extends OperationsFacade
                 resultList.add(nodeId);
             }
         }
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, new MergingPrimitiveLongIterator(originalIT,resultList));
     }
 
@@ -270,6 +222,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexSeek(index,value));
     }
 
@@ -282,6 +235,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper));
     }
 
@@ -294,6 +248,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper));
     }
 
@@ -302,6 +257,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByPrefix(index,prefix));
     }
 
@@ -310,6 +266,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexScan(index));
     }
 
@@ -318,6 +275,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexContainsScan(index,term));
     }
 
@@ -326,6 +284,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException
     {
         // TODO !
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexEndsWithScan(index,suffix));
     }
 
@@ -334,6 +293,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             throws IndexNotFoundKernelException, IndexBrokenKernelException
     {
         long candidateId = super.nodeGetFromUniqueIndexSeek(index,value);
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         //if(candidateId!=StatementConstants.NO_SUCH_NODE){
             if(!nodeIdFilter.isUnused()) {
                 // -> is used
@@ -349,6 +309,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean nodeExists( long nodeId )
     {
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         if(!nodeIdFilter.isUnused()){
             // -> is used
             if(!nodeIdFilter.idIsInFilter(nodeId)){
@@ -367,6 +328,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     @Override
     public boolean relationshipExists( long relId )
     {
+        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
         if(!relIdFilter.isUnused()){
             // -> is used
             if(!relIdFilter.idIsInFilter(relId)){
@@ -461,6 +423,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // TODO SASCHA
         Set<RelationshipItem> foundItems = new HashSet<>();
         RelationshipIterator realIt = null;
+        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
         // get the real ones
         if(!isVirtual(nodeId)) {
             realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
@@ -548,7 +511,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // build up a collection of rel ids that match
 
         Set<RelationshipItem> foundItems = new HashSet<>();
-
+        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
         // get the real ones
         if(!isVirtual(nodeId)) {
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
@@ -919,6 +882,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         // getting the real ones
         Cursor<NodeItem> realCursor = super.nodeCursorGetForLabel(labelId);
         ArrayList<NodeItem> itemList = new ArrayList<>();
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         while(realCursor.next()){
             NodeItem item = realCursor.get();
             // filter real ids
@@ -2116,6 +2080,7 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private int countVirtualNodes(int labelId){
         int count = 0;
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         Iterator<Map.Entry<Long, Set<Integer>>> it = virtualNodeIdToLabelIds.get(authenticate()).entrySet().iterator();
         while(it.hasNext()){
             Map.Entry<Long,Set<Integer>> entry = it.next();
@@ -2139,6 +2104,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         int count = 0;
         int ANY_LABEL = -1;
         int ANY_REL = -1;
+        IdFilter relIdFilter = ((KernelTransactionImplementation) tx).getRelationshipIdFilter();
 
         Set<Long> possibleStartNodes;
         Set<Long> possibleEndNodes;
@@ -2195,6 +2161,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     private Set<Long> getVirtualNodesForLabel(int labelId){
         Set<Long> returnSet = new TreeSet<>();
         Iterator<Long> nodeIdIterator = virtualNodeIdToLabelIds.get(authenticate()).keySet().iterator();
+        IdFilter nodeIdFilter = ((KernelTransactionImplementation) tx).getNodeIdFilter();
         while(nodeIdIterator.hasNext()){
             Long id = nodeIdIterator.next();
             // filter
@@ -2300,5 +2267,25 @@ public class VirtualOperationsFacade extends OperationsFacade
         } else{
             throw new EntityNotFoundException(EntityType.RELATIONSHIP,relId);
         }
+    }
+
+    public void cacheView(String name, List<Collection<Long>> sets){
+        ((KernelTransactionImplementation) tx) .addViewToCache(name,sets);
+    }
+
+    public List<Collection<Long>> getCachedView(String name){
+        return ((KernelTransactionImplementation) tx).getCachedView(name);
+    }
+
+    public void enableViews(String[] cachedViewnames){
+        ((KernelTransactionImplementation) tx).enableViews(cachedViewnames);
+    }
+
+    public void clearNodeIdFilter(){
+        ((KernelTransactionImplementation) tx).clearNodeIdFilter();
+    }
+
+    public void clearRelationshipIdFilter(){
+        ((KernelTransactionImplementation) tx).clearRelationshipIdFilter();
     }
 }

@@ -153,13 +153,15 @@ public class ViewProcedures {
         Set<Long> nodeIdSet = new HashSet<>();
         Set<Long> relIdSet = new HashSet<>();
 
+        String[] names = new String[viewDefs.size()];
+        int i = 0;
         for(ViewDefinition v:viewDefs){
 
             Collection<Long> n_set;
             Collection<Long> colRel;
 
             // is this view cached?
-            List<Collection<Long>> list = facade.cachedIdSets.get(v.name);
+            List<Collection<Long>> list = facade.getCachedView(v.name);
             if(list==null){
                 // is not cached yet -> execute IdQuery
                 String idqueryString = v.getIdQuery();
@@ -174,28 +176,18 @@ public class ViewProcedures {
                 list = new ArrayList<>();
                 list.add(n_set);
                 list.add(colRel);
-                facade.cachedIdSets.put(v.name,list);
+                facade.cacheView(v.name,list);
 
-            } else{
-                // is cached!
-                n_set = list.get(0);
-                colRel = list.get(1);
             }
 
-            // adding to the filter
-            nodeIdSet.addAll(n_set);
-            if (colRel != null) {
-                relIdSet.addAll(colRel);
-            }
-
+            names[i] = v.name;
+            i++;
 
         }
+        facade.clearNodeIdFilter();
+        facade.clearRelationshipIdFilter();
 
-        facade.nodeIdFilter.clear();
-        facade.nodeIdFilter.clear();
-
-        facade.nodeIdFilter.addAll(nodeIdSet);
-        facade.relIdFilter.addAll(relIdSet);
+        facade.enableViews(names);
 
     }
 
@@ -204,9 +196,8 @@ public class ViewProcedures {
     public void clearViews() {
 
         VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
-        facade.nodeIdFilter.clear();
-        facade.nodeIdFilter.clear();
-
+        facade.clearNodeIdFilter();
+        facade.clearRelationshipIdFilter();
     }
 
     /*

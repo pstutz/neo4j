@@ -49,6 +49,7 @@ import org.neo4j.storageengine.api.StorageEngine;
 import org.neo4j.storageengine.api.StorageStatement;
 import org.neo4j.storageengine.api.StoreReadLayer;
 import org.neo4j.storageengine.api.txstate.TxStateVisitor;
+import saschapeukert.IdFilter;
 
 import java.time.Clock;
 import java.util.*;
@@ -161,6 +162,10 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     private volatile int reuseCount;
     private volatile Map<String,Object> userMetaData;
 
+    private Map<String,List<Collection<Long>>> cachedIdSets;
+    private IdFilter nodeIdFilter;
+    private IdFilter relIdFilter;
+
     /**
      * Lock prevents transaction {@link #markForTermination(Status)}  transaction termination} from interfering with
      * {@link #close() transaction commit} and specifically with {@link #release()}.
@@ -201,6 +206,10 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.storageStatement = storeLayer.newStatement();
         this.currentStatement = new KernelStatement( this, this, storageStatement, procedures, accessCapability );
         this.userMetaData = Collections.emptyMap();
+
+        cachedIdSets = new HashMap<>();
+        nodeIdFilter = new IdFilter();
+        relIdFilter = new IdFilter();
     }
 
     /**
@@ -226,7 +235,44 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.commitTime = NOT_COMMITTED_TRANSACTION_COMMIT_TIME;
         this.currentTransactionOperations = timeoutMillis > 0 ? operationContainer.guardedParts() : operationContainer.nonGuarderParts();
         this.currentStatement.initialize( statementLocks, currentTransactionOperations );
+
+        this.cachedIdSets.clear();
+        this.nodeIdFilter.clear();
+        this.relIdFilter.clear();
+
         return this;
+    }
+
+    public void addViewToCache(String name, List<Collection<Long>> sets){
+        this.cachedIdSets.put(name,sets);
+    }
+
+    public List<Collection<Long>> getCachedView(String name){
+        return this.cachedIdSets.get(name);
+    }
+    //TODO: Sascha: We should have an remove as well, in real impl
+
+    public IdFilter getNodeIdFilter(){
+        return nodeIdFilter;
+    }
+    public IdFilter getRelationshipIdFilter(){
+        return relIdFilter;
+    }
+
+    public void enableViews(String[] cachedViewnames){
+        for(String name:cachedViewnames){
+            List<Collection<Long>> sets = getCachedView(name);
+            nodeIdFilter.addAll(sets.get(0));
+            relIdFilter.addAll(sets.get(1));
+        }
+    }
+
+    public void clearNodeIdFilter(){
+        nodeIdFilter.clear();
+    }
+
+    public void clearRelationshipIdFilter(){
+        relIdFilter.clear();
     }
 
     int getReuseCount()
@@ -732,6 +778,9 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         finally
         {
             terminationReleaseLock.unlock();
+            cachedIdSets.clear();
+            this.nodeIdFilter.clear();
+            this.relIdFilter.clear();
         }
     }
 
