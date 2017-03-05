@@ -267,7 +267,23 @@ public class GraphDatabaseServiceExecuteTest
         // when
         try ( Transaction tx = graphDb.beginTx() )
         {
+
+            // caching the execution plans to have a fair test
             graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
+            graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
+
+
+            // not the best test ever...
+            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
+            NodeProxy n = (NodeProxy)r.next().get("n");
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
+
+            tx.success();
+        }
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
             graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
 
 
@@ -275,20 +291,22 @@ public class GraphDatabaseServiceExecuteTest
             StopWatch watch = new StopWatch();
             watch.reset();
             watch.start();
-            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
-            NodeProxy n = (NodeProxy)r.next().get("n");
+            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (z) RETURN z");
+            NodeProxy n = (NodeProxy)r.next().get("z");
             assertEquals(0,n.getId());
             assertEquals("hallo",(String)n.getProperty("text"));
             watch.stop();
 
             long first = watch.getTime();
 
+            graphDb.execute("CALL db.useView(['Test']) MATCH ()-[i]-() RETURN i"); // just that no jvm caching magic interferes
+
             watch.reset();
             watch.start();
-            r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
-            n = (NodeProxy)r.next().get("n");
-            assertEquals(0,n.getId());
-            assertEquals("hallo",(String)n.getProperty("text"));
+            Result r2 = graphDb.execute("CALL db.useView(['Test']) MATCH (m) RETURN m");
+            NodeProxy m = (NodeProxy)r2.next().get("m");
+            assertEquals(0,m.getId());
+            assertEquals("hallo",(String)m.getProperty("text"));
             watch.stop();
 
             long second = watch.getTime();
