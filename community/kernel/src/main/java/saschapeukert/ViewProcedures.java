@@ -6,7 +6,7 @@ import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.exceptions.ProcedureException;
 import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
 import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
-import org.neo4j.kernel.impl.api.VirtualOperationsFacade;
+import org.neo4j.kernel.impl.api.ViewOperationsFacade;
 import org.neo4j.kernel.internal.GraphDatabaseAPI;
 import org.neo4j.procedure.Context;
 import org.neo4j.procedure.Description;
@@ -52,7 +52,7 @@ public class ViewProcedures {
         a.Message = index;
         ar.add(a);
 
-        VirtualOperationsFacade v = (VirtualOperationsFacade) tx.acquireStatement().readOperations(); // not that elegant...
+        ViewOperationsFacade v = (ViewOperationsFacade) tx.acquireStatement().readOperations(); // not that elegant...
 
         a = new OutputStringResult();
         a.Message = String.valueOf(v.nodeExists(0l));
@@ -148,7 +148,7 @@ public class ViewProcedures {
 
         // Filter!
 
-        VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+        ViewOperationsFacade facade = (ViewOperationsFacade) tx.acquireStatement().readOperations();
 
         Set<Long> nodeIdSet = new HashSet<>();
         Set<Long> relIdSet = new HashSet<>();
@@ -195,7 +195,7 @@ public class ViewProcedures {
     @Description("THIS NEEDS SOME DESCRIPTION LATER")
     public void clearViews() {
 
-        VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+        ViewOperationsFacade facade = (ViewOperationsFacade) tx.acquireStatement().readOperations();
         facade.clearNodeIdFilter();
         facade.clearRelationshipIdFilter();
     }
@@ -217,7 +217,7 @@ public class ViewProcedures {
 
         // Filter!
 
-        VirtualOperationsFacade facade = (VirtualOperationsFacade) tx.acquireStatement().readOperations();
+        ViewOperationsFacade facade = (ViewOperationsFacade) tx.acquireStatement().readOperations();
         String idqueryString = v.getIdQuery();
 
         Result resultIdQuery = graphDatabaseAPI.execute(idqueryString);

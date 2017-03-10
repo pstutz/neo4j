@@ -19,9 +19,9 @@ import java.util.function.IntSupplier;
 public class VirtualNodeItem implements NodeItem {
 
     private long id;
-    private VirtualOperationsFacade ops;
+    private ViewOperationsFacade ops;
 
-    public VirtualNodeItem(long id, VirtualOperationsFacade ops){
+    public VirtualNodeItem(long id, ViewOperationsFacade ops){
         this.id = id;
         this.ops = ops;
     }

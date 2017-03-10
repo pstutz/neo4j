@@ -264,6 +264,7 @@ public class GraphDatabaseServiceExecuteTest
     {
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
 
+        /*
         // when
         try ( Transaction tx = graphDb.beginTx() )
         {
@@ -280,12 +281,12 @@ public class GraphDatabaseServiceExecuteTest
             assertEquals("hallo",(String)n.getProperty("text"));
 
             tx.success();
-        }
+        } */
 
         try ( Transaction tx = graphDb.beginTx() )
         {
+            graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
             graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
-
 
             // not the best test ever...
             StopWatch watch = new StopWatch();
@@ -314,6 +315,9 @@ public class GraphDatabaseServiceExecuteTest
             System.out.println(first + " ms");
             System.out.println(second + " ms");
             assertTrue(first>second);
+
+            // cleanup
+            ViewController.getInstance().clearViews();
 
             tx.success();
         }

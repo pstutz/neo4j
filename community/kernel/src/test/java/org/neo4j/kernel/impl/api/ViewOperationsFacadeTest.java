@@ -14,7 +14,7 @@ import static org.junit.Assert.*;
 /**
  * Created by Sascha Peukert on 18.08.2016.
  */
-public class VirtualOperationsFacadeTest {
+public class ViewOperationsFacadeTest {
     // okay, we do only test the virtual functionality here
 
     private GraphDatabaseService graphDb;

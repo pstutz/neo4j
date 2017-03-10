@@ -60,7 +60,7 @@ public class KernelStatement implements TxStateHolder, Statement
     private final StorageStatement storeStatement;
     private final AccessCapability accessCapability;
     private final KernelTransactionImplementation transaction;
-    private final VirtualOperationsFacade facade;
+    private final ViewOperationsFacade facade;
     private StatementLocks statementLocks;
     private int referenceCount;
     private volatile ExecutingQueryList executingQueryList;
@@ -75,7 +75,7 @@ public class KernelStatement implements TxStateHolder, Statement
         this.txStateHolder = txStateHolder;
         this.storeStatement = storeStatement;
         this.accessCapability = accessCapability;
-        this.facade =  new VirtualOperationsFacade( transaction, this, procedures );//new OperationsFacade( transaction, this, procedures );
+        this.facade =  new ViewOperationsFacade( transaction, this, procedures );//new OperationsFacade( transaction, this, procedures );
         this.executingQueryList = ExecutingQueryList.EMPTY;
     }
 

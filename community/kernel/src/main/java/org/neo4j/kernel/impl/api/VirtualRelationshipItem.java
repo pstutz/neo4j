@@ -21,9 +21,9 @@ public class VirtualRelationshipItem implements RelationshipItem {
     private long startNode;
     private long endNode;
     private long id;
-    private VirtualOperationsFacade ops;
+    private ViewOperationsFacade ops;
 
-    public VirtualRelationshipItem(long start, long end, int type, long relId, VirtualOperationsFacade ops){
+    public VirtualRelationshipItem(long start, long end, int type, long relId, ViewOperationsFacade ops){
         this.type = type;
         this.startNode = start;
         this.endNode = end;

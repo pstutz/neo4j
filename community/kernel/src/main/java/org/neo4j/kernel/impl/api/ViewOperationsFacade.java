@@ -20,7 +20,6 @@
 package org.neo4j.kernel.impl.api;
 
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.neo4j.collection.primitive.PrimitiveLongCollections;
 import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.Direction;
@@ -50,7 +49,7 @@ import saschapeukert.IdFilter;
 import java.util.*;
 
 // TODO Sascha
-public class VirtualOperationsFacade extends OperationsFacade
+public class ViewOperationsFacade extends OperationsFacade
 {
 
     class PropertyValueId {
@@ -90,39 +89,63 @@ public class VirtualOperationsFacade extends OperationsFacade
         }
     }
 
-    class MyFilteredPrimitiveLongIterator implements PrimitiveLongIterator{
+    class FilteredPrimitiveLongIterator implements PrimitiveLongIterator {
 
         private IdFilter filter;
         private PrimitiveLongIterator iterator;
+        private boolean hasCached;
+        private long cached;
 
-        public MyFilteredPrimitiveLongIterator(IdFilter f, PrimitiveLongIterator originalIterator){
+        public FilteredPrimitiveLongIterator(IdFilter f, PrimitiveLongIterator originalIterator) {
             super();
             filter = f;
-
-            if(filter.isUnused()){
-                iterator = originalIterator;
-            } else {
-                // Apply filter!
-                Set<Long> resultSet = new HashSet<>();
-                while(originalIterator.hasNext()){
-                    long id = originalIterator.next();
-                    if(filter.idIsInFilter(id)){
-                        resultSet.add(id);
-                    }
-                }
-
-                iterator = PrimitiveLongCollections.toPrimitiveIterator(resultSet.iterator());
-            }
+            iterator = originalIterator;
+            cached = -1;
+            hasCached = false;
         }
 
         @Override
         public boolean hasNext() {
-            return iterator.hasNext();
+            if (hasCached) return true;
+            //iterate until you find one and set hasCached and cached
+            if (filter.isUnused()) {
+                return iterator.hasNext();
+            } else {
+                // filter in use
+                do {
+                    if (iterator.hasNext()) {
+                        long candidateId = iterator.next();
+                        if (filter.idIsInFilter(candidateId)) {
+                            hasCached = true;
+                            cached = candidateId;
+                            return true;
+                        }
+                    } else {
+                        return false;
+                    }
+                } while (true);
+            }
         }
 
         @Override
         public long next() {
-            return iterator.next();
+            if (hasCached) {
+                hasCached = false;
+                return cached;
+            }
+            //iterate until next matches
+            if (filter.isUnused()) {
+                return iterator.next();
+            } else {
+                // filter in use
+                if (hasNext()) {
+                    hasCached = false;
+                    return cached;
+                } else {
+                    iterator.next(); // this makes booom
+                    return -1; // this does not happen!
+                }
+            }
         }
     }
 
@@ -147,8 +170,8 @@ public class VirtualOperationsFacade extends OperationsFacade
 
     private SortedSet<Integer> knowntransactionIds;
 
-    VirtualOperationsFacade(KernelTransaction tx, KernelStatement statement,
-                            Procedures procedures )
+    ViewOperationsFacade(KernelTransaction tx, KernelStatement statement,
+                         Procedures procedures )
     {
         super(tx,statement,procedures);
 
@@ -185,7 +208,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         MergingPrimitiveLongIterator bothNodeIds = new MergingPrimitiveLongIterator(allRealNodes,
                 virtualNodeIds.get(authenticate()));
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter,bothNodeIds);
+        return new FilteredPrimitiveLongIterator(nodeIdFilter,bothNodeIds);
     }
 
     @Override
@@ -195,7 +218,7 @@ public class VirtualOperationsFacade extends OperationsFacade
         MergingPrimitiveLongIterator bothRelIds =
                 new MergingPrimitiveLongIterator(allRealRels,virtualRelationshipIds());
         IdFilter relIdFilter = txState().getRelationshipIdFilter();
-        return new MyFilteredPrimitiveLongIterator(relIdFilter,bothRelIds);
+        return new FilteredPrimitiveLongIterator(relIdFilter,bothRelIds);
     }
 
     @Override
@@ -206,6 +229,21 @@ public class VirtualOperationsFacade extends OperationsFacade
 
         ArrayList<Long> resultList = new ArrayList<>();
 
+        // Get all virtual nodes that belong to this transaction
+        Map<Long,Set<Integer>> nodeIdToLabelIds =
+                virtualNodeIdToLabelIds.get(authenticate());
+
+        for(Long nodeId :nodeIdToLabelIds.keySet()) {
+            Set<Integer> labelIds = nodeIdToLabelIds.get(nodeId);
+            if(labelIds.contains(labelId)){
+                resultList.add(nodeId);
+            }
+        }
+        IdFilter nodeIdFilter = txState().getNodeIdFilter();
+
+        PrimitiveLongIterator it = new MergingPrimitiveLongIterator(originalIT,resultList);
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, it);
+        /*
         // TODO: Improvements possible
         for(Long nodeId : virtualNodeIdToLabelIds.get(authenticate()).keySet()) {
             Set<Integer> labelIds = virtualNodeIdToLabelIds.get(authenticate()).get(nodeId);
@@ -214,7 +252,7 @@ public class VirtualOperationsFacade extends OperationsFacade
             }
         }
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, new MergingPrimitiveLongIterator(originalIT,resultList));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, new MergingPrimitiveLongIterator(originalIT,resultList)); */
     }
 
     @Override
@@ -223,7 +261,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexSeek(index,value));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexSeek(index,value));
     }
 
     @Override
@@ -236,7 +274,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByNumber(index,lower,includeLower,upper,includeUpper));
     }
 
     @Override
@@ -249,7 +287,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByString(index,lower,includeLower,upper,includeUpper));
     }
 
     @Override
@@ -258,7 +296,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByPrefix(index,prefix));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexRangeSeekByPrefix(index,prefix));
     }
 
     @Override
@@ -267,7 +305,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexScan(index));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexScan(index));
     }
 
     @Override
@@ -276,7 +314,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexContainsScan(index,term));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexContainsScan(index,term));
     }
 
     @Override
@@ -285,7 +323,7 @@ public class VirtualOperationsFacade extends OperationsFacade
     {
         // TODO !
         IdFilter nodeIdFilter = txState().getNodeIdFilter();
-        return new MyFilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexEndsWithScan(index,suffix));
+        return new FilteredPrimitiveLongIterator(nodeIdFilter, super.nodesGetFromIndexEndsWithScan(index,suffix));
     }
 
     @Override
