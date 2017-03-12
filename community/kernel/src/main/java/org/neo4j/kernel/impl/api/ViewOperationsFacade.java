@@ -168,7 +168,7 @@ public class ViewOperationsFacade extends OperationsFacade
     private Map<Integer,Map<Long,Set<Integer>>> virtualNodeIdToLabelIds;
     private Map<Integer,Map<Long,Long[]>> virtualRelationshipIdToVirtualNodeIds; // Node[0] = from, Node[1] = to
 
-    private SortedSet<Integer> knowntransactionIds;
+    private HashSet<Integer> knowntransactionIds;  // why sorted?
 
     ViewOperationsFacade(KernelTransaction tx, KernelStatement statement,
                          Procedures procedures )
@@ -190,7 +190,7 @@ public class ViewOperationsFacade extends OperationsFacade
         virtualPropertyIdToValueForNodes = new HashMap<>();
         virtualPropertyIdToValueForRels = new HashMap<>();
 
-        knowntransactionIds = new TreeSet<>();
+        knowntransactionIds = new HashSet<>(); // previously TreeSet
 
     }
 
@@ -1421,16 +1421,17 @@ public class ViewOperationsFacade extends OperationsFacade
     {
         statement.assertOpen();
         long new_id;
-        if(virtualNodeIds.get(authenticate()).size()==0){
+        int auth = authenticate();
+        if(virtualNodeIds.get(auth).size()==0){
             new_id = -2;
         } else {
-            long smallest = virtualNodeIds.get(authenticate()).first();
+            long smallest = virtualNodeIds.get(auth).first();
             new_id = smallest - 1;
         }
-        virtualNodeIds.get(authenticate()).add(new_id);
-        virtualNodeIdToPropertyKeyIds.get(authenticate()).put(new_id,new LinkedHashSet<>());
-        virtualNodeIdToLabelIds.get(authenticate()).put(new_id,new LinkedHashSet<>());
-        virtualNodeIdToConnectedRelationshipIds.get(authenticate()).put(new_id,new LinkedHashSet<>());
+        virtualNodeIds.get(auth).add(new_id);
+        virtualNodeIdToPropertyKeyIds.get(auth).put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToLabelIds.get(auth).put(new_id,new LinkedHashSet<>());
+        virtualNodeIdToConnectedRelationshipIds.get(auth).put(new_id,new LinkedHashSet<>());
 
         return new_id;
     }
