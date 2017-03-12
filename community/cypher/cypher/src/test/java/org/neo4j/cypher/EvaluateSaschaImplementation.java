@@ -16,7 +16,7 @@ import java.util.Map;
  */
 public class EvaluateSaschaImplementation {
     // not the best place for measurements, but it works for now...
-    private int size = 20; //  > 1  !
+    private int size = 16; //  > 1  !
     private int max = 300000;
 
     @Test
@@ -67,7 +67,7 @@ public class EvaluateSaschaImplementation {
             }
             middle = middle / size-1; // ignore first run
 
-            System.out.println(i+": " +median.evaluate(values) + " , " + middle );
+            System.out.println(i+" " +median.evaluate(values) + " " + middle );
 
         }
 
@@ -121,7 +121,7 @@ public class EvaluateSaschaImplementation {
             }
             middle = middle / size -1;
 
-            System.out.println(i+": " +median.evaluate(values) + " , " + middle );
+            System.out.println(i+" " +median.evaluate(values) + " " + middle );
         }
     }
 }
