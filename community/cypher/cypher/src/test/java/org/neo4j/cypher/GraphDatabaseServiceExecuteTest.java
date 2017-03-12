@@ -557,7 +557,7 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -2.",e.getMessage());
+                assertEquals("Unable to load NODE with id -4.",e.getMessage());
                 graphDb.execute("MATCH (n) DETACH DELETE n");
             }
             try {
@@ -567,7 +567,7 @@ public class GraphDatabaseServiceExecuteTest
                 fail();
             } catch (QueryExecutionException e){
                 // success!?
-                assertEquals("Unable to load NODE with id -2.",e.getMessage());
+                assertEquals("Unable to load NODE with id -5.",e.getMessage());
                 graphDb.execute("MATCH (n) DETACH DELETE n");
             }
 

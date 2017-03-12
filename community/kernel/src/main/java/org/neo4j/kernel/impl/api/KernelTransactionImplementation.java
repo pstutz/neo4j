@@ -166,6 +166,12 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     private IdFilter nodeIdFilter;
     private IdFilter relIdFilter;
 
+    private long lowestVirtualRelId;
+    private long lowestVirtualNodeId;
+    private int lowestVirtualLabelId;
+    private int lowestVirtualPropertyId;
+    private int lowestVirtualRelTypeId;
+
     /**
      * Lock prevents transaction {@link #markForTermination(Status)}  transaction termination} from interfering with
      * {@link #close() transaction commit} and specifically with {@link #release()}.
@@ -207,9 +213,16 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.currentStatement = new KernelStatement( this, this, storageStatement, procedures, accessCapability );
         this.userMetaData = Collections.emptyMap();
 
-        cachedIdSets = new HashMap<>();
-        nodeIdFilter = new IdFilter();
-        relIdFilter = new IdFilter();
+        this.cachedIdSets = new HashMap<>();
+        this.nodeIdFilter = new IdFilter();
+        this.relIdFilter = new IdFilter();
+
+        this.lowestVirtualNodeId = -2;
+        this.lowestVirtualRelId = -2;
+        this.lowestVirtualLabelId = -2;
+        this.lowestVirtualPropertyId = -2;
+        this.lowestVirtualRelTypeId = -2;
+
     }
 
     /**
@@ -240,6 +253,11 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.nodeIdFilter.clear();
         this.relIdFilter.clear();
 
+        this.lowestVirtualNodeId = -2;
+        this.lowestVirtualRelId = -2;
+        this.lowestVirtualLabelId = -2;
+        this.lowestVirtualPropertyId = -2;
+        this.lowestVirtualRelTypeId = -2;
         return this;
     }
 
@@ -273,6 +291,36 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
 
     public void clearRelationshipIdFilter(){
         relIdFilter.clear();
+    }
+
+    public long getNextVirtualNodeId(){
+        long ret = lowestVirtualNodeId;
+        lowestVirtualNodeId--;
+        return ret;
+    }
+
+    public long getNextVirtualRelationshipId(){
+        long ret = lowestVirtualRelId;
+        lowestVirtualRelId--;
+        return ret;
+    }
+
+    public int getNextVirtualLabelId(){
+        int ret = lowestVirtualLabelId;
+        lowestVirtualLabelId--;
+        return ret;
+    }
+
+    public int getNextVirtualPropertyId(){
+        int ret = lowestVirtualPropertyId;
+        lowestVirtualPropertyId--;
+        return ret;
+    }
+
+    public int getNextVirtualRelationshipTypeId(){
+        int ret = lowestVirtualRelTypeId;
+        lowestVirtualRelTypeId--;
+        return ret;
     }
 
     int getReuseCount()
@@ -781,6 +829,11 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
             cachedIdSets.clear();
             this.nodeIdFilter.clear();
             this.relIdFilter.clear();
+            this.lowestVirtualNodeId = -2;
+            this.lowestVirtualRelId = -2;
+            this.lowestVirtualLabelId = -2;
+            this.lowestVirtualPropertyId = -2;
+            this.lowestVirtualRelTypeId = -2;
         }
     }
 

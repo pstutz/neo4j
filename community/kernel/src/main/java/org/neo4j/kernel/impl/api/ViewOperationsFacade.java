@@ -149,11 +149,11 @@ public class ViewOperationsFacade extends OperationsFacade
         }
     }
 
-    private Map<Integer,TreeMap<Long,Integer>> virtualRelationshipIdToTypeId; // actualData and ref to types
-    private Map<Integer,SortedSet<Long>> virtualNodeIds;  // "actual data"
-    private Map<Integer,TreeMap<Integer,String>> virtualPropertyKeyIdsToName;  // "actual data"
-    private Map<Integer,TreeMap<Integer,String>> virtualLabels; // actual data
-    private Map<Integer,TreeMap<Integer,String>> virtualRelationshipTypeIdToName; // actual data
+    private Map<Integer,HashMap<Long,Integer>> virtualRelationshipIdToTypeId; // actualData and ref to types
+    private Map<Integer,HashSet<Long>> virtualNodeIds;  // "actual data"
+    private Map<Integer,HashMap<Integer,String>> virtualPropertyKeyIdsToName;  // "actual data"
+    private Map<Integer,HashMap<Integer,String>> virtualLabels; // actual data
+    private Map<Integer,HashMap<Integer,String>> virtualRelationshipTypeIdToName; // actual data
 
     //entityId + propKeyId -> value
     private Map<PropertyValueId,Object> virtualPropertyIdToValueForNodes;
@@ -1329,12 +1329,7 @@ public class ViewOperationsFacade extends OperationsFacade
         }
 
         // not found, need to create
-        int newId;
-        if(virtualLabels().size()==0){
-            newId = -2;
-        } else{
-            newId = virtualLabels.get(authenticate()).firstKey()-1;
-        }
+        int newId = txState().getNextVirtualLabelId();
         virtualLabelCreateForName(labelName,newId);
         return newId;
     }
@@ -1353,12 +1348,7 @@ public class ViewOperationsFacade extends OperationsFacade
         }
 
         // not found, need to create
-        int newId;
-        if(virtualPropertyKeyIds().size()==0){
-            newId = -2;
-        } else{
-            newId = virtualPropertyKeyIdsToName.get(authenticate()).firstKey()-1;
-        }
+        int newId = txState().getNextVirtualPropertyId();
         virtualPropertyKeyCreateForName(propertyKeyName,newId);
         return newId;
     }
@@ -1377,12 +1367,7 @@ public class ViewOperationsFacade extends OperationsFacade
         }
 
         // not found, need to create
-        int newId;
-        if(virtualRelationshipTypeIdToName.get(authenticate()).size()==0){
-            newId = -2;
-        } else{
-            newId = virtualRelationshipTypeIdToName.get(authenticate()).firstKey()-1;
-        }
+        int newId=txState().getNextVirtualRelationshipTypeId();
         virtualRelationshipTypeCreateForName(relationshipTypeName,newId);
         return newId;
     }
@@ -1420,14 +1405,9 @@ public class ViewOperationsFacade extends OperationsFacade
     public long virtualNodeCreate()
     {
         statement.assertOpen();
-        long new_id;
+        long new_id = txState().getNextVirtualNodeId();
         int auth = authenticate();
-        if(virtualNodeIds.get(auth).size()==0){
-            new_id = -2;
-        } else {
-            long smallest = virtualNodeIds.get(auth).first();
-            new_id = smallest - 1;
-        }
+
         virtualNodeIds.get(auth).add(new_id);
         virtualNodeIdToPropertyKeyIds.get(auth).put(new_id,new LinkedHashSet<>());
         virtualNodeIdToLabelIds.get(auth).put(new_id,new LinkedHashSet<>());
@@ -1486,22 +1466,17 @@ public class ViewOperationsFacade extends OperationsFacade
     {
         //TODO: Test it with all possible inputs
         //if(isVirtual(startNodeId)||isVirtual(endNodeId)){
-
+        int auth = authenticate();
             // create a new relId
-            long newId;
-            if(virtualRelationshipIdToTypeId.get(authenticate()).size()==0) {
-                newId =-2;
-            } else {
-                newId = virtualRelationshipIdToTypeId.get(authenticate()).firstKey() - 1;
-            }
-            virtualRelationshipIdToTypeId.get(authenticate()).put(newId,relationshipTypeId);
+            long newId = txState().getNextVirtualRelationshipId();
+            virtualRelationshipIdToTypeId.get(auth).put(newId,relationshipTypeId);
 
             Long[] nodes = new Long[2];
             nodes[0] = startNodeId;
             nodes[1] = endNodeId;
 
-            virtualRelationshipIdToVirtualNodeIds.get(authenticate()).put(newId,nodes);
-            virtualRelationshipIdToPropertyKeyIds.get(authenticate()).put(newId,new LinkedHashSet<Integer>());
+            virtualRelationshipIdToVirtualNodeIds.get(auth).put(newId,nodes);
+            virtualRelationshipIdToPropertyKeyIds.get(auth).put(newId,new LinkedHashSet<Integer>());
 
             return newId;
         //} else {
@@ -2039,11 +2014,11 @@ public class ViewOperationsFacade extends OperationsFacade
 
         } else{
             // new id
-            virtualRelationshipIdToTypeId.put(taId,new TreeMap<>());
-            virtualNodeIds.put(taId,new TreeSet<>());
-            virtualPropertyKeyIdsToName.put(taId, new TreeMap<>());
-            virtualLabels.put(taId, new TreeMap<>());
-            virtualRelationshipTypeIdToName.put(taId, new TreeMap<>());
+            virtualRelationshipIdToTypeId.put(taId,new HashMap<>());
+            virtualNodeIds.put(taId,new HashSet<>());
+            virtualPropertyKeyIdsToName.put(taId, new HashMap<>());
+            virtualLabels.put(taId, new HashMap<>());
+            virtualRelationshipTypeIdToName.put(taId, new HashMap<>());
 
             virtualNodeIdToPropertyKeyIds.put(taId, new HashMap<>());
             virtualRelationshipIdToPropertyKeyIds.put(taId, new HashMap<>());
