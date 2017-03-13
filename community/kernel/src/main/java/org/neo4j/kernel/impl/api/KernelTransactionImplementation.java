@@ -881,6 +881,10 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         return transactionId;
     }
 
+    public int getLockSessionId(){
+        return statementLocks.pessimistic().getLockSessionId(); // can this act as identifier during the TA?
+    }
+
     @Override
     public long getCommitTime()
     {

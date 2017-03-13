@@ -46,7 +46,9 @@ abstract class BaseRelationshipPipe(src: Pipe, key: String, startNode: String, t
     val typeId = typ.typ(state.query)
 
     //TODO: Sascha
-    val virtual = properties.toList.toString().contains(CONST.PROPERTYKEY  + " -> {  AUTO") // change later for real virtual prop
+    val list = properties.toList.toString() // change later for real virtual prop
+    val virtual = list.contains(""+CONST.PROPERTYKEY + " -> {  AUTO") || list.contains(""+CONST.PROPERTYKEY + " -> true") // should not be possible but in measurement it happens!
+
     var relationship:Relationship = null
     if(virtual) {
       relationship = state.query.createRelationship(start.getId, end.getId, typeId,false)

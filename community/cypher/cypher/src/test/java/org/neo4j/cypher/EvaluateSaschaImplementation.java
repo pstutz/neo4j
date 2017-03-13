@@ -16,7 +16,7 @@ import java.util.Map;
  */
 public class EvaluateSaschaImplementation {
     // not the best place for measurements, but it works for now...
-    private int size = 16; //  > 1  !
+    private int size = 21; //  > 1  !
     private int max = 300000;
 
     @Test

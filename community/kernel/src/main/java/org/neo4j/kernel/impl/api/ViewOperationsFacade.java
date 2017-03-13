@@ -1996,7 +1996,7 @@ public class ViewOperationsFacade extends OperationsFacade
     }
 
     private int getTransactionId(){
-        String txString = tx.toString();
+        /*String txString = tx.toString();
 
         //"KernelTransaction[" + this.locks.getLockSessionId() + "]";
         int posStart = txString.indexOf("[");
@@ -2004,6 +2004,8 @@ public class ViewOperationsFacade extends OperationsFacade
         txString = txString.substring(posStart+1,posEnd);
 
         return Integer.parseInt(txString);
+        */
+        return txState().getLockSessionId();
     }
 
     private int authenticate(){

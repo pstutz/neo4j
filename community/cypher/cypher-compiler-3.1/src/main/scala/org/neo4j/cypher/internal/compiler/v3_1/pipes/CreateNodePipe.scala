@@ -45,8 +45,8 @@ abstract class BaseCreateNodePipe(src: Pipe, key: String, labels: Seq[LazyLabel]
 
     // current check if virtual:
     // (dirty) check if prop is set (to String)
-
-    val virtual = properties.toList.toString().contains(""+CONST.PROPERTYKEY + " -> {  AUTO")
+    val list = properties.toList.toString()
+    val virtual = list.contains(""+CONST.PROPERTYKEY + " -> {  AUTO") || list.contains(""+CONST.PROPERTYKEY + " -> true") // should not be possible but in measurement it happens!
     var node:Node = null
     if(virtual) {
       //val node = state.query.createVirtualNode()
