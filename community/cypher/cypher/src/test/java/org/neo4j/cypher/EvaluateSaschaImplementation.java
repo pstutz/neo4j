@@ -124,4 +124,105 @@ public class EvaluateSaschaImplementation {
             System.out.println(i+" " +median.evaluate(values) + " " + middle );
         }
     }
+
+    @Test
+    public void MeasureCreatingVirtualEntitiesTA() throws Exception
+    {
+        GraphDatabaseService graphDb;
+        StopWatch watch = new StopWatch();
+        Map<String,Object> params = new HashMap<>();
+
+        System.out.println("Virtual Entities (whole TA)");
+        for(int i=1;i<max;i=i*2) {
+            params.put("1", i);
+
+            Median median = new Median();
+            double[] values = new double[size];
+            int p = 0;
+            for(int j=0;j<size;j++){
+                // VE
+                graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+                try ( Transaction tx = graphDb.beginTx() )
+                {
+                    // preparing labels and types
+                    Result r = graphDb.execute( "CREATE (a:User {id:0})-[:IS_SAME_AS]->(a)" );
+
+                    tx.success();
+                }
+                watch.start();
+                try (Transaction tx = graphDb.beginTx()) {
+                    graphDb.execute("FOREACH (r IN range(1,{1}) | \n" +
+                            "  CREATE VIRTUAL (b:User {id:r})-[:IS_SAME_AS]->(b)\n" +
+                            ");", params);
+                    tx.success();  // implicit cleanup
+                }
+                watch.stop();
+                values[p] = (double) watch.getTime();
+                p++;
+                watch.reset();
+                graphDb.shutdown();
+            }
+            double middle = 0;
+            for(int j=1;j<size;j++){
+                // ignore the first run because of jvm stuff
+                middle = middle +values[j];
+            }
+            middle = middle / size-1; // ignore first run
+
+            System.out.println(i+" " +median.evaluate(values) + " " + middle );
+
+        }
+
+    }
+
+    @Test
+    public void MeasureCreatingRealEntitiesTA() throws Exception
+    {
+        GraphDatabaseService graphDb;
+        StopWatch watch = new StopWatch();
+        Map<String,Object> params = new HashMap<>();
+
+        System.out.println("Real Entities (whole TA)");
+        for(int i=1;i<max;i=i*2) {
+            params.put("1", i);
+
+            Median median = new Median();
+            double[] values = new double[size];
+            int p = 0;
+            for(int j=0;j<size;j++){
+                // VE
+                graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+                try ( Transaction tx = graphDb.beginTx() )
+                {
+                    // preparing labels and types
+                    Result r = graphDb.execute( "CREATE (a:User {id:0})-[:IS_SAME_AS]->(a)" );
+
+                    tx.success();
+                }
+                watch.start();
+                try (Transaction tx = graphDb.beginTx()) {
+                    graphDb.execute("FOREACH (o IN range(1,{1}) | \n" +
+                            "  CREATE (c:User {id:o})-[:IS_SAME_AS]->(c)\n" +
+                            ");", params);
+
+                    tx.success();
+                }
+                watch.stop();
+                values[p] = (double) watch.getTime();
+                p++;
+                watch.reset();
+                graphDb.shutdown();
+            }
+            double middle = 0;
+            for(int j=1;j<size;j++){
+                // ignore the first run because of jvm stuff
+                middle = middle +values[j];
+            }
+            middle = middle / size -1;
+
+            System.out.println(i+" " +median.evaluate(values) + " " + middle );
+        }
+    }
 }

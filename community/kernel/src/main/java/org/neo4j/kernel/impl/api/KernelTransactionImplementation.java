@@ -172,6 +172,24 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     private int lowestVirtualPropertyId;
     private int lowestVirtualRelTypeId;
 
+    // Testing Sascha
+    public Map<Long,Integer> virtualRelationshipIdToTypeId; // actualData and ref to types
+    public Set<Long> virtualNodeIds;  // "actual data"
+    public Map<Integer,String> virtualPropertyKeyIdsToName;  // "actual data"
+    public Map<Integer,String> virtualLabels; // actual data
+    public Map<Integer,String> virtualRelationshipTypeIdToName; // actual data
+
+    //entityId + propKeyId -> value
+    public Map<ViewOperationsFacade.PropertyValueId,Object> virtualPropertyIdToValueForNodes;
+    public Map<ViewOperationsFacade.PropertyValueId,Object> virtualPropertyIdToValueForRels;
+
+    public Map<Long,Set<Integer>> virtualNodeIdToPropertyKeyIds;   // Natural ordering 1 2 3 10 12 ...  -> first one is the smallest with negative
+    public Map<Long,Set<Long>> virtualNodeIdToConnectedRelationshipIds;
+    public Map<Long,Set<Integer>> virtualRelationshipIdToPropertyKeyIds;
+    public Map<Long,Set<Integer>> virtualNodeIdToLabelIds;
+    public Map<Long,Long[]> virtualRelationshipIdToVirtualNodeIds; // Node[0] = from, Node[1] = to
+
+
     /**
      * Lock prevents transaction {@link #markForTermination(Status)}  transaction termination} from interfering with
      * {@link #close() transaction commit} and specifically with {@link #release()}.
@@ -223,6 +241,18 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.lowestVirtualPropertyId = -2;
         this.lowestVirtualRelTypeId = -2;
 
+        this.virtualRelationshipIdToTypeId = new HashMap<>();
+        this.virtualNodeIds = new HashSet<>();
+        this.virtualPropertyKeyIdsToName = new HashMap<>();
+        this.virtualLabels = new HashMap<>();
+        this.virtualRelationshipTypeIdToName = new HashMap<>();
+        this.virtualPropertyIdToValueForNodes = new HashMap<>();
+        this.virtualPropertyIdToValueForRels = new HashMap<>();
+        this.virtualNodeIdToPropertyKeyIds = new HashMap<>();
+        this.virtualNodeIdToConnectedRelationshipIds = new HashMap<>();
+        this.virtualRelationshipIdToPropertyKeyIds = new HashMap<>();
+        this.virtualNodeIdToLabelIds = new HashMap<>();
+        this.virtualRelationshipIdToVirtualNodeIds = new HashMap<>();
     }
 
     /**
@@ -258,6 +288,20 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         this.lowestVirtualLabelId = -2;
         this.lowestVirtualPropertyId = -2;
         this.lowestVirtualRelTypeId = -2;
+
+        this.virtualRelationshipIdToTypeId.clear();
+        this.virtualNodeIds.clear();
+        this.virtualPropertyKeyIdsToName.clear();
+        this.virtualLabels.clear();
+        this.virtualRelationshipTypeIdToName.clear();
+        this.virtualPropertyIdToValueForNodes.clear();
+        this.virtualPropertyIdToValueForRels.clear();
+        this.virtualNodeIdToPropertyKeyIds.clear();
+        this.virtualNodeIdToConnectedRelationshipIds.clear();
+        this.virtualRelationshipIdToPropertyKeyIds.clear();
+        this.virtualNodeIdToLabelIds.clear();
+        this.virtualRelationshipIdToVirtualNodeIds.clear();
+
         return this;
     }
 
@@ -834,6 +878,18 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
             this.lowestVirtualLabelId = -2;
             this.lowestVirtualPropertyId = -2;
             this.lowestVirtualRelTypeId = -2;
+            this.virtualRelationshipIdToTypeId.clear();
+            this.virtualNodeIds.clear();
+            this.virtualPropertyKeyIdsToName.clear();
+            this.virtualLabels.clear();
+            this.virtualRelationshipTypeIdToName.clear();
+            this.virtualPropertyIdToValueForNodes.clear();
+            this.virtualPropertyIdToValueForRels.clear();
+            this.virtualNodeIdToPropertyKeyIds.clear();
+            this.virtualNodeIdToConnectedRelationshipIds.clear();
+            this.virtualRelationshipIdToPropertyKeyIds.clear();
+            this.virtualNodeIdToLabelIds.clear();
+            this.virtualRelationshipIdToVirtualNodeIds.clear();
         }
     }
 
