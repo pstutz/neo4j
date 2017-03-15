@@ -452,7 +452,9 @@ public class ViewOperationsFacade extends OperationsFacade
         // get the real ones
         if(!isVirtual(nodeId)) {
             realIt = super.nodeGetRelationships(nodeId, direction,relTypes);
-
+            if(relIdFilter.isUnused()&&tx.virtualRelationshipIdToVirtualNodeIds.keySet().size()==0){
+                return realIt;  // more of a hack then anything else
+            }
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
 
@@ -532,6 +534,9 @@ public class ViewOperationsFacade extends OperationsFacade
         // get the real ones
         if(!isVirtual(nodeId)) {
             RelationshipIterator realIt = super.nodeGetRelationships(nodeId, direction);
+            if(relIdFilter.isUnused()&&tx.virtualRelationshipIdToVirtualNodeIds.keySet().size()==0){
+                return realIt;  // more of a hack then anything else
+            }
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
 

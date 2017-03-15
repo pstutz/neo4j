@@ -264,25 +264,6 @@ public class GraphDatabaseServiceExecuteTest
     {
         GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
 
-        /*
-        // when
-        try ( Transaction tx = graphDb.beginTx() )
-        {
-
-            // caching the execution plans to have a fair test
-            graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
-            graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
-
-
-            // not the best test ever...
-            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (n) RETURN n");
-            NodeProxy n = (NodeProxy)r.next().get("n");
-            assertEquals(0,n.getId());
-            assertEquals("hallo",(String)n.getProperty("text"));
-
-            tx.success();
-        } */
-
         try ( Transaction tx = graphDb.beginTx() )
         {
             graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
@@ -323,6 +304,48 @@ public class GraphDatabaseServiceExecuteTest
         }
 
     }
+
+    @Test
+    public void testShortRead1Rewrite() throws Exception
+    {
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabase();
+
+        try ( Transaction tx = graphDb.beginTx() )
+        {
+            graphDb.execute( "MATCH (p:Person)-[f:PERSON_IS_LOCATED_IN]->(c:City)\n" +
+                    "    WITH collect (p) + collect (c) AS nodes, collect (f) AS rels\n" +
+                    "    MATCH\n" +
+                    "            (person:Person {id:13194139535419})-[r:PERSON_IS_LOCATED_IN]->(city:City)\n" +
+                    "    WHERE person IN nodes AND r IN rels AND city IN nodes\n" +
+                    "    RETURN\n" +
+                    "    person.firstName AS firstName,\n" +
+                    "    person.lastName AS lastName,\n" +
+                    "    person.birthday AS birthday,\n" +
+                    "    person.locationIP AS locationIp,\n" +
+                    "    person.browserUsed AS browserUsed,\n" +
+                    "    person.gender AS gender,\n" +
+                    "    person.creationDate AS creationDate,\n" +
+                    "    city.id AS cityId" );
+
+            tx.success();
+        }
+
+    }
+    /*
+    MATCH (p:Person)-[f:PERSON_IS_LOCATED_IN]->(c:City)
+    WITH collect (p) + collect (c) AS nodes, collect (f) AS rels
+    MATCH
+            (person:Person {id:13194139535419})-[r:PERSON_IS_LOCATED_IN]->(city:City)
+    WHERE person IN nodes AND r IN rels AND city IN nodes
+    RETURN
+    person.firstName AS firstName,
+    person.lastName AS lastName,
+    person.birthday AS birthday,
+    person.locationIP AS locationIp,
+    person.browserUsed AS browserUsed,
+    person.gender AS gender,
+    person.creationDate AS creationDate,
+    city.id AS cityId */
 
     @Test
     public void runOnViewWithNestingShouldWorkProperly() throws Exception
