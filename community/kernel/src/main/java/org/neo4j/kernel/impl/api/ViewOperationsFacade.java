@@ -217,7 +217,6 @@ public class ViewOperationsFacade extends OperationsFacade
     @Override
     public PrimitiveLongIterator nodesGetForLabel(int labelId )
     {
-
         PrimitiveLongIterator originalIT = super.nodesGetForLabel(labelId);
         KernelTransactionImplementation tx = txState();
         ArrayList<Long> resultList = new ArrayList<>();
@@ -225,7 +224,7 @@ public class ViewOperationsFacade extends OperationsFacade
         // Get all virtual nodes that belong to this transaction
         Map<Long,Set<Integer>> nodeIdToLabelIds = tx.virtualNodeIdToLabelIds;
 
-        for(Long nodeId :nodeIdToLabelIds.keySet()) {
+        for(Long nodeId: nodeIdToLabelIds.keySet()) {
             Set<Integer> labelIds = nodeIdToLabelIds.get(nodeId);
             if(labelIds.contains(labelId)){
                 resultList.add(nodeId);
