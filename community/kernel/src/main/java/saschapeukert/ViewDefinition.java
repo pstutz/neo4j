@@ -11,6 +11,7 @@ public class ViewDefinition {
 
     public String name;
     public String query;
+    public String idQuery;
     public List<String> savedNodes;
     public List<String> savedRelationships;
 
@@ -27,14 +28,17 @@ public class ViewDefinition {
         query = q; // replace useless whitespace
     }
 
-    public String getIdQuery(){
+    public String getIdQuery() {
+        return idQuery;
+    }
+
+    public void produceIdQuery(){
         //TODO: This query might include duplicate ids
         String result= query;
 
-        if(query.toLowerCase().startsWith("call db.runonview(")){
+        /*if(query.toLowerCase().startsWith("call db.runonview(")){
             return result;
-        }
-
+        }*/
 
         result = result + " RETURN collect(id("; //+
         boolean first = true;
@@ -64,7 +68,7 @@ public class ViewDefinition {
 
         }
 
-        return result;
+        this.idQuery = result;
     }
 
     public Set<String> getLabels(){

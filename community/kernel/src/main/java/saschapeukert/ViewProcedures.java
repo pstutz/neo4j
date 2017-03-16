@@ -273,6 +273,7 @@ public class ViewProcedures {
         result.setQuery( query);
         result.savedNodes = nodeBindings;
         result.savedRelationships = relBindings;
+        result.produceIdQuery();
 
         // TODO: input validation
 

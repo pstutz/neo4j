@@ -126,8 +126,8 @@ public class GraphDatabaseServiceExecuteTest
             graphDb.execute( "CALL db.createView('Test2','MATCH (m:Person)',['m'],[])");
             r = graphDb.execute( "CALL db.getAllViewDefinitions()");
 
-            assertEquals("{name=Test, savedRelationships=[], savedNodes=[n], query=MATCH (n:Person)}",r.next().toString());
-            assertEquals("{name=Test2, savedRelationships=[], savedNodes=[m], query=MATCH (m:Person)}",r.next().toString());
+            assertEquals("{name=Test, idQuery=MATCH (n:Person) RETURN collect(id(n)) AS nodeIds, savedRelationships=[], savedNodes=[n], query=MATCH (n:Person)}",r.next().toString());
+            assertEquals("{name=Test2, idQuery=MATCH (m:Person) RETURN collect(id(m)) AS nodeIds, savedRelationships=[], savedNodes=[m], query=MATCH (m:Person)}",r.next().toString());
             assertFalse(r.hasNext());
 
             // cleanup
@@ -193,13 +193,14 @@ public class GraphDatabaseServiceExecuteTest
             Result r = graphDb.execute( "CREATE (n:Foo{bar:\"baz\"}) RETURN n.bar, id(n)" );
             assertEquals("{id(n)=0, n.bar=baz}",r.next().toString());
 
-
+            result.produceIdQuery();
             assertEquals("MATCH (n :Foo)-[:TEST]->(m:Foo) MATCH (n)-[a:Yo]->(m) " +
                     "RETURN collect(id(n))+ collect(id(m)) AS nodeIds , collect(id(a)) AS relIds",
                     result.getIdQuery());
 
             result.setQuery("MATCH (n    :Foo),  (m:Foo)");
             arrRel.clear(); // Need to do this!
+            result.produceIdQuery();
             Result test = graphDb.execute(result.getIdQuery());
             Map<String,Object> map =test.next();
 
@@ -269,15 +270,30 @@ public class GraphDatabaseServiceExecuteTest
             graphDb.execute( "CREATE (n:Foo{text:'hallo'})-[:REL]->(m:Bar{text:'welt'})" );
             graphDb.execute("CALL db.createView('Test','MATCH (n:Foo)',['n'],[])");
 
-            // not the best test ever...
+            // This is just to test the difference to rewrite algorithm
+             graphDb.execute("MATCH (n:Foo) WITH collect(n) as nodes MATCH (z) WHERE z IN nodes RETURN z");
             StopWatch watch = new StopWatch();
             watch.reset();
             watch.start();
-            Result r = graphDb.execute("CALL db.useView(['Test']) MATCH (z) RETURN z");
-            NodeProxy n = (NodeProxy)r.next().get("z");
-            assertEquals(0,n.getId());
-            assertEquals("hallo",(String)n.getProperty("text"));
+            Result r = graphDb.execute("MATCH (n:Foo) WITH collect(n) as nodes MATCH (z) WHERE z IN nodes RETURN z");
+            //NodeProxy n = (NodeProxy)r.next().get("z");
+            //assertEquals(0,n.getId());
+            //assertEquals("hallo",(String)n.getProperty("text"));
             watch.stop();
+            System.out.println("Rewrite: " + watch.getTime() + " ms");
+            watch.reset();
+
+
+            // not the best test ever...
+
+
+            watch.start();
+            r = graphDb.execute("CALL db.useView(['Test']) MATCH (z) RETURN z");
+            //n = (NodeProxy)r.next().get("z");
+            //assertEquals(0,n.getId());
+            //assertEquals("hallo",(String)n.getProperty("text"));
+            watch.stop();
+
 
             long first = watch.getTime();
 
@@ -286,9 +302,9 @@ public class GraphDatabaseServiceExecuteTest
             watch.reset();
             watch.start();
             Result r2 = graphDb.execute("CALL db.useView(['Test']) MATCH (m) RETURN m");
-            NodeProxy m = (NodeProxy)r2.next().get("m");
-            assertEquals(0,m.getId());
-            assertEquals("hallo",(String)m.getProperty("text"));
+            //NodeProxy m = (NodeProxy)r2.next().get("m");
+            //assertEquals(0,m.getId());
+            //assertEquals("hallo",(String)m.getProperty("text"));
             watch.stop();
 
             long second = watch.getTime();
@@ -312,20 +328,15 @@ public class GraphDatabaseServiceExecuteTest
 
         try ( Transaction tx = graphDb.beginTx() )
         {
-            graphDb.execute( "MATCH (p:Person)-[f:PERSON_IS_LOCATED_IN]->(c:City)\n" +
-                    "    WITH collect (p) + collect (c) AS nodes, collect (f) AS rels\n" +
-                    "    MATCH\n" +
-                    "            (person:Person {id:13194139535419})-[r:PERSON_IS_LOCATED_IN]->(city:City)\n" +
-                    "    WHERE person IN nodes AND r IN rels AND city IN nodes\n" +
-                    "    RETURN\n" +
-                    "    person.firstName AS firstName,\n" +
-                    "    person.lastName AS lastName,\n" +
-                    "    person.birthday AS birthday,\n" +
-                    "    person.locationIP AS locationIp,\n" +
-                    "    person.browserUsed AS browserUsed,\n" +
-                    "    person.gender AS gender,\n" +
-                    "    person.creationDate AS creationDate,\n" +
-                    "    city.id AS cityId" );
+            graphDb.execute( "CALL db.useView(['PersonsActivities'])\n" +
+                    "MATCH (message:Message {id:{1}})\n" +
+                    "RETURN\n" +
+                    "  message.creationDate AS messageCreationDate,\n" +
+                    "  CASE ((message:Post) AND not(exists(message.content)))\n" +
+                    "    WHEN true \n" +
+                    "      THEN message.imageFile\n" +
+                    "    ELSE message.content\n" +
+                    "  END AS messageContent" );
 
             tx.success();
         }
