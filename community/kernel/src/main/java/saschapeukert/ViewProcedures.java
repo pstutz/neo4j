@@ -172,12 +172,16 @@ public class ViewProcedures {
                 n_set = (Collection<Long>) idQueryMap.get("nodeIds");
                 colRel = (Collection<Long>) idQueryMap.get("relIds");
 
+                System.out.println("IdQuery '"+idqueryString +"' executed");
+
                 // saving this
                 list = new ArrayList<>();
                 list.add(n_set);
                 list.add(colRel);
                 facade.cacheView(v.name,list);
 
+            } else{
+                System.out.println("used cached view " + v.name);
             }
 
             names[i] = v.name;
@@ -194,7 +198,6 @@ public class ViewProcedures {
     @Procedure( name = "db.clearViews", mode = READ )
     @Description("THIS NEEDS SOME DESCRIPTION LATER")
     public void clearViews() {
-
         ViewOperationsFacade facade = (ViewOperationsFacade) tx.acquireStatement().readOperations();
         facade.clearNodeIdFilter();
         facade.clearRelationshipIdFilter();

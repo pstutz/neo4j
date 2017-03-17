@@ -276,9 +276,9 @@ public class GraphDatabaseServiceExecuteTest
             watch.reset();
             watch.start();
             Result r = graphDb.execute("MATCH (n:Foo) WITH collect(n) as nodes MATCH (z) WHERE z IN nodes RETURN z");
-            //NodeProxy n = (NodeProxy)r.next().get("z");
-            //assertEquals(0,n.getId());
-            //assertEquals("hallo",(String)n.getProperty("text"));
+            NodeProxy n = (NodeProxy)r.next().get("z");
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
             watch.stop();
             System.out.println("Rewrite: " + watch.getTime() + " ms");
             watch.reset();
@@ -289,9 +289,9 @@ public class GraphDatabaseServiceExecuteTest
 
             watch.start();
             r = graphDb.execute("CALL db.useView(['Test']) MATCH (z) RETURN z");
-            //n = (NodeProxy)r.next().get("z");
-            //assertEquals(0,n.getId());
-            //assertEquals("hallo",(String)n.getProperty("text"));
+            n = (NodeProxy)r.next().get("z");
+            assertEquals(0,n.getId());
+            assertEquals("hallo",(String)n.getProperty("text"));
             watch.stop();
 
 
@@ -302,19 +302,20 @@ public class GraphDatabaseServiceExecuteTest
             watch.reset();
             watch.start();
             Result r2 = graphDb.execute("CALL db.useView(['Test']) MATCH (m) RETURN m");
-            //NodeProxy m = (NodeProxy)r2.next().get("m");
-            //assertEquals(0,m.getId());
-            //assertEquals("hallo",(String)m.getProperty("text"));
+            NodeProxy m = (NodeProxy)r2.next().get("m");
+            assertEquals(0,m.getId());
+            assertEquals("hallo",(String)m.getProperty("text"));
             watch.stop();
 
             long second = watch.getTime();
 
             System.out.println(first + " ms");
             System.out.println(second + " ms");
-            assertTrue(first>second);
 
             // cleanup
             ViewController.getInstance().clearViews();
+
+            assertTrue(first>second);
 
             tx.success();
         }

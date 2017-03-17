@@ -455,6 +455,7 @@ public class ViewOperationsFacade extends OperationsFacade
             if(relIdFilter.isUnused()&&tx.virtualRelationshipIdToVirtualNodeIds.keySet().size()==0){
                 return realIt;  // more of a hack then anything else
             }
+
             while (realIt.hasNext()) {
                 Long rId = realIt.next();
 
@@ -465,14 +466,26 @@ public class ViewOperationsFacade extends OperationsFacade
                         continue;
                     }
                 }
-                Cursor<RelationshipItem> cursor = super.relationshipCursorGetAll();
+                Cursor<RelationshipItem> c = super.relationshipCursor(rId);
+                while(c.next()){
+                    RelationshipItem item = c.get();
+                    //c.close();
+                    if(item.id()==rId){
+                        foundItems.add(item);
+                        break;
+
+                    }
+                }
+
+                //foundItems.add(super.relationshipCursor(rId).get());
+                /*Cursor<RelationshipItem> cursor = super.relationshipCursorGetAll();
                 while(cursor.next()){
                     RelationshipItem i = cursor.get();
                     if(i.id()==rId){
                         foundItems.add(i);
                         break;
                     }
-                }
+                } */
             }
         }
 
@@ -547,7 +560,17 @@ public class ViewOperationsFacade extends OperationsFacade
                         continue;
                     }
                 }
+                Cursor<RelationshipItem> c = super.relationshipCursor(rId);
+                while(c.next()){
+                    RelationshipItem item = c.get();
+                    //c.close();
+                    if(item.id()==rId){
+                        foundItems.add(item);
+                        break;
 
+                    }
+                }
+                /*
                 Cursor<RelationshipItem> c = super.relationshipCursor(rId);
                 RelationshipItem item;
                 while(c.next()){
@@ -572,7 +595,7 @@ public class ViewOperationsFacade extends OperationsFacade
                     }
                     foundItems.add(item);
                     break;
-                }
+                }*/
             }
         }
         Set<Long> relIds = tx.virtualRelationshipIdToVirtualNodeIds.keySet();
