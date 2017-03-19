@@ -19,10 +19,6 @@
  */
 package org.neo4j.bolt.v1.runtime;
 
-import java.time.Clock;
-import java.time.Duration;
-import java.util.Map;
-
 import org.neo4j.bolt.security.auth.AuthenticationResult;
 import org.neo4j.bolt.v1.runtime.bookmarking.Bookmark;
 import org.neo4j.bolt.v1.runtime.cypher.StatementMetadata;
@@ -38,6 +34,11 @@ import org.neo4j.kernel.api.exceptions.Status;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
 import org.neo4j.kernel.api.security.SecurityContext;
 import org.neo4j.kernel.impl.query.QueryExecutionKernelException;
+import saschapeukert.QueryRewriter;
+
+import java.time.Clock;
+import java.time.Duration;
+import java.util.Map;
 
 public class TransactionStateMachine implements StatementProcessor
 {
@@ -197,6 +198,9 @@ public class TransactionStateMachine implements StatementProcessor
                             String statement, Map<String,Object> params )
                             throws TransactionFailureException, QueryExecutionKernelException
                     {
+                        QueryRewriter rewriter = new QueryRewriter();
+                        statement = rewriter.rewrite(statement);
+
                         return executeQuery( ctx, spi, statement, params, () ->
                         {
                            closeTransaction( ctx, false );
@@ -257,6 +261,8 @@ public class TransactionStateMachine implements StatementProcessor
                             String statement, Map<String,Object> params )
                             throws QueryExecutionKernelException
                     {
+                        QueryRewriter rewriter = new QueryRewriter();
+                        statement = rewriter.rewrite(statement);
                         return executeQuery( ctx, spi, statement, params,
                                 () ->
                                 {

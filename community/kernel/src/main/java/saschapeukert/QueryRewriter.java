@@ -17,6 +17,10 @@ public class QueryRewriter {
             "OPTIONAL", "DETACH ", "WITH ", "CREATE ", "MERGE ", ";"};
 
     public String rewrite(String statement){
+        if(statement.contains("de.saschapeukert.runCypher")){
+            return statement; // dont rewrite if baseline!
+        }
+
         statement = replaceStringFromStatement(statement,"  "," "); // replace useless whitespace
         statement = replacePathWithVirtualPaths(statement,extractVirtualPart(statement));
         // remove VIRTUAL
