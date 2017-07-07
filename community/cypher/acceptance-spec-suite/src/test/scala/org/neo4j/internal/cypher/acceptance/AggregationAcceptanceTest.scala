@@ -45,4 +45,23 @@ class AggregationAcceptanceTest extends ExecutionEngineFunSuite with NewPlannerT
 
     result1.size should equal(result2.size)
   }
+
+  test("should have no problem mixing aggregation and optional match") {
+    val a = createLabeledNode(Map("userId" -> 11), "A")
+    createLabeledNode(Map("userId" -> 12), "A")
+    val z = createLabeledNode(Map("key" -> 11), "Z")
+    relate(z,a,"IS_A",Map.empty[String,Any])
+
+    val query1 = """MATCH (a:A)
+                   |WITH count(*) AS aCount
+                   |OPTIONAL MATCH (z:Z)-[:IS_A]->()
+                   |RETURN aCount, count(distinct z.key) AS zCount""".stripMargin
+
+    val result = executeWithAllPlannersAndCompatibilityMode(query1).toList   // we want to test this without any prefix
+
+    val resultMap = result.head
+    resultMap.size should equal(2)
+    resultMap("zCount") should equal(1)
+    resultMap("aCount") should equal(2)
+  }
 }
