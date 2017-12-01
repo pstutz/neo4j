@@ -28,8 +28,7 @@ import org.neo4j.kernel.impl.store.record.RelationshipRecord;
 
 import static org.neo4j.kernel.impl.newapi.References.setFilterFlag;
 
-class RelationshipGroupCursor extends RelationshipGroupRecord
-        implements org.neo4j.internal.kernel.api.RelationshipGroupCursor
+class RelationshipGroupCursor extends RelationshipGroupRecord implements org.neo4j.internal.kernel.api.RelationshipGroupCursor
 {
     private Read read;
     private final RelationshipRecord edge = new RelationshipRecord( NO_ID );
@@ -37,7 +36,7 @@ class RelationshipGroupCursor extends RelationshipGroupRecord
     private PageCursor page;
     private PageCursor edgePage;
 
-    RelationshipGroupCursor( )
+    RelationshipGroupCursor()
     {
         super( NO_ID );
     }
@@ -48,8 +47,7 @@ class RelationshipGroupCursor extends RelationshipGroupRecord
         setId( NO_ID );
         setNext( NO_ID );
         // TODO: read first record to get the required capacity (from the count value in the prev field)
-        try ( PrimitiveIntObjectMap<Group> buffer = Primitive.intObjectMap();
-              PageCursor edgePage = read.relationshipPage( relationshipReference ) )
+        try ( PrimitiveIntObjectMap<Group> buffer = Primitive.intObjectMap(); PageCursor edgePage = read.relationshipPage( relationshipReference ) )
         {
             Group current = null;
             while ( relationshipReference != NO_ID )
@@ -280,7 +278,29 @@ class RelationshipGroupCursor extends RelationshipGroupRecord
     @Override
     public boolean isClosed()
     {
-        return page == null;
+        return page == null && current == null;
+    }
+
+    @Override
+    public String toString()
+    {
+        if ( isClosed() )
+        {
+            return "RelationshipGroupCursor[closed state]";
+        }
+        else
+        {
+            String mode = "mode=";
+            if ( current != null )
+            {
+                mode = mode + "group";
+            }
+            else
+            {
+                mode = mode + "direct";
+            }
+            return "RelationshipGroupCursor[id=" + getId() + ", open state with: " + mode + ", underlying record=" + super.toString() + " ]";
+        }
     }
 
     static class Group
@@ -347,6 +367,5 @@ class RelationshipGroupCursor extends RelationshipGroupRecord
         {
             return setFilterFlag( firstLoop );
         }
-
     }
 }
